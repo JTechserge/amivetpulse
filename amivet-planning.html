@@ -1,0 +1,2749 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amivet Planning — Clinique Vétérinaire</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Police chargée en non-bloquant : si le réseau de la clinique est lent ou coupé,
+     la page s'affiche immédiatement avec la police système au lieu de rester sur un
+     écran blanc en attendant la réponse de Google Fonts. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
+<style>
+/* ============================================================
+   AMIVET PLANNING — Variables & Reset
+   ============================================================ */
+:root{
+  --color-primary:#0F766E;
+  --color-primary-light:#14B8A6;
+  --color-secondary:#F0FDF9;
+  --color-surface:#FFFFFF;
+  --color-border:#E2E8F0;
+  --color-text:#0F172A;
+  --color-text-muted:#64748B;
+  --color-sunday:#F1F5F9;
+  --color-saturday:#E0F2F1;
+  --color-holiday:#FDE047;
+  --color-david:#2563EB;
+  --color-stephane:#7C3AED;
+  /* Couleurs de statut indépendantes de la personne : congé validé = rouge marqué, congé
+     en attente = bleu foncé, férié = jaune. "Présent" reste vert mais varie en nuance par
+     personne (PRESENT_SHADES, en JS) pour les distinguer entre elles. */
+  --color-absent:#FCA5A5;
+  --color-absent-border:#F87171;
+  --color-absent-text:#7F1D1D;
+  --color-forecast:#FFFBEB;
+  --color-forecast-accent:#D97706;
+  --color-leave-pending:#1E3A8A;
+  --color-leave-pending-text:#FFFFFF;
+  --color-leave-pending-border:#1E40AF;
+  --color-leave-rejected:#E2E8F0;
+  --color-leave-rejected-text:#475569;
+  --color-leave-rejected-border:#CBD5E1;
+  --shadow-sm:0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md:0 4px 12px rgba(15,23,42,0.10);
+  --shadow-lg:0 12px 32px rgba(15,23,42,0.16);
+  --radius-card:12px;
+  --radius-btn:8px;
+  --transition:0.15s ease;
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:'Inter',system-ui,sans-serif;
+  background:var(--color-secondary);
+  color:var(--color-text);
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-weight:700;letter-spacing:-0.02em;margin:0;}
+p{margin:0;}
+button{font-family:inherit;cursor:pointer;}
+button:focus-visible,a:focus-visible,input:focus-visible,[tabindex]:focus-visible{
+  outline:2px solid var(--color-primary-light);
+  outline-offset:2px;
+}
+::-webkit-scrollbar{height:10px;width:10px;}
+::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:8px;}
+::-webkit-scrollbar-track{background:transparent;}
+
+/* ============================================================
+   Layout général
+   ============================================================ */
+#app{min-height:100vh;display:flex;flex-direction:column;}
+.app-main{flex:1;width:100%;max-width:1440px;margin:0 auto;padding:24px 28px 64px;}
+body.forecast-theme{background:var(--color-forecast);}
+
+/* ============================================================
+   Header / Navigation
+   ============================================================ */
+.app-header{
+  position:sticky;top:0;z-index:40;
+  background:var(--color-surface);
+  border-bottom:1px solid var(--color-border);
+  box-shadow:var(--shadow-sm);
+}
+.app-header-inner{
+  max-width:1440px;margin:0 auto;padding:0 28px;
+  display:flex;align-items:center;gap:24px;height:64px;
+}
+.brand{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.brand-logo{width:38px;height:38px;object-fit:contain;flex-shrink:0;}
+.brand-title{font-size:18px;font-weight:800;color:var(--color-text);white-space:nowrap;}
+.brand-sub{font-size:11px;color:var(--color-text-muted);font-weight:500;white-space:nowrap;}
+
+.main-nav{display:flex;gap:4px;flex:1;overflow-x:auto;}
+.nav-tab{
+  display:flex;align-items:center;gap:6px;
+  padding:10px 16px;border:none;background:transparent;border-radius:var(--radius-btn);
+  font-size:14px;font-weight:600;color:var(--color-text-muted);
+  transition:background var(--transition),color var(--transition);
+  white-space:nowrap;
+}
+.nav-tab:hover{background:var(--color-secondary);color:var(--color-text);}
+.nav-tab.active{background:var(--color-primary);color:#fff;}
+.nav-badge{
+  display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;
+  padding:0 5px;border-radius:999px;background:#DC2626;color:#fff;font-size:11px;font-weight:800;
+  vertical-align:middle;
+}
+.leave-status-badge{
+  display:inline-flex;align-items:center;flex-shrink:0;
+  padding:4px 10px;border-radius:999px;font-size:11.5px;font-weight:700;
+}
+.leave-status-badge.leave-pending{background:var(--color-leave-pending);color:var(--color-leave-pending-text);}
+.leave-status-badge.leave-approved{background:var(--color-absent);color:var(--color-absent-text);}
+.leave-status-badge.leave-rejected{background:var(--color-leave-rejected);color:var(--color-leave-rejected-text);}
+
+.header-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+
+/* ============================================================
+   Boutons génériques
+   ============================================================ */
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:9px 14px;border-radius:var(--radius-btn);border:1px solid transparent;
+  font-size:13px;font-weight:600;
+  transition:transform var(--transition),box-shadow var(--transition),background var(--transition),border-color var(--transition);
+  background:var(--color-surface);color:var(--color-text);border-color:var(--color-border);
+}
+.btn:hover{box-shadow:var(--shadow-sm);transform:translateY(-1px);}
+.btn:active{transform:translateY(0);}
+.btn-primary{background:var(--color-primary);color:#fff;border-color:var(--color-primary);}
+.btn-primary:hover{background:var(--color-primary-light);border-color:var(--color-primary-light);}
+.btn-ghost{background:transparent;border-color:transparent;}
+.btn-ghost:hover{background:var(--color-secondary);}
+.btn-danger{color:#B91C1C;border-color:#FCA5A5;background:#FFF;}
+.btn-danger:hover{background:#FEF2F2;}
+.btn-icon{
+  width:36px;height:36px;padding:0;justify-content:center;
+  border-radius:var(--radius-btn);border:1px solid var(--color-border);background:var(--color-surface);
+  font-size:16px;color:var(--color-text-muted);
+}
+.btn-icon:hover{background:var(--color-secondary);color:var(--color-text);}
+.btn-sm{padding:6px 10px;font-size:12px;}
+
+/* ============================================================
+   Menu réglages (dropdown)
+   ============================================================ */
+.settings-wrap{position:relative;}
+.settings-menu{
+  position:absolute;right:0;top:calc(100% + 8px);
+  width:240px;background:var(--color-surface);border:1px solid var(--color-border);
+  border-radius:var(--radius-card);box-shadow:var(--shadow-lg);
+  padding:8px;display:none;flex-direction:column;gap:2px;z-index:50;
+}
+.settings-menu.open{display:flex;}
+.settings-menu button{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  padding:9px 10px;border:none;background:transparent;border-radius:8px;
+  font-size:13px;font-weight:500;color:var(--color-text);
+}
+.settings-menu button:hover{background:var(--color-secondary);}
+.settings-menu button.danger{color:#B91C1C;}
+.settings-menu button.danger:hover{background:#FEF2F2;}
+.settings-menu hr{border:none;border-top:1px solid var(--color-border);margin:6px 2px;}
+.settings-section-label{font-size:11px;font-weight:700;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.04em;padding:6px 10px 2px;}
+
+/* ============================================================
+   Cards & sections génériques
+   ============================================================ */
+.card{
+  background:var(--color-surface);border:1px solid var(--color-border);
+  border-radius:var(--radius-card);box-shadow:var(--shadow-sm);
+  padding:20px;
+}
+.section-title{font-size:20px;margin-bottom:4px;}
+.section-desc{color:var(--color-text-muted);font-size:13px;margin-bottom:18px;}
+
+/* ============================================================
+   Bandeau prévisionnel
+   ============================================================ */
+.forecast-banner{
+  display:flex;align-items:center;gap:10px;
+  background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;
+  padding:10px 16px;border-radius:var(--radius-btn);font-size:13px;font-weight:600;
+  margin-bottom:18px;
+}
+.rollover-banner{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  background:var(--color-primary);color:#fff;
+  padding:12px 20px;border-radius:var(--radius-btn);font-size:13.5px;font-weight:600;
+  margin-bottom:18px;
+}
+.rollover-banner .rollover-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.rollover-banner #rollover-dismiss{color:#fff;}
+.rollover-banner #rollover-dismiss:hover{background:rgba(255,255,255,0.15);}
+/* ============================================================
+   Toolbar calendrier (mois, filtres, navigation)
+   ============================================================ */
+.cal-toolbar{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  margin-bottom:18px;flex-wrap:wrap;
+}
+.cal-month-nav{display:flex;align-items:center;gap:10px;}
+.cal-month-label{font-size:22px;font-weight:800;min-width:220px;text-align:center;text-transform:capitalize;}
+.cal-toolbar-actions{display:flex;gap:8px;align-items:center;}
+.undo-btn:disabled{opacity:0.35;cursor:default;}
+.undo-btn:disabled:hover{background:var(--color-surface);}
+
+/* ============================================================
+   Grille calendrier
+   ============================================================ */
+.cal-scroll{overflow-x:auto;}
+.cal-tables{display:flex;flex-direction:column;gap:10px;}
+.cal-table{
+  width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;
+  border:1px solid var(--color-border);border-radius:var(--radius-card);
+  overflow:hidden;background:var(--color-surface);
+}
+.cal-table .col-label{width:76px;}
+
+.row-label{
+  width:76px;padding:4px 6px;font-size:10px;font-weight:800;text-align:left;
+  background:var(--color-secondary);border-right:1.5px solid var(--color-border);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.row-label.corner{background:var(--color-secondary);border-bottom:1px solid var(--color-border);}
+tbody .row-label{border-top:1.5px solid var(--color-border);}
+
+.cth{
+  padding:4px 2px 3px;border-bottom:1px solid var(--color-border);border-right:1px solid var(--color-border);
+  text-align:center;position:relative;background:var(--color-secondary);
+}
+.cth:last-child{border-right:none;}
+.cth.is-saturday{background:var(--color-saturday);}
+.cth.is-holiday{background:var(--color-holiday);}
+.cth.is-sunday{background:var(--color-sunday);}
+.cth.is-today{box-shadow:inset 0 -3px 0 var(--color-primary);}
+.cth.is-today .cal-daynum{color:var(--color-primary);}
+.cal-weekday{font-size:8px;font-weight:700;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.01em;}
+.cal-daynum{font-size:13px;font-weight:800;line-height:1.15;}
+.cal-holiday-dot{
+  position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;
+  background:#D97706;
+}
+.cal-holiday-badge{
+  display:inline-block;font-size:11px;font-weight:800;color:#92400E;
+  background:#FDE68A;padding:2px 7px;border-radius:6px;letter-spacing:0.02em;vertical-align:middle;
+}
+.cal-col-tools{display:flex;justify-content:center;gap:1px;margin-top:1px;}
+.cal-icon-btn{
+  width:15px;height:15px;border:none;background:transparent;border-radius:4px;
+  font-size:8.5px;color:var(--color-text-muted);display:flex;align-items:center;justify-content:center;
+  transition:background var(--transition);
+}
+.cal-icon-btn:hover{background:rgba(15,118,110,0.1);color:var(--color-primary);}
+.cal-icon-btn.has-comment{color:var(--color-primary);}
+
+.cal-cell{
+  border:1px solid var(--color-border);
+  height:24px;
+  text-align:center;vertical-align:middle;
+  font-size:8.5px;font-weight:700;padding:2px;
+  cursor:pointer;transition:background var(--transition);user-select:none;
+  background:#fff;color:var(--color-text-muted);overflow:hidden;
+  white-space:nowrap;text-overflow:ellipsis;position:relative;
+}
+.cal-cell::before{
+  content:attr(data-slot-short);
+  position:absolute;top:0;left:2px;font-size:6px;font-weight:800;opacity:0.4;
+}
+.cal-cell:hover{background:var(--color-secondary);}
+.cal-cell.state-absent{background:var(--color-absent);color:var(--color-absent-text);border-color:var(--color-absent-border);}
+.cal-cell.state-absent:hover{filter:brightness(0.96);}
+.cal-cell.state-leave-approved{background:var(--color-absent);color:var(--color-absent-text);border-color:var(--color-absent-border);}
+.cal-cell.state-leave-approved:hover{filter:brightness(0.96);}
+.cal-cell.state-leave-pending{background:var(--color-leave-pending);color:var(--color-leave-pending-text);border-color:var(--color-leave-pending-border);}
+.cal-cell.state-leave-pending:hover{filter:brightness(0.96);}
+.cal-cell.state-leave-rejected{background:var(--color-leave-rejected);color:var(--color-leave-rejected-text);border-color:var(--color-leave-rejected-border);font-size:7.5px;}
+.cal-cell.state-leave-rejected:hover{filter:brightness(0.96);}
+.cal-cell.sunday-cell{background:var(--color-sunday);cursor:default;}
+.cal-cell.sunday-cell:hover{background:var(--color-sunday);}
+.cal-cell .cell-mark{font-size:10px;}
+
+/* ============================================================
+   Légende
+   ============================================================ */
+.legend{margin-top:18px;padding:14px 16px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-card);}
+.legend-row{display:flex;gap:22px;align-items:center;flex-wrap:wrap;}
+.legend-row + .legend-row{margin-top:12px;padding-top:12px;border-top:1px solid var(--color-border);}
+.legend-item{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--color-text-muted);font-weight:500;}
+.legend-swatch{width:16px;height:16px;border-radius:5px;flex-shrink:0;}
+.legend-help-item{font-size:12.5px;color:var(--color-text-muted);line-height:1.5;flex:1 1 220px;}
+.legend-help-item strong{color:var(--color-text);}
+
+/* ============================================================
+   Popover (motif d'absence / commentaire jour)
+   ============================================================ */
+.popover-backdrop{
+  position:fixed;inset:0;background:rgba(15,23,42,0.35);z-index:90;
+  display:none;align-items:center;justify-content:center;
+}
+.popover-backdrop.open{display:flex;}
+.popover-box{
+  background:#fff;border-radius:var(--radius-card);box-shadow:var(--shadow-lg);
+  padding:20px;width:320px;
+}
+.popover-box h4{font-size:15px;margin-bottom:10px;}
+.popover-box input,.popover-box textarea{
+  width:100%;padding:9px 11px;border:1px solid var(--color-border);border-radius:8px;
+  font-family:inherit;font-size:13px;margin-bottom:12px;resize:vertical;
+}
+.popover-actions{display:flex;justify-content:flex-end;gap:8px;}
+.popover-split-btn{
+  width:100%;justify-content:center;margin-bottom:14px;padding:11px;
+  background:rgba(20,184,166,0.12);border:2px solid var(--color-primary-light);
+  color:var(--color-primary);font-weight:800;font-size:13.5px;
+  box-shadow:0 1px 2px rgba(15,118,110,0.12);
+}
+.popover-split-btn:hover{background:rgba(20,184,166,0.22);border-color:var(--color-primary);transform:translateY(-1px);}
+.popover-quicktags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
+.quicktag{
+  font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--color-border);
+  background:var(--color-secondary);color:var(--color-text-muted);font-weight:600;
+}
+.quicktag:hover{background:var(--color-primary);color:#fff;border-color:var(--color-primary);}
+
+/* ============================================================
+   Sidebar édition colonne
+   ============================================================ */
+.sidebar-overlay{
+  position:fixed;inset:0;background:rgba(15,23,42,0.35);z-index:80;display:none;
+}
+.sidebar-overlay.open{display:block;}
+.day-sidebar{
+  position:fixed;top:0;right:0;height:100%;width:340px;
+  background:#fff;box-shadow:var(--shadow-lg);z-index:81;
+  transform:translateX(100%);transition:transform 0.2s ease;
+  display:flex;flex-direction:column;
+}
+.day-sidebar.open{transform:translateX(0);}
+.day-sidebar-head{padding:20px;border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;}
+.day-sidebar-body{padding:20px;overflow-y:auto;flex:1;}
+.sidebar-person-block{margin-bottom:22px;}
+.sidebar-person-title{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;margin-bottom:10px;}
+.sidebar-state-row{display:flex;gap:6px;margin-bottom:8px;}
+.sidebar-state-btn{
+  flex:1;min-width:0;padding:8px 4px;border-radius:8px;border:1.5px solid var(--color-border);
+  background:#fff;font-size:11.5px;font-weight:600;color:var(--color-text-muted);text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.sidebar-state-btn.active{color:#fff;border-color:transparent;}
+
+/* ============================================================
+   Toast
+   ============================================================ */
+#toast-container{position:fixed;bottom:22px;right:22px;z-index:99;display:flex;flex-direction:column;gap:8px;}
+.toast{
+  background:var(--color-text);color:#fff;padding:11px 18px;border-radius:9px;
+  font-size:13px;font-weight:600;box-shadow:var(--shadow-lg);
+  display:flex;align-items:center;gap:8px;
+  animation:toast-in 0.2s ease, toast-out 0.2s ease 1.8s forwards;
+}
+@keyframes toast-in{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+@keyframes toast-out{to{opacity:0;transform:translateY(8px);}}
+
+/* ============================================================
+   Modale confirmation
+   ============================================================ */
+.modal-backdrop{
+  position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:95;
+  display:none;align-items:center;justify-content:center;
+}
+.modal-backdrop.open{display:flex;}
+.modal-box{background:#fff;border-radius:var(--radius-card);box-shadow:var(--shadow-lg);padding:24px;width:380px;}
+.modal-box h3{font-size:16px;margin-bottom:8px;}
+.modal-box p{font-size:13px;color:var(--color-text-muted);margin-bottom:18px;}
+.modal-box input[type=password],.modal-box input[type=text]{
+  width:100%;padding:9px 11px;border:1px solid var(--color-border);border-radius:8px;font-family:inherit;font-size:13px;
+}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;}
+
+/* ============================================================
+   Sous-navigation (Calendrier mensuel / Vue annuelle au sein
+   d'un onglet groupé Vétérinaires ou ASV)
+   ============================================================ */
+.sub-nav{display:flex;gap:4px;background:var(--color-secondary);padding:4px;border-radius:10px;width:fit-content;margin-bottom:18px;}
+.sub-tab{padding:8px 18px;border:none;background:transparent;border-radius:7px;font-size:13px;font-weight:700;color:var(--color-text-muted);}
+.sub-tab.active{background:#fff;color:var(--color-primary);box-shadow:var(--shadow-sm);}
+.sub-nav-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px;}
+.sub-nav-row .sub-nav{margin-bottom:0;}
+
+/* ============================================================
+   Verrou par mot de passe
+   ============================================================ */
+.gate-wrap{display:flex;justify-content:center;padding:60px 20px;}
+.gate-box{max-width:360px;width:100%;text-align:center;}
+.gate-box input{width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;font-size:14px;margin-top:14px;text-align:center;font-family:inherit;}
+.gate-error{color:#B91C1C;font-size:12.5px;margin-top:8px;}
+
+/* ============================================================
+   Tableau de bord
+   ============================================================ */
+.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px;}
+.dash-grid-3{grid-template-columns:1fr 1fr 1fr;}
+.person-card{border-top:4px solid var(--color-border);}
+.person-card[data-person="david"]{border-top-color:var(--color-david);}
+.person-card[data-person="stephane"]{border-top-color:var(--color-stephane);}
+.person-card-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+.person-avatar{
+  width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+  color:#fff;font-weight:800;font-size:15px;flex-shrink:0;
+}
+.stat-row{display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-bottom:1px solid #F1F5F9;}
+.stat-row:last-child{border-bottom:none;}
+.stat-label{font-size:12.5px;color:var(--color-text-muted);font-weight:500;}
+.stat-value{font-size:14px;font-weight:700;}
+.stat-value.big{font-size:26px;font-weight:800;}
+.progress-track{height:7px;background:#F1F5F9;border-radius:99px;overflow:hidden;margin-top:6px;}
+.progress-fill{height:100%;border-radius:99px;transition:width 0.4s ease;}
+
+.year-toggle{display:flex;gap:4px;background:var(--color-secondary);padding:4px;border-radius:10px;width:fit-content;}
+.year-toggle button{
+  padding:6px 16px;border:none;background:transparent;border-radius:7px;
+  font-size:13px;font-weight:700;color:var(--color-text-muted);
+}
+.year-toggle button.active{background:#fff;color:var(--color-primary);box-shadow:var(--shadow-sm);}
+
+.chart-wrap{margin-top:14px;}
+.chart-legend{display:flex;gap:18px;margin-bottom:10px;font-size:12px;font-weight:600;color:var(--color-text-muted);}
+.chart-legend span{display:inline-flex;align-items:center;gap:6px;}
+
+table.recap-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;}
+table.recap-table th,table.recap-table td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--color-border);}
+table.recap-table th:first-child,table.recap-table td:first-child{text-align:left;}
+table.recap-table thead th{font-size:11px;text-transform:uppercase;letter-spacing:0.03em;color:var(--color-text-muted);font-weight:700;border-bottom:2px solid var(--color-border);}
+table.recap-table tbody tr:hover{background:var(--color-secondary);}
+table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-border);border-bottom:none;}
+.ecart-david{color:var(--color-david);font-weight:700;}
+.ecart-stephane{color:var(--color-stephane);font-weight:700;}
+.ecart-equilibre{color:var(--color-text-muted);font-weight:700;}
+
+/* ============================================================
+   Vue annuelle (heatmap)
+   ============================================================ */
+.heatmap-wrap{overflow-x:auto;}
+.heatmap-table{width:100%;border-collapse:separate;border-spacing:1.5px;table-layout:fixed;}
+.heatmap-table th{font-size:11px;line-height:1;color:var(--color-text-muted);font-weight:700;padding:1px 0;text-align:center;}
+.heatmap-table .col-month{width:44px;}
+.heatmap-table .col-label{width:54px;}
+.heatmap-table td{padding:0;line-height:0;}
+.heatmap-month-label{font-size:12px;line-height:1;font-weight:800;color:var(--color-text);text-align:center;background:var(--color-secondary);}
+.heatmap-row-label{font-size:11.5px;line-height:1;font-weight:800;text-align:left;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.heatmap-cell{
+  width:100%;height:17px;border-radius:3px;cursor:pointer;position:relative;
+  border:1px solid rgba(0,0,0,0.05);transition:transform var(--transition);
+  box-sizing:border-box;
+}
+.heatmap-cell:hover{transform:scale(1.12);z-index:3;box-shadow:var(--shadow-sm);}
+.heatmap-cell.empty-cell{visibility:hidden;cursor:default;}
+.heatmap-weekday-row{background:var(--color-secondary);}
+.heatmap-weekday-cell{
+  font-size:9px;font-weight:700;color:var(--color-text-muted);text-align:center;
+  line-height:14px;height:14px;
+}
+.heatmap-weekday-cell.is-saturday{background:var(--color-saturday);}
+.heatmap-weekday-cell.is-sunday{background:var(--color-sunday);}
+.heatmap-weekday-cell.empty-cell{visibility:hidden;}
+
+/* ============================================================
+   Utilitaires
+   ============================================================ */
+.hidden{display:none!important;}
+.flex{display:flex;}
+.gap-2{gap:8px;}
+.mt-2{margin-top:8px;}
+.text-muted{color:var(--color-text-muted);}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+
+@media (max-width:900px){
+  .dash-grid{grid-template-columns:1fr;}
+  .brand-sub{display:none;}
+}
+
+/* ============================================================
+   Impression — ne garde que le calendrier mensuel affiché
+   ============================================================ */
+@media print{
+  .app-header,.sub-nav-row,.legend,.section-desc,.rollover-banner,.forecast-banner,
+  .cal-toolbar-actions,.cal-col-tools,#toast-container{display:none!important;}
+  .cal-month-nav button{display:none!important;}
+  body{background:#fff;}
+  .app-main{padding:0;max-width:none;}
+  .card,.cal-table{box-shadow:none;}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ============================================================
+       HEADER
+       ============================================================ -->
+  <header class="app-header">
+    <div class="app-header-inner">
+      <div class="brand">
+        <img class="brand-logo" src="logo.png" alt="Logo Clinique Amivet">
+        <div>
+          <div class="brand-title">Amivet Planning</div>
+          <div class="brand-sub">Clinique Vétérinaire — Dr. Pelois &amp; Dr. Maquinay</div>
+        </div>
+      </div>
+
+      <nav class="main-nav" id="main-nav" aria-label="Navigation principale">
+        <button class="nav-tab" data-view="dashboard">📊 Tableau de bord<span id="dash-nav-badge"></span></button>
+        <button class="nav-tab active" data-view="vets" aria-current="page">🩺 Vétérinaires</button>
+        <button class="nav-tab" data-view="asv">🐾 ASV</button>
+      </nav>
+
+      <div class="header-actions">
+        <div class="settings-wrap">
+          <button class="btn-icon" id="settings-toggle" aria-label="Ouvrir le menu réglages" aria-haspopup="true" aria-expanded="false">⚙️</button>
+          <div class="settings-menu" id="settings-menu" role="menu">
+            <div class="settings-section-label">Personnalisation</div>
+            <button id="action-colors" role="menuitem">🎨 Couleurs des associés</button>
+            <hr>
+            <div class="settings-section-label">Sécurité</div>
+            <button id="action-change-password" role="menuitem">🔒 Modifier le mot de passe</button>
+            <hr>
+            <div class="settings-section-label">Données</div>
+            <button id="action-export" role="menuitem">⬇️ Exporter JSON</button>
+            <button id="action-import" role="menuitem">⬆️ Importer JSON</button>
+            <input type="file" id="import-file-input" accept="application/json" class="hidden" aria-hidden="true">
+            <hr>
+            <div class="settings-section-label">Réinitialisation</div>
+            <button class="danger" id="action-reset-current" role="menuitem">🗑️ Réinitialiser l'année courante</button>
+            <button class="danger" id="action-reset-forecast" role="menuitem">🗑️ Réinitialiser le prévisionnel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================================================
+       MAIN
+       ============================================================ -->
+  <main class="app-main" id="app-main">
+
+    <!-- Onglet groupé Vétérinaires : Calendrier mensuel / Vue annuelle / Prévisionnel -->
+    <section id="view-vets" class="view-section">
+      <div class="sub-nav-row">
+        <div class="sub-nav" id="vets-sub-nav">
+          <button class="sub-tab active" data-sub="calendar">📅 Calendrier mensuel</button>
+          <button class="sub-tab" data-sub="annual">🗓️ Vue Annuelle</button>
+          <button class="sub-tab" data-sub="forecast">🔮 Prévisionnel</button>
+        </div>
+        <button class="btn-icon lock-now-btn" title="Verrouiller maintenant" aria-label="Verrouiller maintenant">🔒</button>
+      </div>
+      <div id="vets-sub-calendar" class="sub-page" data-cal-view="vets-current"></div>
+      <div id="vets-sub-annual" class="sub-page hidden"></div>
+      <div id="vets-sub-forecast" class="sub-page hidden" data-cal-view="vets-forecast"></div>
+    </section>
+
+    <!-- Onglet groupé ASV : Calendrier mensuel / Vue annuelle / Prévisionnel -->
+    <section id="view-asv" class="view-section hidden">
+      <div class="sub-nav" id="asv-sub-nav">
+        <button class="sub-tab active" data-sub="calendar">📅 Calendrier mensuel</button>
+        <button class="sub-tab" data-sub="annual">🗓️ Vue Annuelle</button>
+        <button class="sub-tab" data-sub="forecast">🔮 Prévisionnel</button>
+      </div>
+      <div id="asv-sub-calendar" class="sub-page" data-cal-view="asv-current"></div>
+      <div id="asv-sub-annual" class="sub-page hidden"></div>
+      <div id="asv-sub-forecast" class="sub-page hidden" data-cal-view="asv-forecast"></div>
+    </section>
+
+    <!-- Vue Tableau de bord -->
+    <section id="view-dashboard" class="view-section hidden"></section>
+
+  </main>
+</div>
+
+<!-- Popover absence / commentaire -->
+<div class="popover-backdrop" id="popover-backdrop">
+  <div class="popover-box" id="popover-box"></div>
+</div>
+
+<!-- Sidebar édition colonne -->
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+<aside class="day-sidebar" id="day-sidebar" aria-label="Édition rapide de la journée"></aside>
+
+<!-- Modale confirmation -->
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal-box" id="modal-box"></div>
+</div>
+
+<!-- Toasts -->
+<div id="toast-container" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* ================================================================
+   AMIVET PLANNING — Application JS (vanilla ES2022, sans dépendance)
+   ================================================================ */
+
+/* ----------------------------------------------------------------
+   1. CONSTANTES & ÉTAT GLOBAL
+   ---------------------------------------------------------------- */
+// 3 nuances de vert partagées, attribuées par position : les 2 associés utilisent les 2
+// premières, les 3 ASV les 3 — assez proches pour rester clairement "vert" (jour travaillé)
+// au premier coup d'œil, mais distinctes pour différencier les personnes dans une même vue.
+const PRESENT_SHADES = [
+  { bg:'#86EFAC', border:'#4ADE80', text:'#14532D' }, // vert
+  { bg:'#A7F3D0', border:'#34D399', text:'#064E3B' }, // émeraude
+  { bg:'#BEF264', border:'#A3E635', text:'#3F6212' }, // vert tilleul
+];
+const PEOPLE = [
+  { id:'david',    name:'Dr. David Pelois',     short:'David',    color:'#2563EB', initial:'D', present:PRESENT_SHADES[0] },
+  { id:'stephane', name:'Dr. Stéphane Maquinay', short:'Stéphane', color:'#7C3AED', initial:'S', present:PRESENT_SHADES[1] },
+];
+const ASV_PEOPLE = [
+  { id:'marie',    name:'Marie',    short:'Marie',    color:'#DB2777', initial:'M',  present:PRESENT_SHADES[0] },
+  { id:'johanna',  name:'Johanna',  short:'Johanna',  color:'#EA580C', initial:'Jo', present:PRESENT_SHADES[1] },
+  { id:'julie',    name:'Julie',    short:'Julie',    color:'#059669', initial:'Ju', present:PRESENT_SHADES[2] },
+];
+const ALL_PEOPLE = [...PEOPLE, ...ASV_PEOPLE];
+const SLOTS = ['M','AM'];
+const SLOT_LABELS = { M:'Matin', AM:'Après-midi' };
+const YEARS = [2026, 2027];
+const STORAGE_KEY = 'amivet_planning_data';
+const PERSON_COLORS_KEY = 'amivet_person_colors';
+
+/* ----------------------------------------------------------------
+   1bis. COULEURS PERSONNALISABLES DES ASSOCIÉS
+   ---------------------------------------------------------------- */
+// Convertit un hex #rrggbb en teinte/saturation/luminosité (0-360 / 0-100 / 0-100)
+function hexToHsl(hex){
+  const r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b);
+  let h = 0, s = 0;
+  const l = (max+min)/2;
+  const d = max-min;
+  if(d !== 0){
+    s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+    switch(max){
+      case r: h = ((g-b)/d) % 6; break;
+      case g: h = (b-r)/d + 2; break;
+      default: h = (r-g)/d + 4;
+    }
+    h *= 60;
+    if(h < 0) h += 360;
+  }
+  return { h, s: s*100, l: l*100 };
+}
+// Renvoie une raison de refus si la couleur empiète sur les codes de statut désormais
+// généralisés (présent=vert, congé validé=rouge, congé en attente=bleu foncé, vide=blanc),
+// ou null si la couleur est autorisée. S'applique à n'importe quelle personne (vétérinaire
+// ou ASV) puisque ces codes ne dépendent plus de l'identité de la personne.
+function colorRejectReason(hex){
+  if(!/^#[0-9a-fA-F]{6}$/.test(hex)) return 'couleur invalide.';
+  const { h, s, l } = hexToHsl(hex);
+  if(l > 92) return 'trop proche du blanc (réservé aux demi-journées vides).';
+  if(s > 25 && (h <= 15 || h >= 345)) return 'trop proche du rouge (réservé aux congés validés).';
+  if(s > 25 && (h >= 75 && h <= 160)) return 'trop proche du vert (réservé aux jours travaillés).';
+  if(s > 25 && (h >= 200 && h <= 250)) return 'trop proche du bleu foncé (réservé aux congés en attente).';
+  if(s > 25 && (h >= 40 && h <= 65)) return 'trop proche du jaune (réservé aux jours fériés).';
+  return null;
+}
+function applyPersonColorVars(){
+  ALL_PEOPLE.forEach(p=> document.documentElement.style.setProperty(`--color-${p.id}`, p.color));
+}
+function savePersonColors(){
+  const colors = {};
+  ALL_PEOPLE.forEach(p=> colors[p.id] = p.color);
+  localStorage.setItem(PERSON_COLORS_KEY, JSON.stringify(colors));
+}
+function loadPersonColors(){
+  try{
+    const raw = localStorage.getItem(PERSON_COLORS_KEY);
+    if(raw){
+      const colors = JSON.parse(raw);
+      ALL_PEOPLE.forEach(p=>{ if(colors[p.id]) p.color = colors[p.id]; });
+    }
+  }catch(e){ console.warn('Couleurs personnalisées illisibles, valeurs par défaut conservées.', e); }
+  applyPersonColorVars();
+}
+function colorPickerRow(p){
+  return `
+    <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;font-weight:700;color:var(--color-text);">
+      ${p.short}
+      <input type="color" id="color-input-${p.id}" value="${p.color}" style="width:48px;height:32px;border:1px solid var(--color-border);border-radius:6px;cursor:pointer;padding:2px;background:none;">
+    </label>
+  `;
+}
+function openColorPickerModal(){
+  const backdrop = document.getElementById('modal-backdrop');
+  const box = document.getElementById('modal-box');
+  box.innerHTML = `
+    <h3>🎨 Couleurs des associés et des ASV</h3>
+    <p>Le vert, le rouge, le bleu foncé, le jaune et le blanc restent réservés aux indicateurs de statut (présent / congé validé / congé en attente / férié / vide).</p>
+    <p class="settings-section-label" style="padding:0;margin-bottom:8px;">Vétérinaires</p>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
+      ${PEOPLE.map(colorPickerRow).join('')}
+    </div>
+    <p class="settings-section-label" style="padding:0;margin-bottom:8px;">ASV</p>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:6px;">
+      ${ASV_PEOPLE.map(colorPickerRow).join('')}
+    </div>
+    <p id="color-error" style="color:#B91C1C;font-size:12px;display:none;margin:10px 0 0;"></p>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn" id="modal-cancel">Annuler</button>
+      <button class="btn btn-primary" id="color-save">Appliquer</button>
+    </div>
+  `;
+  backdrop.classList.add('open');
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#modal-cancel').onclick = close;
+  box.querySelector('#color-save').onclick = ()=>{
+    const newColors = {};
+    ALL_PEOPLE.forEach(p=>{ newColors[p.id] = box.querySelector(`#color-input-${p.id}`).value; });
+    const errorEl = box.querySelector('#color-error');
+    const reasons = [];
+    ALL_PEOPLE.forEach(p=>{
+      // Une couleur déjà en place (non modifiée) n'est pas re-validée : on ne pénalise pas
+      // les couleurs par défaut existantes, seulement les nouveaux choix.
+      if(newColors[p.id].toLowerCase() === p.color.toLowerCase()) return;
+      const reason = colorRejectReason(newColors[p.id]);
+      if(reason) reasons.push(`${p.short} : ${reason}`);
+    });
+    for(let i=0; i<ALL_PEOPLE.length; i++){
+      for(let j=i+1; j<ALL_PEOPLE.length; j++){
+        const a = ALL_PEOPLE[i], b = ALL_PEOPLE[j];
+        if(newColors[a.id].toLowerCase() === newColors[b.id].toLowerCase()){
+          reasons.push(`${a.short} et ${b.short} ne peuvent pas avoir la même couleur.`);
+        }
+      }
+    }
+    if(reasons.length){
+      errorEl.textContent = reasons.join(' ');
+      errorEl.style.display = 'block';
+      return;
+    }
+    ALL_PEOPLE.forEach(p=> p.color = newColors[p.id]);
+    savePersonColors();
+    applyPersonColorVars();
+    renderCurrentView();
+    close();
+    showToast('Couleurs appliquées', '🎨');
+  };
+  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+}
+
+// Modale de changement du mot de passe protégeant les onglets Vétérinaires et Tableau de
+// bord. Demande l'ancien mot de passe pour autoriser le changement (protection légère,
+// pas un vrai contrôle d'accès serveur).
+function openChangePasswordModal(){
+  const backdrop = document.getElementById('modal-backdrop');
+  const box = document.getElementById('modal-box');
+  box.innerHTML = `
+    <h3>🔒 Modifier le mot de passe</h3>
+    <p>Protège l'accès aux onglets Vétérinaires et Tableau de bord.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <input type="password" id="pwd-current" placeholder="Mot de passe actuel" autocomplete="current-password">
+      <input type="password" id="pwd-new" placeholder="Nouveau mot de passe" autocomplete="new-password">
+      <input type="password" id="pwd-confirm" placeholder="Confirmer le nouveau mot de passe" autocomplete="new-password">
+    </div>
+    <p id="pwd-error" style="color:#B91C1C;font-size:12px;display:none;margin:10px 0 0;"></p>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn" id="modal-cancel">Annuler</button>
+      <button class="btn btn-primary" id="pwd-save">Enregistrer</button>
+    </div>
+  `;
+  backdrop.classList.add('open');
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#modal-cancel').onclick = close;
+  box.querySelector('#pwd-save').onclick = ()=>{
+    const cur = box.querySelector('#pwd-current').value;
+    const next = box.querySelector('#pwd-new').value;
+    const confirmVal = box.querySelector('#pwd-confirm').value;
+    const errorEl = box.querySelector('#pwd-error');
+    let reason = null;
+    if(cur !== getGatePassword()) reason = 'Mot de passe actuel incorrect.';
+    else if(!next) reason = 'Le nouveau mot de passe ne peut pas être vide.';
+    else if(next !== confirmVal) reason = 'Les deux mots de passe ne correspondent pas.';
+    if(reason){
+      errorEl.textContent = reason;
+      errorEl.style.display = 'block';
+      return;
+    }
+    setGatePassword(next);
+    close();
+    showToast('Mot de passe modifié', '🔒');
+  };
+  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+  box.querySelector('#pwd-current').focus();
+}
+const MONTH_NAMES = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+const MONTH_SHORT = ['Janv','Févr','Mars','Avr','Mai','Juin','Juil','Août','Sept','Oct','Nov','Déc'];
+const WEEKDAY_NAMES = ['Lu','Ma','Me','Je','Ve','Sa','Di']; // lundi = 0
+
+// État de navigation par vue calendrier (mois affiché courant par année)
+const today = new Date();
+
+// ----------------------------------------------------------------
+// Année "courante" / "prévisionnelle" — dynamiques plutôt que des littéraux figés, pour
+// que la bascule annuelle (voir performYearRollover) continue de fonctionner toute seule
+// chaque 1er janvier sans jamais avoir besoin de retoucher le code.
+// ----------------------------------------------------------------
+const CURRENT_YEAR_KEY = 'amivet_current_year';
+function getCurrentYear(){
+  const stored = parseInt(localStorage.getItem(CURRENT_YEAR_KEY), 10);
+  return Number.isInteger(stored) ? stored : 2026;
+}
+function setCurrentYear(y){ localStorage.setItem(CURRENT_YEAR_KEY, String(y)); }
+
+const calStateCurrent = { month: today.getFullYear() === getCurrentYear() ? today.getMonth() : 0 };
+const calStateForecast = { month: 0 };
+const calStateAsvCurrent = { month: today.getFullYear() === getCurrentYear() ? today.getMonth() : 0 };
+const calStateAsvForecast = { month: 0 };
+
+// Registre central des vues "calendrier mensuel" : chacune sait sur quelle année réelle
+// elle travaille (cfg.year), quelles personnes afficher (cfg.people, en lignes) et quel
+// état de navigation (mois affiché) lui appartient. Reconstruit après chaque bascule
+// d'année (performYearRollover) puisque cfg.year doit alors changer.
+function buildCalViews(){
+  const cy = getCurrentYear();
+  return {
+    'vets-current':  { year:cy,   people:PEOPLE,     navState:calStateCurrent,     todayNav:true,  forecast:false, label:'Vétérinaires', containerId:'vets-sub-calendar', gated:true,  printable:false },
+    'vets-forecast': { year:cy+1, people:PEOPLE,     navState:calStateForecast,    todayNav:false, forecast:true,  label:'Vétérinaires', containerId:'vets-sub-forecast', gated:true,  printable:false },
+    'asv-current':   { year:cy,   people:ASV_PEOPLE, navState:calStateAsvCurrent,  todayNav:true,  forecast:false, label:'ASV',          containerId:'asv-sub-calendar',  gated:false, printable:true },
+    'asv-forecast':  { year:cy+1, people:ASV_PEOPLE, navState:calStateAsvForecast, todayNav:false, forecast:true,  label:'ASV',           containerId:'asv-sub-forecast',  gated:false, printable:true },
+  };
+}
+let CAL_VIEWS = buildCalViews();
+const dashState = { year: getCurrentYear() };
+
+// Onglets groupés (Vétérinaires / ASV) : chacun a 3 sous-pages (calendrier mensuel / vue
+// annuelle / prévisionnel). subNavState retient la sous-page active de chaque groupe.
+const subNavState = { vets:'calendar', asv:'calendar' };
+const annualYearState = { vets:'current', asv:'current' }; // année affichée dans la sous-page "Vue annuelle"
+const GROUP_VIEWS = {
+  vets: { label:'Vétérinaires', calendarViewKey:'vets-current', forecastViewKey:'vets-forecast', calendarContainer:'vets-sub-calendar', annualContainer:'vets-sub-annual', forecastContainer:'vets-sub-forecast' },
+  asv:  { label:'ASV',          calendarViewKey:'asv-current',  forecastViewKey:'asv-forecast',  calendarContainer:'asv-sub-calendar',  annualContainer:'asv-sub-annual',  forecastContainer:'asv-sub-forecast' },
+};
+
+// Verrou par mot de passe (protection légère, côté client) des onglets sensibles.
+const GATED_VIEWS = ['vets','dashboard'];
+const PASSWORD_KEY = 'amivet_gate_password';
+const DEFAULT_GATE_PASSWORD = 'David&Stéphane26!';
+const UNLOCK_SESSION_KEY = 'amivet_gate_unlocked_at';
+const GATE_DURATION_MS = 30*60*1000; // 30 minutes
+function getGatePassword(){ return localStorage.getItem(PASSWORD_KEY) || DEFAULT_GATE_PASSWORD; }
+function setGatePassword(pwd){ localStorage.setItem(PASSWORD_KEY, pwd); }
+function isGateUnlocked(){
+  const t = parseInt(sessionStorage.getItem(UNLOCK_SESSION_KEY) || '0', 10);
+  return t > 0 && (Date.now() - t) < GATE_DURATION_MS;
+}
+function unlockGate(){ sessionStorage.setItem(UNLOCK_SESSION_KEY, String(Date.now())); }
+// Re-verrouille immédiatement sans attendre les 30 minutes — bouton posé une fois pour
+// toutes dans le HTML statique, à côté de la sous-navigation de chaque page protégée.
+function lockGate(){ sessionStorage.removeItem(UNLOCK_SESSION_KEY); }
+
+// ----------------------------------------------------------------
+// Bascule annuelle automatique (current -> current+1, forecast -> forecast+1)
+// ----------------------------------------------------------------
+function isYearRolloverDue(){ return today.getFullYear() > getCurrentYear(); }
+function performYearRollover(){
+  const fromYear = getCurrentYear();
+  const toYear = fromYear + 1;
+  setCurrentYear(toYear);
+  CAL_VIEWS = buildCalViews();
+  calStateCurrent.month = 0;
+  calStateAsvCurrent.month = 0;
+  calStateForecast.month = 0;
+  calStateAsvForecast.month = 0;
+  document.getElementById('rollover-banner')?.remove();
+  renderCurrentView();
+  showToast(`Calendrier basculé sur ${toYear}`, '🔄');
+}
+function renderRolloverBanner(){
+  if(!isYearRolloverDue()) return;
+  if(document.getElementById('rollover-banner')) return;
+  const fromYear = getCurrentYear(), toYear = fromYear + 1;
+  const bar = document.createElement('div');
+  bar.id = 'rollover-banner';
+  bar.className = 'rollover-banner';
+  bar.innerHTML = `
+    <span>📅 Nous sommes en ${today.getFullYear()} — le calendrier ${fromYear} peut basculer sur ${toYear} (le prévisionnel ${toYear} devient le calendrier courant, ${toYear+1} est proposé en prévisionnel).</span>
+    <div class="rollover-actions">
+      <button class="btn btn-sm btn-primary" id="rollover-confirm">Basculer maintenant</button>
+      <button class="btn-icon" id="rollover-dismiss" aria-label="Plus tard">✕</button>
+    </div>
+  `;
+  document.getElementById('app-main').prepend(bar);
+  bar.querySelector('#rollover-confirm').onclick = performYearRollover;
+  bar.querySelector('#rollover-dismiss').onclick = ()=> bar.remove();
+}
+
+// État global d'annulation (undo) — pile de snapshots de DATA.slots avant chaque action
+const UNDO_STACK = [];
+const UNDO_MAX = 30;
+function snapshotBeforeChange(){
+  UNDO_STACK.push(JSON.stringify(DATA.slots));
+  if(UNDO_STACK.length > UNDO_MAX) UNDO_STACK.shift();
+  updateUndoButtons();
+}
+function undoLastAction(){
+  if(UNDO_STACK.length === 0) return;
+  DATA.slots = JSON.parse(UNDO_STACK.pop());
+  saveData(false);
+  renderCurrentView();
+  updateUndoButtons();
+  showToast('Dernière action annulée', '↩️');
+}
+function updateUndoButtons(){
+  document.querySelectorAll('.undo-btn').forEach(btn=>{ btn.disabled = UNDO_STACK.length === 0; });
+}
+
+/* ----------------------------------------------------------------
+   2. JOURS FÉRIÉS FRANÇAIS (algorithme de Meeus/Jones/Butcher)
+   ---------------------------------------------------------------- */
+function getFrenchHolidays(year){
+  const a = year % 19, b = Math.floor(year/100), c = year % 100;
+  const d = Math.floor(b/4), e = b % 4, f = Math.floor((b+8)/25);
+  const g = Math.floor((b-f+1)/3), h = (19*a+b-d-g+15) % 30;
+  const i = Math.floor(c/4), k = c % 4;
+  const l = (32+2*e+2*i-h-k) % 7;
+  const m = Math.floor((a+11*h+22*l)/451);
+  const month = Math.floor((h+l-7*m+114)/31);
+  const day = ((h+l-7*m+114) % 31) + 1;
+  const easter = new Date(year, month-1, day);
+
+  const dates = [
+    new Date(year, 0, 1),                            // Jour de l'An
+    new Date(easter.getTime() + 1*86400000),          // Lundi de Pâques
+    new Date(year, 4, 1),                             // Fête du Travail
+    new Date(year, 4, 8),                             // Victoire 1945
+    new Date(easter.getTime() + 39*86400000),         // Ascension
+    new Date(easter.getTime() + 50*86400000),         // Lundi de Pentecôte
+    new Date(year, 6, 14),                            // Fête Nationale
+    new Date(year, 7, 15),                            // Assomption
+    new Date(year, 10, 1),                            // Toussaint
+    new Date(year, 10, 11),                           // Armistice
+    new Date(year, 11, 25),                           // Noël
+  ];
+  const names = ["Jour de l'An","Lundi de Pâques","Fête du Travail","Victoire 1945","Ascension","Lundi de Pentecôte","Fête Nationale","Assomption","Toussaint","Armistice","Noël"];
+  const map = {};
+  dates.forEach((d,idx)=>{ map[fmtISO(d)] = names[idx]; });
+  return map;
+}
+// Cache des fériés par année pour éviter de recalculer Pâques sans cesse
+const HOLIDAYS_CACHE = {};
+function holidaysFor(year){
+  if(!HOLIDAYS_CACHE[year]) HOLIDAYS_CACHE[year] = getFrenchHolidays(year);
+  return HOLIDAYS_CACHE[year];
+}
+function holidayName(isoDate){
+  const year = parseInt(isoDate.slice(0,4),10);
+  return holidaysFor(year)[isoDate] || null;
+}
+
+/* ----------------------------------------------------------------
+   3. UTILITAIRES DATES
+   ---------------------------------------------------------------- */
+function fmtISO(d){
+  // Évite les soucis de fuseau horaire de toISOString() en construisant la chaîne localement
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function daysInMonth(year, month){ return new Date(year, month+1, 0).getDate(); }
+// Lundi = 0 ... Dimanche = 6
+function isoWeekday(date){ return (date.getDay() + 6) % 7; }
+function isSunday(date){ return isoWeekday(date) === 6; }
+function isSaturday(date){ return isoWeekday(date) === 5; }
+
+/* ----------------------------------------------------------------
+   4. PERSISTANCE (localStorage)
+   ---------------------------------------------------------------- */
+let DATA = { version:2, slots:{} };
+
+function loadData(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && parsed.slots) { DATA = parsed; return; }
+    }
+  }catch(e){ console.warn('Lecture localStorage impossible, ré-initialisation.', e); }
+  DATA = { version:2, slots:{} };
+  seedDemoData();
+}
+function saveData(showToast = true){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+  updateDashboardNavBadge();
+  if(showToast) showSavedToast();
+}
+// Notifie le nombre de demandes de congé ASV en attente directement sur l'onglet "Tableau
+// de bord", visible depuis n'importe quelle page de l'app (pas seulement quand on y est).
+function updateDashboardNavBadge(){
+  const el = document.getElementById('dash-nav-badge');
+  if(!el) return;
+  const n = countPendingLeaveRequests();
+  el.textContent = n > 0 ? String(n) : '';
+  el.className = n > 0 ? 'nav-badge' : '';
+}
+
+function slotKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}`; }
+function labelKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}_label`; }
+function commentKey(isoDate){ return `${isoDate}_comment`; }
+function isASVPerson(personId){ return ASV_PEOPLE.some(p=>p.id===personId); }
+
+// ----------------------------------------------------------------
+// Demandes de congé ASV — statut de décision rattaché à chaque demi-journée plutôt qu'à
+// une entité "demande" séparée : ça réutilise directement la logique de fusion des
+// absences contiguës déjà en place (mêmes clés DATA.slots, même date ISO réelle), sans
+// avoir à synchroniser deux structures de données en parallèle.
+function decisionKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}_decision`; }
+function decisionCommentKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}_decision_comment`; }
+function getLeaveDecision(isoDate, personId, slot){ return DATA.slots[decisionKey(isoDate,personId,slot)] || null; }
+function setLeaveDecision(isoDate, personId, slot, decision){
+  const key = decisionKey(isoDate,personId,slot);
+  if(decision) DATA.slots[key] = decision; else delete DATA.slots[key];
+}
+function getLeaveDecisionComment(isoDate, personId, slot){ return DATA.slots[decisionCommentKey(isoDate,personId,slot)] || ''; }
+function setLeaveDecisionComment(isoDate, personId, slot, text){
+  const key = decisionCommentKey(isoDate,personId,slot);
+  if(text) DATA.slots[key] = text; else delete DATA.slots[key];
+}
+
+function getSlotState(isoDate, personId, slot){ return DATA.slots[slotKey(isoDate,personId,slot)] || 'empty'; }
+function setSlotState(isoDate, personId, slot, state){
+  const key = slotKey(isoDate,personId,slot);
+  const wasAbsent = DATA.slots[key] === 'absent';
+  if(state === 'empty'){
+    delete DATA.slots[key];
+    delete DATA.slots[labelKey(isoDate,personId,slot)];
+  } else {
+    DATA.slots[key] = state;
+    if(state !== 'absent') delete DATA.slots[labelKey(isoDate,personId,slot)];
+  }
+  if(isASVPerson(personId)){
+    if(state === 'absent' && !wasAbsent){
+      // Nouvelle absence ASV : demande de congé automatiquement créée en attente de
+      // validation vétérinaire (sauf si une décision existait déjà sur cette demi-journée,
+      // ex. ré-application du même état pendant un glisser-peindre).
+      if(!getLeaveDecision(isoDate, personId, slot)) setLeaveDecision(isoDate, personId, slot, 'pending');
+    } else if(state !== 'absent' && wasAbsent){
+      setLeaveDecision(isoDate, personId, slot, null);
+      setLeaveDecisionComment(isoDate, personId, slot, '');
+    }
+  }
+}
+function getSlotLabel(isoDate, personId, slot){ return DATA.slots[labelKey(isoDate,personId,slot)] || ''; }
+function setSlotLabel(isoDate, personId, slot, label){
+  const key = labelKey(isoDate,personId,slot);
+  if(label) DATA.slots[key] = label; else delete DATA.slots[key];
+}
+function getDayComment(isoDate){ return DATA.slots[commentKey(isoDate)] || ''; }
+function setDayComment(isoDate, text){
+  const key = commentKey(isoDate);
+  if(text) DATA.slots[key] = text; else delete DATA.slots[key];
+}
+// Cycle d'état d'une demi-journée : vide -> présent -> absent -> vide
+function cycleState(state){
+  if(state === 'empty') return 'present';
+  if(state === 'present') return 'absent';
+  return 'empty';
+}
+
+/* ----------------------------------------------------------------
+   5. DONNÉES DE DÉMONSTRATION
+   ---------------------------------------------------------------- */
+// Marque une plage de jours (bornes incluses) comme absente avec un motif, pour une personne donnée
+function seedAbsenceRange(personId, fromISO, toISO, label){
+  let d = new Date(fromISO+'T00:00:00');
+  const end = new Date(toISO+'T00:00:00');
+  while(d <= end){
+    if(!isSunday(d)){
+      const iso = fmtISO(d);
+      SLOTS.forEach(slot=>{
+        setSlotState(iso, personId, slot, 'absent');
+        setSlotLabel(iso, personId, slot, label);
+      });
+    }
+    d = new Date(d.getTime() + 86400000);
+  }
+}
+
+function seedDemoData(){
+  // --- 2026 : données réelles (issues du planning Excel de la clinique) ---
+  // Janvier à août : présence par défaut Lu-Sa pour les deux associés (les jours fériés
+  // restent vides, comme dans le fichier source, qui ne contient pas non plus de données
+  // au-delà du mois d'août 2026 — sept./oct./nov./déc. ne sont donc pas pré-remplis).
+  for(let month=0; month<=7; month++){
+    const nbDays = daysInMonth(2026, month);
+    for(let day=1; day<=nbDays; day++){
+      const date = new Date(2026, month, day);
+      const iso = fmtISO(date);
+      if(isSunday(date) || holidayName(iso)) continue;
+      setSlotState(iso,'david','M','present');
+      setSlotState(iso,'david','AM','present');
+      setSlotState(iso,'stephane','M','present');
+      setSlotState(iso,'stephane','AM','present');
+    }
+  }
+  // Congés et événements identifiés sur le planning d'origine
+  seedAbsenceRange('david', '2026-01-12', '2026-01-16', 'Perche');
+  seedAbsenceRange('david', '2026-01-26', '2026-01-31', 'Ski');
+  seedAbsenceRange('david', '2026-02-09', '2026-02-13', 'Perche');
+  seedAbsenceRange('stephane', '2026-05-01', '2026-05-02', '70 ans de Michel');
+  seedAbsenceRange('stephane', '2026-05-13', '2026-05-14', 'Baptême Lucas');
+  seedAbsenceRange('david', '2026-05-19', '2026-05-23', 'Florence et Erwan');
+  seedAbsenceRange('stephane', '2026-06-19', '2026-06-20', 'Week-end Pivot');
+  seedAbsenceRange('stephane', '2026-06-24', '2026-06-28', 'Barcelone GP');
+  seedAbsenceRange('stephane', '2026-10-10', '2026-10-11', 'Marathon Cologne');
+
+  // --- 2027 : janvier (prévisionnel) ---
+  const nbDaysJan2027 = daysInMonth(2027,0);
+  for(let day=1; day<=nbDaysJan2027; day++){
+    const date = new Date(2027,0,day);
+    if(isSunday(date)) continue;
+    const iso = fmtISO(date);
+    const wd = isoWeekday(date);
+    if(wd <=3){ setSlotState(iso,'david','M','present'); setSlotState(iso,'david','AM','present'); }
+    else if(wd === 4){ setSlotState(iso,'david','M','absent'); setSlotState(iso,'david','AM','absent'); }
+    if(wd >=1 && wd <=4){ setSlotState(iso,'stephane','M','present'); setSlotState(iso,'stephane','AM','present'); }
+    else if(wd === 0){ setSlotState(iso,'stephane','M','absent'); setSlotState(iso,'stephane','AM','absent'); }
+  }
+  ['2027-01-12','2027-01-13','2027-01-14'].forEach(iso=>{
+    setSlotState(iso,'stephane','M','absent'); setSlotLabel(iso,'stephane','M','Formation chirurgie');
+    setSlotState(iso,'stephane','AM','absent'); setSlotLabel(iso,'stephane','AM','Formation chirurgie');
+  });
+  // --- 2027 : semaine de congés David en février ---
+  for(let day=8; day<=12; day++){
+    const date = new Date(2027,1,day);
+    if(isSunday(date)) continue;
+    const iso = fmtISO(date);
+    setSlotState(iso,'david','M','absent'); setSlotLabel(iso,'david','M','Vacances hiver');
+    setSlotState(iso,'david','AM','absent'); setSlotLabel(iso,'david','AM','Vacances hiver');
+  }
+  saveData(false);
+}
+
+/* ----------------------------------------------------------------
+   6. TOAST
+   ---------------------------------------------------------------- */
+function showToast(message, icon='✓'){
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<span>${icon}</span><span>${message}</span>`;
+  container.appendChild(el);
+  setTimeout(()=> el.remove(), 2000);
+}
+function showSavedToast(){ showToast('Sauvegardé'); }
+
+/* ----------------------------------------------------------------
+   7. MODALE DE CONFIRMATION GÉNÉRIQUE
+   ---------------------------------------------------------------- */
+function openConfirmModal({title, message, confirmLabel='Confirmer', danger=true, onConfirm}){
+  const backdrop = document.getElementById('modal-backdrop');
+  const box = document.getElementById('modal-box');
+  box.innerHTML = `
+    <h3>${title}</h3>
+    <p>${message}</p>
+    <div class="modal-actions">
+      <button class="btn" id="modal-cancel">Annuler</button>
+      <button class="btn ${danger?'btn-danger':'btn-primary'}" id="modal-confirm">${confirmLabel}</button>
+    </div>
+  `;
+  backdrop.classList.add('open');
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#modal-cancel').onclick = close;
+  box.querySelector('#modal-confirm').onclick = ()=>{ onConfirm(); close(); };
+  backdrop.onclick = (e)=>{ if(e.target === backdrop) close(); };
+}
+
+/* ----------------------------------------------------------------
+   8. MENU RÉGLAGES (export / import / reset)
+   ---------------------------------------------------------------- */
+function initSettingsMenu(){
+  const toggle = document.getElementById('settings-toggle');
+  const menu = document.getElementById('settings-menu');
+  toggle.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    const willOpen = !menu.classList.contains('open');
+    menu.classList.toggle('open', willOpen);
+    toggle.setAttribute('aria-expanded', String(willOpen));
+  });
+  document.addEventListener('click', (e)=>{
+    if(!menu.contains(e.target) && e.target !== toggle){
+      menu.classList.remove('open');
+      toggle.setAttribute('aria-expanded','false');
+    }
+  });
+
+  document.getElementById('action-colors').addEventListener('click', ()=>{
+    menu.classList.remove('open');
+    openColorPickerModal();
+  });
+
+  document.getElementById('action-change-password').addEventListener('click', ()=>{
+    menu.classList.remove('open');
+    openChangePasswordModal();
+  });
+
+  document.getElementById('action-export').addEventListener('click', ()=>{
+    const blob = new Blob([JSON.stringify(DATA, null, 2)], { type:'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `amivet_planning_${fmtISO(new Date())}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    menu.classList.remove('open');
+    showToast('Export JSON téléchargé', '⬇️');
+  });
+
+  const fileInput = document.getElementById('import-file-input');
+  document.getElementById('action-import').addEventListener('click', ()=>{
+    menu.classList.remove('open');
+    fileInput.click();
+  });
+  fileInput.addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      try{
+        const parsed = JSON.parse(reader.result);
+        if(!parsed || typeof parsed.slots !== 'object') throw new Error('Format invalide');
+        snapshotBeforeChange();
+        DATA = parsed;
+        saveData(false);
+        renderCurrentView();
+        showToast('Import réussi', '⬆️');
+      }catch(err){
+        showToast('Fichier JSON invalide', '⚠️');
+      }
+      fileInput.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  document.getElementById('action-reset-current').addEventListener('click', ()=>{
+    menu.classList.remove('open');
+    const y = getCurrentYear();
+    openConfirmModal({
+      title:`Réinitialiser ${y} ?`,
+      message:`Toutes les présences, absences et commentaires de l'année ${y} seront définitivement supprimés. Cette action est irréversible.`,
+      confirmLabel:`Réinitialiser ${y}`,
+      onConfirm:()=>{
+        snapshotBeforeChange();
+        Object.keys(DATA.slots).filter(k=>k.startsWith(`${y}-`)).forEach(k=> delete DATA.slots[k]);
+        saveData();
+        renderCurrentView();
+        showToast(`Année ${y} réinitialisée`, '🗑️');
+      }
+    });
+  });
+  document.getElementById('action-reset-forecast').addEventListener('click', ()=>{
+    menu.classList.remove('open');
+    const y = getCurrentYear() + 1;
+    openConfirmModal({
+      title:`Réinitialiser ${y} ?`,
+      message:`Toutes les données prévisionnelles de l'année ${y} seront définitivement supprimées. Cette action est irréversible.`,
+      confirmLabel:`Réinitialiser ${y}`,
+      onConfirm:()=>{
+        snapshotBeforeChange();
+        Object.keys(DATA.slots).filter(k=>k.startsWith(`${y}-`)).forEach(k=> delete DATA.slots[k]);
+        saveData();
+        renderCurrentView();
+        showToast(`Année ${y} réinitialisée`, '🗑️');
+      }
+    });
+  });
+}
+
+/* ----------------------------------------------------------------
+   9. NAVIGATION ENTRE ONGLETS
+   ---------------------------------------------------------------- */
+let currentView = 'vets';
+const VIEW_RENDERERS = {}; // rempli plus loin par chaque module de vue
+
+function switchView(viewId){
+  currentView = viewId;
+  document.querySelectorAll('.nav-tab').forEach(btn=>{
+    const active = btn.dataset.view === viewId;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-current', active ? 'page' : 'false');
+  });
+  document.querySelectorAll('.view-section').forEach(sec=>{
+    sec.classList.toggle('hidden', sec.id !== `view-${viewId}`);
+  });
+  renderCurrentView();
+}
+// Renvoie l'id du conteneur DOM de la sous-page actuellement sélectionnée pour ce groupe.
+function activeSubContainer(group){
+  const g = GROUP_VIEWS[group];
+  const sub = subNavState[group];
+  if(sub === 'calendar') return g.calendarContainer;
+  if(sub === 'forecast') return g.forecastContainer;
+  return g.annualContainer;
+}
+// Seul point d'entrée qui décide si le contenu réel peut s'afficher ou s'il faut montrer
+// le verrou — aussi bien pour un onglet simple (tableau de bord) que pour un onglet groupé
+// (vétérinaires), où le verrou doit s'afficher À L'INTÉRIEUR de la sous-page active sans
+// détruire la sous-navigation (sub-nav) ni les autres sous-pages masquées.
+function renderCurrentView(){
+  renderRolloverBanner();
+  const isForecastSubPage = (currentView === 'vets' && subNavState.vets === 'forecast') || (currentView === 'asv' && subNavState.asv === 'forecast');
+  document.body.classList.toggle('forecast-theme', isForecastSubPage);
+  if(GATED_VIEWS.includes(currentView) && !isGateUnlocked()){
+    const group = GROUP_VIEWS[currentView];
+    if(group){
+      renderPasswordGate(activeSubContainer(currentView), ()=> renderGroupSubPage(currentView));
+    } else {
+      renderPasswordGate(`view-${currentView}`, renderCurrentView);
+    }
+    return;
+  }
+  const renderer = VIEW_RENDERERS[currentView];
+  if(renderer) renderer();
+}
+// Affiche un formulaire de mot de passe dans le conteneur ciblé. Le verrou est partagé
+// entre tous les onglets de GATED_VIEWS : une fois déverrouillé, il reste valable 30
+// minutes (ou jusqu'à la fermeture du navigateur, qui vide sessionStorage).
+function renderPasswordGate(containerId, onUnlock){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  container.innerHTML = `
+    <div class="gate-wrap">
+      <div class="gate-box card">
+        <h2 class="section-title">🔒 Accès protégé</h2>
+        <p class="section-desc">Cette section est réservée. Saisissez le mot de passe pour continuer.</p>
+        <input type="password" id="gate-password-input" placeholder="Mot de passe" autocomplete="current-password">
+        <p id="gate-error" class="gate-error hidden">Mot de passe incorrect.</p>
+        <button class="btn btn-primary" id="gate-submit" style="width:100%;justify-content:center;margin-top:14px;">Déverrouiller</button>
+      </div>
+    </div>
+  `;
+  const input = container.querySelector('#gate-password-input');
+  const submit = ()=>{
+    if(input.value === getGatePassword()){
+      unlockGate();
+      onUnlock();
+    } else {
+      container.querySelector('#gate-error').classList.remove('hidden');
+      input.value = '';
+      input.focus();
+    }
+  };
+  container.querySelector('#gate-submit').onclick = submit;
+  input.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') submit(); });
+  input.focus();
+}
+
+// Sous-pages "Calendrier mensuel" / "Vue annuelle" / "Prévisionnel" au sein d'un onglet
+// groupé. Appelée uniquement une fois l'accès autorisé par renderCurrentView (jamais
+// directement quand le groupe est protégé et verrouillé).
+function renderGroupSubPage(group){
+  const g = GROUP_VIEWS[group];
+  const sub = subNavState[group];
+  if(sub === 'calendar') renderCalendarView(g.calendarViewKey);
+  else if(sub === 'forecast') renderCalendarView(g.forecastViewKey);
+  else renderAnnualViewForGroup(group);
+}
+function switchSubPage(group, subKey){
+  const g = GROUP_VIEWS[group];
+  subNavState[group] = subKey;
+  document.querySelectorAll(`#${group}-sub-nav .sub-tab`).forEach(btn=>{
+    btn.classList.toggle('active', btn.dataset.sub === subKey);
+  });
+  document.getElementById(g.calendarContainer).classList.toggle('hidden', subKey !== 'calendar');
+  document.getElementById(g.annualContainer).classList.toggle('hidden', subKey !== 'annual');
+  document.getElementById(g.forecastContainer).classList.toggle('hidden', subKey !== 'forecast');
+  renderCurrentView();
+}
+function initNav(){
+  document.getElementById('main-nav').addEventListener('click', (e)=>{
+    const btn = e.target.closest('.nav-tab');
+    if(btn) switchView(btn.dataset.view);
+  });
+  document.addEventListener('click', (e)=>{
+    if(e.target.closest('.lock-now-btn')){
+      lockGate();
+      renderCurrentView();
+    }
+  });
+  document.querySelectorAll('.sub-nav').forEach(nav=>{
+    const group = nav.id.replace('-sub-nav','');
+    nav.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.sub-tab');
+      if(btn) switchSubPage(group, btn.dataset.sub);
+    });
+  });
+}
+
+/* ----------------------------------------------------------------
+   10. RACCOURCIS CLAVIER
+   ---------------------------------------------------------------- */
+// Renvoie la clé CAL_VIEWS du calendrier mensuel actuellement affiché, ou null si la vue
+// courante n'est pas un calendrier (ex. tableau de bord, sous-page "Vue annuelle"...).
+function activeCalendarViewKey(){
+  // Si l'onglet courant est protégé et verrouillé, le calendrier n'est pas réellement
+  // affiché (un formulaire de mot de passe occupe le conteneur) : les raccourcis clavier
+  // ne doivent pas pouvoir naviguer ni rendre le calendrier dans son dos.
+  if(GATED_VIEWS.includes(currentView) && !isGateUnlocked()) return null;
+  const g = GROUP_VIEWS[currentView];
+  if(!g) return null;
+  const sub = subNavState[currentView];
+  if(sub === 'calendar') return g.calendarViewKey;
+  if(sub === 'forecast') return g.forecastViewKey;
+  return null;
+}
+function initKeyboardShortcuts(){
+  document.addEventListener('keydown', (e)=>{
+    if(e.target.matches && e.target.matches('input, textarea')) return;
+    if((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z'){
+      e.preventDefault();
+      undoLastAction();
+      return;
+    }
+    const viewKey = activeCalendarViewKey();
+    if(!viewKey) return;
+    if(e.key === 'ArrowLeft'){ changeMonth(viewKey, -1); }
+    else if(e.key === 'ArrowRight'){ changeMonth(viewKey, 1); }
+    else if(e.key.toLowerCase() === 't' && CAL_VIEWS[viewKey].todayNav){ goToToday(viewKey); }
+  });
+}
+
+/* ----------------------------------------------------------------
+   11. UTILITAIRES DIVERS (échappement, couleurs)
+   ---------------------------------------------------------------- */
+function escapeHTML(str){
+  return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function hexToRgba(hex, alpha){
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+function personOf(id){ return ALL_PEOPLE.find(p=>p.id===id); }
+
+/* ================================================================
+   12. VUE CALENDRIER (moteur partagé 2026 / 2027)
+   ================================================================ */
+function changeMonth(viewKey, delta){
+  const cfg = CAL_VIEWS[viewKey];
+  const m = cfg.navState.month + delta;
+  cfg.navState.month = ((m % 12) + 12) % 12;
+  renderCalendarView(viewKey);
+}
+function goToToday(viewKey){
+  const cfg = CAL_VIEWS[viewKey];
+  cfg.navState.month = (today.getFullYear() === cfg.year) ? today.getMonth() : 0;
+  renderCalendarView(viewKey);
+}
+
+// Calcule classes + contenu d'une cellule demi-journée à partir de DATA. Pour une absence
+// ASV, l'apparence dépend aussi du statut de la demande de congé (en attente / approuvée /
+// refusée) — sans changement pour les vétérinaires, qui n'ont pas ce concept.
+function cellRenderInfo(iso, personId, slot){
+  const person = personOf(personId);
+  const state = getSlotState(iso, personId, slot);
+  const label = state === 'absent' ? getSlotLabel(iso, personId, slot) : '';
+  const decision = state === 'absent' && isASVPerson(personId) ? (getLeaveDecision(iso, personId, slot) || 'pending') : null;
+  let style = '';
+  let html = '';
+  let title = label;
+  let stateClass = state;
+  if(state === 'present'){
+    style = `background:${person.present.bg};border-color:${person.present.border};color:${person.present.text};`;
+    html = `<span class="cell-mark">✓</span>`;
+  } else if(state === 'absent'){
+    if(decision === 'pending'){
+      stateClass = 'leave-pending';
+      html = `${label ? escapeHTML(label)+' ' : ''}<span class="cell-mark">⏳</span>`;
+      title = `${label ? label+' — ' : ''}En attente de validation`;
+    } else if(decision === 'rejected'){
+      stateClass = 'leave-rejected';
+      html = `<span class="cell-mark">⚠️</span> Voir vétérinaire`;
+      const comment = getLeaveDecisionComment(iso, personId, slot);
+      title = `Congé refusé — merci de vous rapprocher d'un vétérinaire${comment ? ' — '+comment : ''}`;
+    } else {
+      if(decision === 'approved') stateClass = 'leave-approved';
+      html = label ? escapeHTML(label) : `<span class="cell-mark">✈</span>`;
+      if(decision === 'approved'){
+        html = `<span class="cell-mark">✓</span> ${html}`;
+        title = `${label ? label+' — ' : ''}Congé approuvé`;
+      }
+    }
+  } else {
+    style = `border-left:3px solid ${hexToRgba(person.color,0.4)};`;
+  }
+  return { state, label, decision, style, html, title, stateClass };
+}
+function cellAriaLabel(iso, personId, slot){
+  const person = personOf(personId);
+  const { state, label, decision } = cellRenderInfo(iso, personId, slot);
+  let stateTxt;
+  if(state === 'present') stateTxt = 'présent';
+  else if(state === 'absent'){
+    if(decision === 'pending') stateTxt = `demande de congé en attente${label?' — '+label:''}`;
+    else if(decision === 'rejected') stateTxt = 'demande de congé refusée — voir un vétérinaire';
+    else if(decision === 'approved') stateTxt = `congé approuvé${label?' — '+label:''}`;
+    else stateTxt = `absent${label?' — '+label:''}`;
+  } else stateTxt = 'non renseigné';
+  return `${person.short}, ${SLOT_LABELS[slot]}, ${stateTxt}. Cliquer pour changer.`;
+}
+// Met à jour le DOM d'une seule cellule sans tout re-rendre (utilisé pendant le drag-to-fill)
+function updateCellDOM(cellEl){
+  const { date:iso, person:personId, slot } = cellEl.dataset;
+  const info = cellRenderInfo(iso, personId, slot);
+  cellEl.className = `cal-cell state-${info.stateClass}`;
+  cellEl.style.cssText = info.style;
+  cellEl.innerHTML = info.html;
+  cellEl.setAttribute('aria-label', cellAriaLabel(iso, personId, slot));
+  cellEl.title = info.title || '';
+}
+
+function buildCalendarToolbar(viewKey){
+  const cfg = CAL_VIEWS[viewKey];
+  const monthLabel = `${MONTH_NAMES[cfg.navState.month]} ${cfg.year}`;
+  const todayBtn = cfg.todayNav ? `<button class="btn btn-sm" id="cal-today-${viewKey}" aria-label="Revenir au mois actuel">📍 Aujourd'hui</button>` : '';
+  return `
+    <div class="cal-toolbar">
+      <div class="cal-month-nav">
+        <button class="btn-icon" id="cal-prev-${viewKey}" aria-label="Mois précédent">←</button>
+        <div class="cal-month-label">${monthLabel}</div>
+        <button class="btn-icon" id="cal-next-${viewKey}" aria-label="Mois suivant">→</button>
+        ${todayBtn}
+      </div>
+      <div class="cal-toolbar-actions">
+        <button class="btn-icon undo-btn" id="cal-undo-${viewKey}" aria-label="Annuler la dernière action" title="Annuler la dernière action (Cmd/Ctrl+Z)" ${UNDO_STACK.length===0?'disabled':''}>↩️</button>
+        <button class="btn btn-sm btn-danger" id="cal-clear-month-${viewKey}" aria-label="Vider le mois affiché">🗑️ Vider le mois</button>
+        ${cfg.printable ? `<button class="btn-icon" id="cal-print-${viewKey}" title="Imprimer ce calendrier" aria-label="Imprimer ce calendrier">🖨️</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+// Supprime les présences/absences du mois affiché — pour une personne donnée, ou pour
+// tout le groupe affiché si personId est omis (dans ce cas, les commentaires de journée
+// sont aussi effacés).
+function clearMonth(viewKey, month, personId){
+  const cfg = CAL_VIEWS[viewKey];
+  snapshotBeforeChange();
+  const nbDays = daysInMonth(cfg.year, month);
+  const targets = personId ? cfg.people.filter(p=>p.id===personId) : cfg.people;
+  for(let day=1; day<=nbDays; day++){
+    const iso = fmtISO(new Date(cfg.year, month, day));
+    targets.forEach(p=> SLOTS.forEach(slot=> setSlotState(iso, p.id, slot, 'empty')));
+    if(!personId) setDayComment(iso, '');
+  }
+  saveData();
+  renderCalendarView(viewKey);
+  const who = personId ? personOf(personId).short : cfg.people.map(p=>p.short).join(' et ');
+  showToast(`${MONTH_NAMES[month]} ${cfg.year} vidé (${who})`, '🗑️');
+}
+
+// Modale de choix : que vider pour ce mois ? Les boutons sont générés dynamiquement à
+// partir de cfg.people, donc le même code sert le calendrier à 2 personnes (vétérinaires)
+// comme celui à 3 (ASV).
+function openClearMonthModal(viewKey, month){
+  const cfg = CAL_VIEWS[viewKey];
+  const label = `${MONTH_NAMES[month]} ${cfg.year}`;
+  const backdrop = document.getElementById('modal-backdrop');
+  const box = document.getElementById('modal-box');
+  const allLabel = cfg.people.map(p=>p.short).join(' + ');
+  box.innerHTML = `
+    <h3>Vider ${label} ?</h3>
+    <p>Choisissez ce qui doit être supprimé définitivement pour ${label}. Cette action est irréversible.</p>
+    <div class="modal-actions" style="flex-direction:column;align-items:stretch;">
+      <button class="btn btn-danger" id="clear-all" style="justify-content:center;">🗑️ Tout le mois (${allLabel})</button>
+      ${cfg.people.map(p=>`<button class="btn btn-danger" data-clear-person="${p.id}" style="justify-content:center;color:${p.color};border-color:${hexToRgba(p.color,0.4)};">${p.short} uniquement</button>`).join('')}
+      <button class="btn" id="modal-cancel" style="justify-content:center;">Annuler</button>
+    </div>
+  `;
+  backdrop.classList.add('open');
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#modal-cancel').onclick = close;
+  box.querySelector('#clear-all').onclick = ()=>{ clearMonth(viewKey, month); close(); };
+  box.querySelectorAll('[data-clear-person]').forEach(btn=>{
+    btn.onclick = ()=>{ clearMonth(viewKey, month, btn.dataset.clearPerson); close(); };
+  });
+  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+}
+
+// Découpe un mois en (au plus) 2 moitiés de taille proche, la coupure tombant toujours
+// juste après un dimanche (jamais au milieu d'une semaine).
+function splitMonthIntoHalves(year, month){
+  const nbDays = daysInMonth(year, month);
+  const sundays = [];
+  for(let day=1; day<nbDays; day++){
+    if(isSunday(new Date(year, month, day))) sundays.push(day);
+  }
+  let cut = Math.ceil(nbDays/2);
+  if(sundays.length){
+    cut = sundays.reduce((best,d)=> Math.abs(d-nbDays/2) < Math.abs(best-nbDays/2) ? d : best, sundays[0]);
+  }
+  const half1 = [], half2 = [];
+  for(let d=1; d<=nbDays; d++){ (d<=cut?half1:half2).push(d); }
+  return [half1, half2].filter(h=>h.length>0);
+}
+
+// Renvoie la demi-journée suivant immédiatement (iso,slot), en sautant un dimanche s'il y en
+// a un juste après — ou null si le jour suivant n'est pas un dimanche (rien à enjamber).
+function nextSlotAcrossSunday(iso, slot){
+  let date = new Date(iso+'T00:00:00');
+  let slotIdx = SLOTS.indexOf(slot) + 1;
+  if(slotIdx >= SLOTS.length){ slotIdx = 0; date = new Date(date.getTime()+86400000); }
+  if(!isSunday(date)) return null;
+  date = new Date(date.getTime()+86400000);
+  return { iso: fmtISO(date), slot: SLOTS[slotIdx] };
+}
+// Symétrique de nextSlotAcrossSunday, vers le passé.
+function prevSlotAcrossSunday(iso, slot){
+  let date = new Date(iso+'T00:00:00');
+  let slotIdx = SLOTS.indexOf(slot) - 1;
+  if(slotIdx < 0){ slotIdx = SLOTS.length-1; date = new Date(date.getTime()-86400000); }
+  if(!isSunday(date)) return null;
+  date = new Date(date.getTime()-86400000);
+  return { iso: fmtISO(date), slot: SLOTS[slotIdx] };
+}
+// Collecte toutes les demi-journées absentes contiguës à partir de (iso,slot), dans une
+// direction (1 = vers le futur, -1 = vers le passé), en s'arrêtant à un dimanche.
+function collectContiguousAbsentSlots(personId, iso, slot, direction){
+  const result = [];
+  let date = new Date(iso+'T00:00:00');
+  let slotIdx = SLOTS.indexOf(slot);
+  while(!isSunday(date)){
+    const curIso = fmtISO(date);
+    const curSlot = SLOTS[slotIdx];
+    if(getSlotState(curIso, personId, curSlot) !== 'absent') break;
+    if(direction > 0) result.push({iso:curIso, slot:curSlot});
+    else result.unshift({iso:curIso, slot:curSlot});
+    slotIdx += direction;
+    if(slotIdx < 0){ slotIdx = SLOTS.length-1; date = new Date(date.getTime()-86400000); }
+    else if(slotIdx >= SLOTS.length){ slotIdx = 0; date = new Date(date.getTime()+86400000); }
+  }
+  return result;
+}
+// Si l'absence saisie touche un dimanche, applique le même motif à l'absence contiguë de
+// l'autre côté de ce dimanche (sans avoir à le ressaisir).
+function propagateLabelAcrossSunday(personId, slots, label){
+  if(!slots.length) return;
+  const first = slots[0], last = slots[slots.length-1];
+  const before = prevSlotAcrossSunday(first.iso, first.slot);
+  if(before && getSlotState(before.iso, personId, before.slot) === 'absent'){
+    collectContiguousAbsentSlots(personId, before.iso, before.slot, -1)
+      .forEach(({iso,slot})=> setSlotLabel(iso, personId, slot, label));
+  }
+  const after = nextSlotAcrossSunday(last.iso, last.slot);
+  if(after && getSlotState(after.iso, personId, after.slot) === 'absent'){
+    collectContiguousAbsentSlots(personId, after.iso, after.slot, 1)
+      .forEach(({iso,slot})=> setSlotLabel(iso, personId, slot, label));
+  }
+}
+
+// Construit les <td> de la ligne d'une personne, en fusionnant les demi-journées
+// d'absence contiguës (même motif, et pour les ASV même statut de demande de congé) en
+// une seule cellule.
+function buildPersonRowCells(year, month, days, personId){
+  let html = '';
+  let run = null;
+  const flush = ()=>{
+    if(!run) return;
+    const first = run.slots[0], last = run.slots[run.slots.length-1];
+    const ariaRange = run.slots.length>1 ? `du ${formatFR(first.iso)} au ${formatFR(last.iso)}` : formatFR(first.iso);
+    const info = cellRenderInfo(first.iso, personId, first.slot);
+    html += `<td class="cal-cell state-${info.stateClass}" colspan="${run.colspan}"
+      data-slots='${JSON.stringify(run.slots)}' data-person="${personId}"
+      tabindex="0" role="button" title="${escapeHTML(info.title||'')}"
+      aria-label="${personOf(personId).short} ${ariaRange} — ${cellAriaLabel(first.iso, personId, first.slot)}">${info.html}</td>`;
+    run = null;
+  };
+  // Un dimanche peut être "absorbé" dans une case fusionnée (sans devenir une vraie
+  // demi-journée de données) pour un congé vétérinaire (toujours validé d'office, aucune
+  // approbation n'existant pour eux) ou pour une demande de congé ASV en attente ou
+  // validée — à condition que le motif se poursuive identique de l'autre côté. Une demande
+  // ASV refusée garde toujours le dimanche comme case "fermée" séparée.
+  const canBridgeSunday = (decision)=> !isASVPerson(personId) || decision === 'pending' || decision === 'approved';
+  days.forEach(day=>{
+    const date = new Date(year, month, day);
+    const iso = fmtISO(date);
+    if(isSunday(date)){
+      if(run && canBridgeSunday(run.decision)){
+        const nextIso = fmtISO(new Date(date.getTime() + 86400000));
+        const nextState = getSlotState(nextIso, personId, 'M');
+        const nextLabel = nextState === 'absent' ? getSlotLabel(nextIso, personId, 'M') : '';
+        const nextDecision = nextState === 'absent' && isASVPerson(personId) ? (getLeaveDecision(nextIso, personId, 'M') || 'pending') : null;
+        if(nextState === 'absent' && nextLabel === run.label && nextDecision === run.decision){
+          run.colspan += 2;
+          return;
+        }
+      }
+      flush();
+      html += `<td class="cal-cell sunday-cell" colspan="2" aria-hidden="true"></td>`;
+      return;
+    }
+    SLOTS.forEach(slot=>{
+      const state = getSlotState(iso, personId, slot);
+      const label = state === 'absent' ? getSlotLabel(iso, personId, slot) : '';
+      const decision = state === 'absent' && isASVPerson(personId) ? (getLeaveDecision(iso, personId, slot) || 'pending') : null;
+      if(state === 'absent'){
+        if(run && run.label === label && run.decision === decision){ run.slots.push({iso, slot}); run.colspan += 1; }
+        else { flush(); run = { label, decision, slots:[{iso, slot}], colspan:1 }; }
+      } else {
+        flush();
+        const info = cellRenderInfo(iso, personId, slot);
+        html += `<td class="cal-cell state-${info.stateClass}" style="${info.style}"
+          data-date="${iso}" data-person="${personId}" data-slot="${slot}" data-slot-short="${slot==='M'?'M':'A'}"
+          tabindex="0" role="button" title="${escapeHTML(info.title||'')}"
+          aria-label="${cellAriaLabel(iso, personId, slot)}">${info.html}</td>`;
+      }
+    });
+  });
+  flush();
+  return html;
+}
+
+function buildHalfTable(year, month, days, people){
+  let headCells = '';
+  days.forEach(day=>{
+    const date = new Date(year, month, day);
+    const iso = fmtISO(date);
+    const wd = isoWeekday(date);
+    const sunday = wd === 6;
+    const saturday = wd === 5;
+    const hName = holidayName(iso);
+    const isToday = fmtISO(today) === iso;
+    const comment = getDayComment(iso);
+
+    let thClasses = ['cth'];
+    if(sunday) thClasses.push('is-sunday');
+    if(saturday) thClasses.push('is-saturday');
+    if(hName) thClasses.push('is-holiday');
+    if(isToday) thClasses.push('is-today');
+
+    let inner = `
+      <div class="cal-weekday">${WEEKDAY_NAMES[wd]}</div>
+      <div class="cal-daynum">${day}</div>
+      ${hName ? `<div class="cal-holiday-dot" title="Férié — ${escapeHTML(hName)}"></div>` : ''}
+    `;
+    if(!sunday){
+      inner += `
+        <div class="cal-col-tools">
+          <button class="cal-icon-btn ${comment?'has-comment':''}" data-action="comment" data-date="${iso}" aria-label="Commentaire du ${day}/${month+1}${comment?' (présent)':''}" title="${comment?escapeHTML(comment):'Ajouter un commentaire'}">💬</button>
+          <button class="cal-icon-btn" data-action="edit-day" data-date="${iso}" aria-label="Édition rapide du ${day}/${month+1}">✏️</button>
+        </div>
+      `;
+    }
+    headCells += `<th colspan="2" class="${thClasses.join(' ')}">${inner}</th>`;
+  });
+
+  let bodyRows = '';
+  people.forEach(person=>{
+    bodyRows += `
+      <tr>
+        <th class="row-label" style="color:${person.color}">${person.short}</th>
+        ${buildPersonRowCells(year, month, days, person.id)}
+      </tr>
+    `;
+  });
+
+  return `
+    <table class="cal-table">
+      <colgroup><col class="col-label">${days.map(()=>'<col><col>').join('')}</colgroup>
+      <thead><tr><th class="row-label corner"></th>${headCells}</tr></thead>
+      <tbody>${bodyRows}</tbody>
+    </table>
+  `;
+}
+
+function buildCalendarGrid(viewKey){
+  const cfg = CAL_VIEWS[viewKey];
+  const month = cfg.navState.month;
+  const halves = splitMonthIntoHalves(cfg.year, month);
+  const tables = halves.map(days => buildHalfTable(cfg.year, month, days, cfg.people)).join('');
+  return `<div class="cal-scroll"><div class="cal-tables">${tables}</div></div>`;
+}
+
+function buildLegendColors(people = PEOPLE){
+  const hasASV = people.some(p=> isASVPerson(p.id));
+  return `
+    <div class="legend-row">
+      ${people.map(p=>`
+        <div class="legend-item"><span class="legend-swatch" style="background:${p.present.bg};border:1.5px solid ${p.present.border}"></span>${p.short} — présent (✓ = une demi-journée)</div>
+      `).join('')}
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--color-absent);border:1.5px solid var(--color-absent-border)"></span>Absent / congé${hasASV?' approuvé':''}</div>
+      ${hasASV ? `
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-leave-pending);border:1.5px solid var(--color-leave-pending-border)"></span>Demande de congé en attente</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-leave-rejected);border:1.5px solid var(--color-leave-rejected-border)"></span>Demande refusée</div>
+      ` : ''}
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--color-holiday);border:1.5px solid var(--color-holiday)"></span>Jour férié</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--color-sunday);border:1.5px solid var(--color-border)"></span>Dimanche (fermé)</div>
+    </div>
+  `;
+}
+function buildLegend(people = PEOPLE){
+  const hasASV = people.some(p=> isASVPerson(p.id));
+  return `
+    <div class="legend">
+      ${buildLegendColors(people)}
+      <div class="legend-row">
+        <span class="legend-help-item">🖱️ <strong>Clic</strong> sur une case : fait défiler Vide → Présent → ${hasASV?'Demande de congé':'Absent'}</span>
+        <span class="legend-help-item">↔️ <strong>Glisser</strong> le clic sur plusieurs cases : les remplit toutes d'un coup</span>
+        <span class="legend-help-item">👆 <strong>Clic droit</strong> (ou appui long) sur une case : ouvre la saisie d'un motif ${hasASV?'de la demande':'d\'absence'}</span>
+        <span class="legend-help-item">🧩 Plusieurs demi-journées contiguës avec le même motif s'affichent <strong>fusionnées en une seule case</strong> — cliquez-la pour changer le motif, l'effacer, ou tout <strong>vider</strong> pour ressaisir la période jour par jour</span>
+        ${hasASV ? `<span class="legend-help-item">📋 Chaque absence saisie est automatiquement <strong>soumise aux vétérinaires</strong> pour validation (onglet Tableau de bord → Demandes de congé)</span>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function renderCalendarView(viewKey){
+  const cfg = CAL_VIEWS[viewKey];
+  const container = document.getElementById(cfg.containerId);
+  if(!container || !cfg) return;
+  const banner = cfg.forecast ? `
+    <div class="forecast-banner">⚠️ Vue prévisionnelle — données indicatives non confirmées</div>
+  ` : '';
+  const title = cfg.forecast
+    ? `<h2 class="section-title">Prévisionnel ${cfg.year} — ${cfg.label}</h2>`
+    : `<h2 class="section-title">Calendrier ${cfg.year} — ${cfg.label}</h2>`;
+  container.innerHTML = `
+    ${banner}
+    ${title}
+    <p class="section-desc">Cliquez sur une cellule pour faire défiler Vide → Présent → Absent. Clic droit (ou appui long) sur une cellule pour saisir un motif d'absence.</p>
+    ${buildCalendarToolbar(viewKey)}
+    ${buildCalendarGrid(viewKey)}
+    ${buildLegend(cfg.people)}
+  `;
+}
+VIEW_RENDERERS['vets'] = ()=> renderGroupSubPage('vets');
+VIEW_RENDERERS['asv'] = ()=> renderGroupSubPage('asv');
+
+/* ----------------------------------------------------------------
+   13. INTERACTIONS CALENDRIER (clic, glisser-peindre, popovers, sidebar)
+   ---------------------------------------------------------------- */
+const WEEKDAY_FULL = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
+function formatFR(iso){
+  const [y,m,d] = iso.split('-').map(Number);
+  const date = new Date(y, m-1, d);
+  return `${WEEKDAY_FULL[isoWeekday(date)]} ${d} ${MONTH_NAMES[m-1].toLowerCase()} ${y}`;
+}
+function calViewKeyOfEventTarget(target){
+  const section = target.closest('[data-cal-view]');
+  return section ? section.dataset.calView : null;
+}
+
+function cycleCellAndSave(cell){
+  snapshotBeforeChange();
+  const { date:iso, person:personId, slot } = cell.dataset;
+  const next = cycleState(getSlotState(iso, personId, slot));
+  setSlotState(iso, personId, slot, next);
+  updateCellDOM(cell);
+  saveData();
+}
+
+// --- Glisser-peindre (drag-to-fill) + appui long ---
+let dragCtx = null;
+function startDrag(cell){
+  snapshotBeforeChange();
+  const { date:iso, person:personId, slot } = cell.dataset;
+  const paintValue = cycleState(getSlotState(iso, personId, slot));
+  dragCtx = {
+    startCell: cell, paintValue, personId, moved:false, cancelled:false, touched:new Set(),
+    viewKey: calViewKeyOfEventTarget(cell),
+    longPressTimer: setTimeout(()=>{
+      if(dragCtx && !dragCtx.moved){
+        dragCtx.cancelled = true;
+        openAbsenceLabelPopover(cell, true);
+        dragCtx = null;
+      }
+    }, 480)
+  };
+}
+function applyPaint(cell, value){
+  const { date:iso, person:personId, slot } = cell.dataset;
+  dragCtx.touched.add(`${iso}_${personId}_${slot}`);
+  setSlotState(iso, personId, slot, value);
+  updateCellDOM(cell);
+}
+function enterDragCell(cell){
+  if(!dragCtx || dragCtx.cancelled) return;
+  dragCtx.moved = true;
+  clearTimeout(dragCtx.longPressTimer);
+  // On ignore les cases de l'autre collaborateur : seul celui sélectionné au clic initial
+  // peut être peint/fusionné pendant ce glisser.
+  if(cell.dataset.person !== dragCtx.personId) return;
+  applyPaint(cell, dragCtx.paintValue);
+}
+function endDrag(){
+  if(!dragCtx) return;
+  clearTimeout(dragCtx.longPressTimer);
+  if(!dragCtx.cancelled){
+    if(!dragCtx.moved) applyPaint(dragCtx.startCell, dragCtx.paintValue);
+    if(dragCtx.touched.size > 0){
+      saveData();
+      // re-rendu complet pour fusionner les nouvelles absences contiguës
+      if(dragCtx.viewKey) renderCalendarView(dragCtx.viewKey);
+    }
+  }
+  dragCtx = null;
+}
+
+// --- Popover : motif d'absence ---
+function openAbsenceLabelPopover(cell, forceAbsent){
+  const { date:iso, person:personId, slot } = cell.dataset;
+  const viewKey = calViewKeyOfEventTarget(cell);
+  const person = personOf(personId);
+  snapshotBeforeChange();
+  if(forceAbsent && getSlotState(iso,personId,slot) !== 'absent'){
+    setSlotState(iso,personId,slot,'absent');
+    updateCellDOM(cell);
+    saveData(false);
+  }
+  const currentLabel = getSlotLabel(iso,personId,slot);
+  const isASV = isASVPerson(personId);
+  const backdrop = document.getElementById('popover-backdrop');
+  const box = document.getElementById('popover-box');
+  const quickTags = ['Vacances','Formation','Congrès','Maladie','RTT','Rendez-vous médical'];
+  box.innerHTML = `
+    <h4>${isASV ? 'Demande de congé' : "Motif d'absence"} — ${person.short}, ${SLOT_LABELS[slot]}<br><span class="text-muted" style="font-weight:500;font-size:12px;">${formatFR(iso)}</span></h4>
+    ${isASV ? `<p class="text-muted" style="font-size:12px;margin:-4px 0 12px;">Sera soumise aux vétérinaires pour validation.</p>` : ''}
+    <div class="popover-quicktags">
+      ${quickTags.map(t=>`<button type="button" class="quicktag" data-tag="${escapeHTML(t)}">${t}</button>`).join('')}
+    </div>
+    <input type="text" id="absence-label-input" placeholder="Motif (ex. SKI TIGNES, GRÈCE...)" value="${escapeHTML(currentLabel)}" maxlength="40">
+    <div class="popover-actions">
+      <button class="btn" id="popover-cancel">Annuler</button>
+      <button class="btn btn-primary" id="popover-save">${isASV ? 'Soumettre la demande' : 'Enregistrer'}</button>
+    </div>
+  `;
+  backdrop.classList.add('open');
+  const input = box.querySelector('#absence-label-input');
+  input.focus(); input.select();
+  box.querySelectorAll('.quicktag').forEach(tag=>{
+    tag.addEventListener('click', ()=>{ input.value = tag.dataset.tag; input.focus(); });
+  });
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#popover-cancel').onclick = close;
+  box.querySelector('#popover-save').onclick = ()=>{
+    const label = input.value.trim();
+    setSlotLabel(iso, personId, slot, label);
+    propagateLabelAcrossSunday(personId, [{iso, slot}], label);
+    saveData();
+    if(viewKey) renderCalendarView(viewKey);
+    close();
+  };
+  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+}
+
+// --- Popover : motif d'absence pour une cellule fusionnée (plusieurs demi-journées) ---
+function openAbsenceRangePopover(slots, personId, viewKey){
+  const person = personOf(personId);
+  const isASV = isASVPerson(personId);
+  const currentLabel = getSlotLabel(slots[0].iso, personId, slots[0].slot);
+  const backdrop = document.getElementById('popover-backdrop');
+  const box = document.getElementById('popover-box');
+  const quickTags = ['Vacances','Formation','Congrès','Maladie','RTT','Rendez-vous médical'];
+  const fromTxt = formatFR(slots[0].iso);
+  const toTxt = formatFR(slots[slots.length-1].iso);
+  box.innerHTML = `
+    <h4>${isASV ? 'Demande de congé' : "Motif d'absence"} — ${person.short}<br><span class="text-muted" style="font-weight:500;font-size:12px;">${fromTxt}${slots.length>1?' → '+toTxt:''}</span></h4>
+    ${isASV ? `<p class="text-muted" style="font-size:12px;margin:-4px 0 12px;">Sera soumise aux vétérinaires pour validation.</p>` : ''}
+    <div class="popover-quicktags">
+      ${quickTags.map(t=>`<button type="button" class="quicktag" data-tag="${escapeHTML(t)}">${t}</button>`).join('')}
+    </div>
+    <input type="text" id="absence-label-input" placeholder="Motif (ex. SKI TIGNES, GRÈCE...)" value="${escapeHTML(currentLabel)}" maxlength="40">
+    ${slots.length>1 ? `<button type="button" class="btn btn-sm popover-split-btn" id="popover-split">🔓 Défusionner et vider ces ${slots.length} demi-journées</button>` : ''}
+    <div class="popover-actions">
+      <button class="btn btn-danger" id="popover-clear">Effacer</button>
+      <button class="btn" id="popover-cancel">Annuler</button>
+      <button class="btn btn-primary" id="popover-save">${isASV ? 'Soumettre la demande' : 'Enregistrer'}</button>
+    </div>
+  `;
+  backdrop.classList.add('open');
+  const input = box.querySelector('#absence-label-input');
+  input.focus(); input.select();
+  box.querySelectorAll('.quicktag').forEach(tag=>{
+    tag.addEventListener('click', ()=>{ input.value = tag.dataset.tag; input.focus(); });
+  });
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#popover-cancel').onclick = close;
+  box.querySelector('#popover-clear').onclick = ()=>{
+    snapshotBeforeChange();
+    slots.forEach(({iso,slot})=> setSlotState(iso, personId, slot, 'empty'));
+    saveData();
+    if(viewKey) renderCalendarView(viewKey);
+    close();
+  };
+  box.querySelector('#popover-save').onclick = ()=>{
+    snapshotBeforeChange();
+    const label = input.value.trim();
+    slots.forEach(({iso,slot})=> setSlotLabel(iso, personId, slot, label));
+    propagateLabelAcrossSunday(personId, slots, label);
+    saveData();
+    if(viewKey) renderCalendarView(viewKey);
+    close();
+  };
+  const splitBtn = box.querySelector('#popover-split');
+  if(splitBtn){
+    splitBtn.onclick = ()=>{
+      snapshotBeforeChange();
+      // La défusion purge entièrement chaque demi-journée (état + motif) plutôt que de
+      // les laisser absentes avec le même texte répété sur chaque case éclatée.
+      slots.forEach(({iso,slot})=> setSlotState(iso, personId, slot, 'empty'));
+      saveData();
+      if(viewKey) renderCalendarView(viewKey);
+      close();
+    };
+  }
+  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+}
+
+// --- Popover : commentaire de journée ---
+function openDayCommentPopover(iso, viewKey){
+  const backdrop = document.getElementById('popover-backdrop');
+  const box = document.getElementById('popover-box');
+  const current = getDayComment(iso);
+  box.innerHTML = `
+    <h4>💬 Commentaire — ${formatFR(iso)}</h4>
+    <textarea id="day-comment-input" rows="3" placeholder="Ex. Réunion fournisseur, journée portes ouvertes...">${escapeHTML(current)}</textarea>
+    <div class="popover-actions">
+      <button class="btn" id="popover-cancel">Annuler</button>
+      <button class="btn btn-primary" id="popover-save">Enregistrer</button>
+    </div>
+  `;
+  backdrop.classList.add('open');
+  box.querySelector('#day-comment-input').focus();
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#popover-cancel').onclick = close;
+  box.querySelector('#popover-save').onclick = ()=>{
+    snapshotBeforeChange();
+    setDayComment(iso, box.querySelector('#day-comment-input').value.trim());
+    saveData();
+    renderCalendarView(viewKey);
+    close();
+  };
+  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+}
+
+// --- Sidebar : édition rapide de toute la journée ---
+function sidebarPersonBlock(iso, person){
+  const isASV = isASVPerson(person.id);
+  return `
+    <div class="sidebar-person-block">
+      <div class="sidebar-person-title"><span class="legend-swatch" style="background:${person.color};width:11px;height:11px;border-radius:50%;display:inline-block;"></span>${person.name}</div>
+      ${SLOTS.map(slot=>{
+        const state = getSlotState(iso, person.id, slot);
+        const label = getSlotLabel(iso, person.id, slot);
+        const decision = state==='absent' && isASV ? (getLeaveDecision(iso, person.id, slot) || 'pending') : null;
+        const btnStyle = (s)=>{
+          if(state!==s) return '';
+          if(s==='present') return `background:${person.present.bg};border-color:${person.present.border};color:${person.present.text};`;
+          if(s==='absent') return `background:var(--color-absent);border-color:var(--color-absent-border);color:var(--color-absent-text);`;
+          return `background:var(--color-secondary);border-color:var(--color-text-muted);color:var(--color-text);`;
+        };
+        const decisionNote = decision === 'pending' ? `<p class="text-muted" style="font-size:11.5px;margin:6px 0 0;">⏳ En attente de validation</p>`
+          : decision === 'rejected' ? `<p style="font-size:11.5px;margin:6px 0 0;color:var(--color-leave-rejected-text);">⚠️ Refusée${getLeaveDecisionComment(iso,person.id,slot) ? ' — '+escapeHTML(getLeaveDecisionComment(iso,person.id,slot)) : ''}</p>`
+          : decision === 'approved' ? `<p class="text-muted" style="font-size:11.5px;margin:6px 0 0;">✓ Approuvée</p>`
+          : '';
+        return `
+          <p class="text-muted" style="font-size:11.5px;margin:10px 0 5px;font-weight:700;text-transform:uppercase;letter-spacing:0.03em;">${SLOT_LABELS[slot]}</p>
+          <div class="sidebar-state-row">
+            ${['empty','present','absent'].map(s=>`
+              <button type="button" class="sidebar-state-btn ${state===s?'active':''}" style="${btnStyle(s)}"
+                data-state-btn data-person="${person.id}" data-slot="${slot}" data-state="${s}">
+                ${s==='empty'?'Vide':s==='present'?'Présent':(isASV?'Congé':'Absent')}
+              </button>
+            `).join('')}
+          </div>
+          ${state==='absent' ? `<input type="text" data-label-input data-person="${person.id}" data-slot="${slot}" value="${escapeHTML(label)}" placeholder="Motif">` : ''}
+          ${decisionNote}
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+function openDaySidebar(iso, viewKey){
+  const people = CAL_VIEWS[viewKey].people;
+  const overlay = document.getElementById('sidebar-overlay');
+  const sidebar = document.getElementById('day-sidebar');
+  const closeSidebar = ()=>{ overlay.classList.remove('open'); sidebar.classList.remove('open'); };
+  const renderBody = ()=>{
+    sidebar.innerHTML = `
+      <div class="day-sidebar-head">
+        <h3>✏️ ${formatFR(iso)}</h3>
+        <button class="btn-icon" id="sidebar-close" aria-label="Fermer le panneau">✕</button>
+      </div>
+      <div class="day-sidebar-body">
+        ${people.map(p=> sidebarPersonBlock(iso,p)).join('')}
+        <div class="sidebar-person-block">
+          <div class="sidebar-person-title">💬 Commentaire de la journée</div>
+          <textarea id="sidebar-comment" rows="3" placeholder="Commentaire...">${escapeHTML(getDayComment(iso))}</textarea>
+        </div>
+      </div>
+    `;
+    sidebar.querySelector('#sidebar-close').onclick = closeSidebar;
+    sidebar.querySelectorAll('[data-state-btn]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        snapshotBeforeChange();
+        const { person:personId, slot, state } = btn.dataset;
+        setSlotState(iso, personId, slot, state);
+        if(state !== 'absent') setSlotLabel(iso, personId, slot, '');
+        saveData();
+        renderBody();
+        renderCalendarView(viewKey);
+      });
+    });
+    sidebar.querySelectorAll('[data-label-input]').forEach(input=>{
+      input.addEventListener('change', ()=>{
+        snapshotBeforeChange();
+        setSlotLabel(iso, input.dataset.person, input.dataset.slot, input.value.trim());
+        saveData();
+        renderCalendarView(viewKey);
+      });
+    });
+    sidebar.querySelector('#sidebar-comment').addEventListener('change', (e)=>{
+      snapshotBeforeChange();
+      setDayComment(iso, e.target.value.trim());
+      saveData();
+      renderCalendarView(viewKey);
+    });
+  };
+  overlay.onclick = closeSidebar;
+  renderBody();
+  overlay.classList.add('open');
+  sidebar.classList.add('open');
+}
+
+// --- Initialisation globale des interactions calendrier (délégation sur document) ---
+function initCalendarInteractions(){
+  document.addEventListener('mousedown', (e)=>{
+    const cell = e.target.closest('.cal-cell');
+    if(!cell || cell.classList.contains('sunday-cell') || cell.dataset.slots) return;
+    e.preventDefault();
+    startDrag(cell);
+  });
+  document.addEventListener('mouseover', (e)=>{
+    if(!dragCtx) return;
+    const cell = e.target.closest('.cal-cell');
+    if(cell && !cell.classList.contains('sunday-cell') && !cell.dataset.slots) enterDragCell(cell);
+  });
+  document.addEventListener('mouseup', endDrag);
+  document.addEventListener('touchstart', (e)=>{
+    const cell = e.target.closest('.cal-cell');
+    if(!cell || cell.classList.contains('sunday-cell') || cell.dataset.slots) return;
+    startDrag(cell);
+  }, { passive:true });
+  document.addEventListener('touchmove', (e)=>{
+    if(!dragCtx) return;
+    const touch = e.touches[0];
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const cell = el && el.closest('.cal-cell');
+    if(cell && !cell.classList.contains('sunday-cell') && !cell.dataset.slots) enterDragCell(cell);
+  }, { passive:true });
+  document.addEventListener('touchend', endDrag);
+
+  document.addEventListener('contextmenu', (e)=>{
+    const cell = e.target.closest('.cal-cell');
+    if(!cell || cell.classList.contains('sunday-cell')) return;
+    e.preventDefault();
+    if(dragCtx){ clearTimeout(dragCtx.longPressTimer); dragCtx = null; }
+    if(cell.dataset.slots){
+      openAbsenceRangePopover(JSON.parse(cell.dataset.slots), cell.dataset.person, calViewKeyOfEventTarget(cell));
+    } else {
+      openAbsenceLabelPopover(cell, true);
+    }
+  });
+
+  document.addEventListener('keydown', (e)=>{
+    const cell = e.target.closest && e.target.closest('.cal-cell');
+    if(!cell || cell.classList.contains('sunday-cell')) return;
+    if(e.key === 'Enter' || e.key === ' '){
+      e.preventDefault();
+      if(cell.dataset.slots){
+        openAbsenceRangePopover(JSON.parse(cell.dataset.slots), cell.dataset.person, calViewKeyOfEventTarget(cell));
+      } else {
+        cycleCellAndSave(cell);
+      }
+    }
+  });
+
+  document.addEventListener('click', (e)=>{
+    const mergedCell = e.target.closest('.cal-cell[data-slots]');
+    if(mergedCell){
+      openAbsenceRangePopover(JSON.parse(mergedCell.dataset.slots), mergedCell.dataset.person, calViewKeyOfEventTarget(mergedCell));
+      return;
+    }
+
+    const viewKey = calViewKeyOfEventTarget(e.target);
+    if(!viewKey) return;
+
+    if(e.target.id === `cal-prev-${viewKey}`) return changeMonth(viewKey, -1);
+    if(e.target.id === `cal-next-${viewKey}`) return changeMonth(viewKey, 1);
+    if(e.target.id === `cal-today-${viewKey}`) return goToToday(viewKey);
+    if(e.target.id === `cal-clear-month-${viewKey}`){
+      openClearMonthModal(viewKey, CAL_VIEWS[viewKey].navState.month);
+      return;
+    }
+    if(e.target.id === `cal-undo-${viewKey}`) return undoLastAction();
+    if(e.target.id === `cal-print-${viewKey}`) return window.print();
+
+    const commentBtn = e.target.closest('[data-action="comment"]');
+    if(commentBtn){ openDayCommentPopover(commentBtn.dataset.date, viewKey); return; }
+
+    const editBtn = e.target.closest('[data-action="edit-day"]');
+    if(editBtn){ openDaySidebar(editBtn.dataset.date, viewKey); return; }
+  });
+}
+
+/* ================================================================
+   14. TABLEAU DE BORD (statistiques, graphique, table récapitulative,
+       demandes de congé ASV)
+   ================================================================ */
+function formatNum(n){ return Number.isInteger(n) ? String(n) : n.toFixed(1); }
+
+// Regroupe les demi-journées d'absence ASV contiguës (même personne, même motif, même
+// statut de décision, même commentaire) en "demandes" pour l'affichage côté tableau de
+// bord — sur les deux années éditables (courante + prévisionnelle). Une demande qui
+// chevauche un dimanche apparaît comme deux groupes distincts (limitation acceptée : ça
+// n'affecte que l'affichage, l'approbation/rejet reste correcte groupe par groupe).
+function collectAllLeaveGroups(){
+  const groups = [];
+  const years = [getCurrentYear(), getCurrentYear()+1];
+  ASV_PEOPLE.forEach(person=>{
+    let current = null;
+    years.forEach(year=>{
+      for(let month=0; month<12; month++){
+        const nbDays = daysInMonth(year, month);
+        for(let day=1; day<=nbDays; day++){
+          const iso = fmtISO(new Date(year, month, day));
+          SLOTS.forEach(slot=>{
+            if(getSlotState(iso, person.id, slot) !== 'absent'){ current = null; return; }
+            const label = getSlotLabel(iso, person.id, slot);
+            const status = getLeaveDecision(iso, person.id, slot) || 'pending';
+            const comment = getLeaveDecisionComment(iso, person.id, slot);
+            if(current && current.label === label && current.status === status && current.comment === comment){
+              current.slots.push({ iso, slot });
+            } else {
+              current = { personId: person.id, label, status, comment, slots: [{ iso, slot }] };
+              groups.push(current);
+            }
+          });
+        }
+      }
+    });
+  });
+  return groups;
+}
+function sortLeaveGroups(groups){
+  const order = { pending:0, approved:1, rejected:2 };
+  return groups.slice().sort((a,b)=> (order[a.status]-order[b.status]) || a.slots[0].iso.localeCompare(b.slots[0].iso));
+}
+function countPendingLeaveRequests(){ return collectAllLeaveGroups().filter(g=> g.status === 'pending').length; }
+function decideLeaveGroup(group, decision, comment){
+  snapshotBeforeChange();
+  group.slots.forEach(({iso,slot})=>{
+    setLeaveDecision(iso, group.personId, slot, decision);
+    setLeaveDecisionComment(iso, group.personId, slot, comment || '');
+  });
+  saveData();
+}
+
+function computeYearStats(year){
+  const stats = {};
+  ALL_PEOPLE.forEach(p=>{
+    stats[p.id] = {
+      halfDaysByMonth: new Array(12).fill(0),
+      absentHalfDaysByMonth: new Array(12).fill(0),
+      saturdaysByMonth: new Array(12).fill(0),
+    };
+  });
+  for(let month=0; month<12; month++){
+    const nbDays = daysInMonth(year, month);
+    for(let day=1; day<=nbDays; day++){
+      const date = new Date(year, month, day);
+      if(isSunday(date)) continue;
+      const iso = fmtISO(date);
+      const saturday = isSaturday(date);
+      ALL_PEOPLE.forEach(p=>{
+        let presentAny = false;
+        SLOTS.forEach(slot=>{
+          const state = getSlotState(iso, p.id, slot);
+          if(state === 'present'){ stats[p.id].halfDaysByMonth[month]++; presentAny = true; }
+          else if(state === 'absent'){ stats[p.id].absentHalfDaysByMonth[month]++; }
+        });
+        if(saturday && presentAny) stats[p.id].saturdaysByMonth[month]++;
+      });
+    }
+  }
+  ALL_PEOPLE.forEach(p=>{
+    const s = stats[p.id];
+    s.totalHalfDays = s.halfDaysByMonth.reduce((a,b)=>a+b,0);
+    s.totalAbsentHalfDays = s.absentHalfDaysByMonth.reduce((a,b)=>a+b,0);
+    s.totalSaturdays = s.saturdaysByMonth.reduce((a,b)=>a+b,0);
+    let busiest = 0;
+    s.halfDaysByMonth.forEach((v,i)=>{ if(v > s.halfDaysByMonth[busiest]) busiest = i; });
+    s.busiestMonth = busiest;
+  });
+  return stats;
+}
+
+function buildPersonCard(year, personId){
+  const person = personOf(personId);
+  const stats = computeYearStats(year)[personId];
+  const fullDays = stats.totalHalfDays/2;
+  const vacationDays = stats.totalAbsentHalfDays/2;
+  const pct = Math.min(100, (stats.totalHalfDays/500)*100);
+  return `
+    <div class="card person-card" data-person="${personId}" style="border-top-color:${person.color}">
+      <div class="person-card-head">
+        <div class="person-avatar" style="background:${person.color}">${person.initial}</div>
+        <div><h3 style="font-size:16px;">${person.name}</h3><p class="text-muted" style="font-size:12px;">Bilan ${year}</p></div>
+      </div>
+      <div class="stat-row"><span class="stat-label">Demi-journées travaillées</span><span class="stat-value">${stats.totalHalfDays} / 500</span></div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${person.color}"></div></div>
+      <div class="stat-row"><span class="stat-label">Jours complets travaillés</span><span class="stat-value">${formatNum(fullDays)}</span></div>
+      <div class="stat-row"><span class="stat-label">Samedis travaillés</span><span class="stat-value big" style="color:${person.color}">${stats.totalSaturdays}</span></div>
+      <div class="stat-row"><span class="stat-label">Jours de congés</span><span class="stat-value">${formatNum(vacationDays)}</span></div>
+      <div class="stat-row"><span class="stat-label">Mois le plus chargé</span><span class="stat-value">${MONTH_NAMES[stats.busiestMonth]}</span></div>
+    </div>
+  `;
+}
+
+function buildBarChartSVG(year){
+  const stats = computeYearStats(year);
+  const dVals = stats.david.halfDaysByMonth.map(h=>h/2);
+  const sVals = stats.stephane.halfDaysByMonth.map(h=>h/2);
+  const maxVal = Math.max(1, ...dVals, ...sVals);
+  const rowH = 30, barH = 10, leftLabelW = 56, chartW = 330, viewW = 470;
+  const height = 12*rowH + 6;
+  let rows = '';
+  for(let m=0; m<12; m++){
+    const y = m*rowH + 6;
+    const dW = (dVals[m]/maxVal)*chartW;
+    const sW = (sVals[m]/maxVal)*chartW;
+    rows += `
+      <text x="0" y="${y+barH+1}" font-size="11" font-weight="700" fill="#64748B" font-family="Inter,sans-serif">${MONTH_SHORT[m]}</text>
+      <rect x="${leftLabelW}" y="${y}" width="${Math.max(dW,1.5)}" height="${barH}" rx="3" fill="${PEOPLE[0].color}"></rect>
+      <text x="${leftLabelW+Math.max(dW,1.5)+6}" y="${y+barH-1}" font-size="10" font-weight="700" fill="${PEOPLE[0].color}" font-family="Inter,sans-serif">${formatNum(dVals[m])}</text>
+      <rect x="${leftLabelW}" y="${y+barH+3}" width="${Math.max(sW,1.5)}" height="${barH}" rx="3" fill="${PEOPLE[1].color}"></rect>
+      <text x="${leftLabelW+Math.max(sW,1.5)+6}" y="${y+2*barH+2}" font-size="10" font-weight="700" fill="${PEOPLE[1].color}" font-family="Inter,sans-serif">${formatNum(sVals[m])}</text>
+    `;
+  }
+  return `<svg viewBox="0 0 ${viewW} ${height}" width="100%" height="${height}" role="img" aria-label="Comparaison des jours travaillés par mois, ${year}">${rows}</svg>`;
+}
+
+function buildRecapTable(year){
+  const stats = computeYearStats(year);
+  let totalD=0, totalS=0, totalSatD=0, totalSatS=0, rows='';
+  for(let m=0; m<12; m++){
+    const dDays = stats.david.halfDaysByMonth[m]/2;
+    const sDays = stats.stephane.halfDaysByMonth[m]/2;
+    const satD = stats.david.saturdaysByMonth[m];
+    const satS = stats.stephane.saturdaysByMonth[m];
+    totalD+=dDays; totalS+=sDays; totalSatD+=satD; totalSatS+=satS;
+    const diff = dDays - sDays;
+    const diffClass = diff>0 ? 'ecart-david' : diff<0 ? 'ecart-stephane' : 'ecart-equilibre';
+    const diffTxt = diff===0 ? 'Équilibre' : `${diff>0?'+':''}${formatNum(diff)} ${diff>0?'David':'Stéphane'}`;
+    rows += `<tr><td>${MONTH_NAMES[m]}</td><td>${formatNum(dDays)}</td><td>${formatNum(sDays)}</td><td>${satD}</td><td>${satS}</td><td class="${diffClass}">${diffTxt}</td></tr>`;
+  }
+  const totalDiff = totalD - totalS;
+  const totalDiffClass = totalDiff>0?'ecart-david':totalDiff<0?'ecart-stephane':'ecart-equilibre';
+  const totalDiffTxt = totalDiff===0?'Équilibre':`${totalDiff>0?'+':''}${formatNum(totalDiff)} ${totalDiff>0?'David':'Stéphane'}`;
+  return `
+    <table class="recap-table">
+      <thead><tr><th>Mois</th><th>David (j)</th><th>Stéphane (j)</th><th>Samedis David</th><th>Samedis Stéphane</th><th>Écart</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><td>Total</td><td>${formatNum(totalD)}</td><td>${formatNum(totalS)}</td><td>${totalSatD}</td><td>${totalSatS}</td><td class="${totalDiffClass}">${totalDiffTxt}</td></tr></tfoot>
+    </table>
+  `;
+}
+
+// --- Variantes ASV (3 personnes) du graphique et du récapitulatif mensuel ---
+function buildBarChartSVGASV(year){
+  const stats = computeYearStats(year);
+  const series = ASV_PEOPLE.map(p=> stats[p.id].halfDaysByMonth.map(h=>h/2));
+  const maxVal = Math.max(1, ...series.flat());
+  const barH = 9, gap = 2, rowH = 3*(barH+gap) + 5, leftLabelW = 56, chartW = 300, viewW = 470;
+  const height = 12*rowH + 6;
+  let rows = '';
+  for(let m=0; m<12; m++){
+    const yBase = m*rowH + 6;
+    rows += `<text x="0" y="${yBase+barH+1}" font-size="11" font-weight="700" fill="#64748B" font-family="Inter,sans-serif">${MONTH_SHORT[m]}</text>`;
+    ASV_PEOPLE.forEach((p,i)=>{
+      const val = series[i][m];
+      const w = (val/maxVal)*chartW;
+      const y = yBase + i*(barH+gap);
+      rows += `
+        <rect x="${leftLabelW}" y="${y}" width="${Math.max(w,1.5)}" height="${barH}" rx="3" fill="${p.color}"></rect>
+        <text x="${leftLabelW+Math.max(w,1.5)+6}" y="${y+barH-1}" font-size="9.5" font-weight="700" fill="${p.color}" font-family="Inter,sans-serif">${formatNum(val)}</text>
+      `;
+    });
+  }
+  return `<svg viewBox="0 0 ${viewW} ${height}" width="100%" height="${height}" role="img" aria-label="Comparaison des jours travaillés par mois pour les ASV, ${year}">${rows}</svg>`;
+}
+
+function buildRecapTableASV(year){
+  const stats = computeYearStats(year);
+  const totals = ASV_PEOPLE.map(()=>0);
+  let grandTotal = 0, rows = '';
+  for(let m=0; m<12; m++){
+    const vals = ASV_PEOPLE.map((p,i)=>{
+      const d = stats[p.id].halfDaysByMonth[m]/2;
+      totals[i] += d;
+      return d;
+    });
+    const monthTotal = vals.reduce((a,b)=>a+b,0);
+    grandTotal += monthTotal;
+    rows += `<tr><td>${MONTH_NAMES[m]}</td>${vals.map(v=>`<td>${formatNum(v)}</td>`).join('')}<td>${formatNum(monthTotal)}</td></tr>`;
+  }
+  return `
+    <table class="recap-table">
+      <thead><tr><th>Mois</th>${ASV_PEOPLE.map(p=>`<th>${p.short} (j)</th>`).join('')}<th>Total ASV (j)</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><td>Total</td>${totals.map(t=>`<td>${formatNum(t)}</td>`).join('')}<td>${formatNum(grandTotal)}</td></tr></tfoot>
+    </table>
+  `;
+}
+
+const dashSubState = { tab: 'stats' };
+function renderDashboard(){
+  const container = document.getElementById('view-dashboard');
+  const pendingCount = countPendingLeaveRequests();
+  container.innerHTML = `
+    <h2 class="section-title">Tableau de bord</h2>
+    <p class="section-desc">Statistiques de présence et demandes de congé ASV.</p>
+    <div class="sub-nav-row">
+      <div class="sub-nav" id="dash-sub-nav">
+        <button class="sub-tab ${dashSubState.tab==='stats'?'active':''}" data-sub="stats">📊 Statistiques</button>
+        <button class="sub-tab ${dashSubState.tab==='requests'?'active':''}" data-sub="requests">📋 Demandes de congé${pendingCount>0?` <span class="nav-badge">${pendingCount}</span>`:''}</button>
+      </div>
+      <button class="btn-icon lock-now-btn" title="Verrouiller maintenant" aria-label="Verrouiller maintenant">🔒</button>
+    </div>
+    <div id="dash-sub-stats" class="sub-page ${dashSubState.tab!=='stats'?'hidden':''}"></div>
+    <div id="dash-sub-requests" class="sub-page ${dashSubState.tab!=='requests'?'hidden':''}"></div>
+  `;
+  container.querySelector('#dash-sub-nav').addEventListener('click', (e)=>{
+    const btn = e.target.closest('.sub-tab');
+    if(!btn) return;
+    dashSubState.tab = btn.dataset.sub;
+    renderDashboard();
+  });
+  if(dashSubState.tab === 'stats') renderDashboardStats(); else renderLeaveRequestsPage();
+}
+VIEW_RENDERERS['dashboard'] = renderDashboard;
+
+function renderDashboardStats(){
+  const container = document.getElementById('dash-sub-stats');
+  const year = dashState.year;
+  const cy = getCurrentYear();
+  container.innerHTML = `
+    <div class="year-toggle" id="dash-year-toggle">
+      <button data-year="${cy}" class="${year===cy?'active':''}">${cy}</button>
+      <button data-year="${cy+1}" class="${year===cy+1?'active':''}">${cy+1}</button>
+    </div>
+    <div class="dash-grid" style="margin-top:18px;">
+      ${PEOPLE.map(p=> buildPersonCard(year, p.id)).join('')}
+    </div>
+    <div class="card" style="margin-bottom:24px;">
+      <h3 style="font-size:16px;margin-bottom:4px;">Comparaison mensuelle — David vs Stéphane</h3>
+      <p class="text-muted" style="font-size:12.5px;margin-bottom:10px;">Jours travaillés par mois, ${year}</p>
+      <div class="chart-legend">
+        ${PEOPLE.map(p=>`<span><span class="legend-swatch" style="background:${p.color};width:11px;height:11px;display:inline-block;border-radius:3px;"></span>${p.short}</span>`).join('')}
+      </div>
+      <div class="chart-wrap">${buildBarChartSVG(year)}</div>
+    </div>
+    <div class="card" style="margin-bottom:24px;">
+      <h3 style="font-size:16px;margin-bottom:10px;">Récapitulatif mensuel ${year}</h3>
+      ${buildRecapTable(year)}
+    </div>
+
+    <h2 class="section-title" style="margin-top:8px;">ASV — Auxiliaires spécialisées vétérinaires</h2>
+    <p class="section-desc">Statistiques de présence des 3 ASV, année ${year}.</p>
+    <div class="dash-grid dash-grid-3" style="margin-top:18px;">
+      ${ASV_PEOPLE.map(p=> buildPersonCard(year, p.id)).join('')}
+    </div>
+    <div class="card" style="margin-bottom:24px;">
+      <h3 style="font-size:16px;margin-bottom:4px;">Comparaison mensuelle — Marie / Johanna / Julie</h3>
+      <p class="text-muted" style="font-size:12.5px;margin-bottom:10px;">Jours travaillés par mois, ${year}</p>
+      <div class="chart-legend">
+        ${ASV_PEOPLE.map(p=>`<span><span class="legend-swatch" style="background:${p.color};width:11px;height:11px;display:inline-block;border-radius:3px;"></span>${p.short}</span>`).join('')}
+      </div>
+      <div class="chart-wrap">${buildBarChartSVGASV(year)}</div>
+    </div>
+    <div class="card">
+      <h3 style="font-size:16px;margin-bottom:10px;">Récapitulatif mensuel ASV ${year}</h3>
+      ${buildRecapTableASV(year)}
+    </div>
+  `;
+  container.querySelector('#dash-year-toggle').addEventListener('click', (e)=>{
+    const btn = e.target.closest('button');
+    if(!btn) return;
+    dashState.year = parseInt(btn.dataset.year, 10);
+    renderDashboardStats();
+  });
+}
+
+// --- Sous-page "Demandes de congé" : liste groupée, triée en attente -> approuvées ->
+// refusées, avec actions d'approbation/refus (refus avec commentaire obligatoire). ---
+function renderLeaveRequestsPage(){
+  const container = document.getElementById('dash-sub-requests');
+  const groups = sortLeaveGroups(collectAllLeaveGroups());
+  const statusLabel = { pending:'En attente', approved:'Approuvée', rejected:'Refusée' };
+  const statusClass = { pending:'leave-pending', approved:'leave-approved', rejected:'leave-rejected' };
+  const rows = groups.map((g, idx)=>{
+    const person = personOf(g.personId);
+    const first = g.slots[0], last = g.slots[g.slots.length-1];
+    const range = first.iso === last.iso
+      ? `${formatFR(first.iso)} (${SLOT_LABELS[first.slot]})`
+      : `du ${formatFR(first.iso)} au ${formatFR(last.iso)}`;
+    const actions = g.status === 'pending' ? `
+      <div class="flex gap-2" style="margin-top:8px;">
+        <button class="btn btn-sm btn-primary" data-approve="${idx}">✓ Approuver</button>
+        <button class="btn btn-sm btn-danger" data-reject="${idx}">✕ Refuser</button>
+      </div>
+      <div class="hidden" data-reject-form="${idx}" style="margin-top:8px;">
+        <textarea data-reject-comment="${idx}" rows="2" placeholder="Motif du refus (obligatoire, visible par l'équipe)"></textarea>
+        <div class="flex gap-2" style="margin-top:6px;">
+          <button class="btn btn-sm btn-danger" data-reject-confirm="${idx}">Confirmer le refus</button>
+          <button class="btn btn-sm" data-reject-cancel="${idx}">Annuler</button>
+        </div>
+      </div>
+    ` : g.comment ? `<p class="text-muted" style="font-size:12.5px;margin-top:6px;">💬 ${escapeHTML(g.comment)}</p>` : '';
+    return `
+      <div class="card" data-leave-group="${idx}" style="margin-bottom:12px;border-left:4px solid ${person.color};">
+        <div class="flex" style="justify-content:space-between;align-items:flex-start;gap:10px;">
+          <div>
+            <strong style="color:${person.color};">${person.short}</strong> — ${range}
+            ${g.label ? `<span class="text-muted"> · ${escapeHTML(g.label)}</span>` : ''}
+            <p class="text-muted" style="font-size:12px;margin-top:2px;">${g.slots.length} demi-journée${g.slots.length>1?'s':''}</p>
+          </div>
+          <span class="leave-status-badge ${statusClass[g.status]}">${statusLabel[g.status]}</span>
+        </div>
+        ${actions}
+      </div>
+    `;
+  }).join('');
+  container.innerHTML = `
+    <p class="section-desc" style="margin-bottom:14px;">Toutes les demandes de congé soumises par les ASV, sur ${getCurrentYear()} et ${getCurrentYear()+1}.</p>
+    ${groups.length ? rows : `<p class="text-muted">Aucune demande de congé pour le moment.</p>`}
+  `;
+  container.querySelectorAll('[data-approve]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const g = groups[parseInt(btn.dataset.approve,10)];
+      decideLeaveGroup(g, 'approved', '');
+      renderDashboard();
+      showToast('Demande approuvée', '✓');
+    });
+  });
+  container.querySelectorAll('[data-reject]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      container.querySelector(`[data-reject-form="${btn.dataset.reject}"]`).classList.remove('hidden');
+    });
+  });
+  container.querySelectorAll('[data-reject-cancel]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      container.querySelector(`[data-reject-form="${btn.dataset.rejectCancel}"]`).classList.add('hidden');
+    });
+  });
+  container.querySelectorAll('[data-reject-confirm]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = btn.dataset.rejectConfirm;
+      const comment = container.querySelector(`[data-reject-comment="${idx}"]`).value.trim();
+      if(!comment){ showToast('Un commentaire est nécessaire pour refuser', '⚠️'); return; }
+      decideLeaveGroup(groups[parseInt(idx,10)], 'rejected', comment);
+      renderDashboard();
+      showToast('Demande refusée', '✕');
+    });
+  });
+}
+
+/* ================================================================
+   15. VUE ANNUELLE (heatmap)
+   ================================================================ */
+function stateLabel(iso, personId, slot){
+  const state = getSlotState(iso, personId, slot);
+  if(state === 'present') return 'Présent';
+  if(state === 'absent'){
+    const l = getSlotLabel(iso, personId, slot);
+    if(isASVPerson(personId)){
+      const decision = getLeaveDecision(iso, personId, slot) || 'pending';
+      if(decision === 'pending') return `Demande de congé en attente${l?' ('+escapeHTML(l)+')':''}`;
+      if(decision === 'rejected') return 'Congé refusé — voir un vétérinaire';
+      return `Congé approuvé${l?' ('+escapeHTML(l)+')':''}`;
+    }
+    return l ? `Absent (${escapeHTML(l)})` : 'Absent';
+  }
+  return '—';
+}
+
+// Couleur d'une demi-journée pour la heatmap : présent = couleur de la personne, absent =
+// rouge (congé vétérinaire ou ASV approuvé), demande ASV en attente = cyan, refusée =
+// gris, vide = blanc.
+// Reprend exactement les mêmes couleurs que le calendrier mensuel (cellRenderInfo) pour
+// que la heatmap et la grille restent visuellement identiques case pour case.
+function heatmapSlotColor(person, iso, slot){
+  const state = getSlotState(iso, person.id, slot);
+  if(state === 'present') return person.present.bg;
+  if(state === 'absent'){
+    if(isASVPerson(person.id)){
+      const decision = getLeaveDecision(iso, person.id, slot) || 'pending';
+      if(decision === 'pending') return 'var(--color-leave-pending)';
+      if(decision === 'rejected') return 'var(--color-leave-rejected)';
+    }
+    return 'var(--color-absent)';
+  }
+  return '#ffffff';
+}
+function buildHeatmap(year, people = PEOPLE){
+  const dayHeaderCells = Array.from({length:31}, (_,i)=>`<th>${i+1}</th>`).join('');
+  let rows = '';
+  for(let month=0; month<12; month++){
+    const nbDays = daysInMonth(year, month);
+    // Ligne fine "jours de la semaine" propre à ce mois — le 1er d'un mois ne tombe pas
+    // forcément le même jour de semaine que le 1er du mois suivant, donc cette ligne est
+    // recalculée à chaque bloc plutôt que d'être un en-tête partagé sur toute l'année.
+    let weekdayCols = '';
+    for(let day=1; day<=31; day++){
+      if(day > nbDays){ weekdayCols += `<td class="heatmap-weekday-cell empty-cell"></td>`; continue; }
+      const wd = isoWeekday(new Date(year, month, day));
+      weekdayCols += `<td class="heatmap-weekday-cell${wd===6?' is-sunday':wd===5?' is-saturday':''}">${WEEKDAY_NAMES[wd][0]}</td>`;
+    }
+    rows += `<tr class="heatmap-weekday-row"><th class="heatmap-month-label" rowspan="${people.length+1}">${MONTH_SHORT[month]}</th><th class="heatmap-row-label"></th>${weekdayCols}</tr>`;
+    people.forEach(person=>{
+      let cols = '';
+      for(let day=1; day<=31; day++){
+        if(day > nbDays){ cols += `<td><div class="heatmap-cell empty-cell"></div></td>`; continue; }
+        const date = new Date(year, month, day);
+        const iso = fmtISO(date);
+        if(isSunday(date)){
+          cols += `<td><div class="heatmap-cell" style="background:var(--color-sunday);cursor:default;" title="${formatFR(iso)} — Fermé"></div></td>`;
+          continue;
+        }
+        const mState = getSlotState(iso, person.id, 'M');
+        const amState = getSlotState(iso, person.id, 'AM');
+        const colorM = heatmapSlotColor(person, iso, 'M'), colorAM = heatmapSlotColor(person, iso, 'AM');
+        let style = mState === amState
+          ? `background:${colorM};`
+          : `background:linear-gradient(to bottom, ${colorM} 50%, ${colorAM} 50%);`;
+        const hName = holidayName(iso);
+        if(hName) style += 'box-shadow:0 0 0 2px var(--color-holiday) inset;';
+        const title = `${formatFR(iso)}${hName?' — '+hName:''} — Matin : ${stateLabel(iso,person.id,'M')} · Après-midi : ${stateLabel(iso,person.id,'AM')}`;
+        cols += `<td><div class="heatmap-cell" data-date="${iso}" style="${style}" title="${escapeHTML(title)}" tabindex="0" role="button" aria-label="Détail du ${formatFR(iso)}"></div></td>`;
+      }
+      rows += `<tr><th class="heatmap-row-label" style="color:${person.color}">${person.short}</th>${cols}</tr>`;
+    });
+  }
+  return `
+    <div class="heatmap-wrap">
+      <table class="heatmap-table">
+        <colgroup><col class="col-month"><col class="col-label">${'<col>'.repeat(31)}</colgroup>
+        <thead><tr><th></th><th></th>${dayHeaderCells}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+// Popover de détail jour, partagé par la vue annuelle vétérinaires et la vue annuelle
+// ASV : affiche le statut de chaque personne de `people`, et le bouton « Éditer ce jour »
+// saute dans le calendrier mensuel correspondant à viewKey (clé de CAL_VIEWS).
+function openAnnualDayDetail(iso, people, viewKey){
+  const backdrop = document.getElementById('popover-backdrop');
+  const box = document.getElementById('popover-box');
+  const hName = holidayName(iso);
+  const comment = getDayComment(iso);
+  const personRows = people.map(p=>`
+    <p style="font-size:13px;margin:5px 0;"><strong style="color:${p.color}">${p.short}</strong> — Matin : ${stateLabel(iso,p.id,'M')} · Après-midi : ${stateLabel(iso,p.id,'AM')}</p>
+  `).join('');
+  box.innerHTML = `
+    <h4>${formatFR(iso)}${hName ? ` <span class="cal-holiday-badge">Férié</span>` : ''}</h4>
+    ${comment ? `<p class="text-muted" style="font-size:12.5px;margin:8px 0;">💬 ${escapeHTML(comment)}</p>` : ''}
+    <div style="margin:10px 0;">${personRows}</div>
+    <div class="popover-actions">
+      <button class="btn" id="popover-cancel">Fermer</button>
+      <button class="btn btn-primary" id="popover-edit">Éditer ce jour</button>
+    </div>
+  `;
+  backdrop.classList.add('open');
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#popover-cancel').onclick = close;
+  box.querySelector('#popover-edit').onclick = ()=>{
+    close();
+    const month = parseInt(iso.split('-')[1], 10) - 1;
+    CAL_VIEWS[viewKey].navState.month = month;
+    const group = viewKey.startsWith('asv') ? 'asv' : 'vets';
+    switchSubPage(group, viewKey.endsWith('forecast') ? 'forecast' : 'calendar');
+    switchView(group);
+    setTimeout(()=> openDaySidebar(iso, viewKey), 50);
+  };
+  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+}
+
+// Sous-page "Vue annuelle" d'un onglet groupé — factorisée pour servir aussi bien
+// Vétérinaires que ASV : même heatmap, même bascule année courante / prévisionnelle.
+function renderAnnualViewForGroup(group){
+  const g = GROUP_VIEWS[group];
+  const container = document.getElementById(g.annualContainer);
+  const mode = annualYearState[group];
+  const viewKey = mode === 'current' ? g.calendarViewKey : g.forecastViewKey;
+  const cfg = CAL_VIEWS[viewKey];
+  container.innerHTML = `
+    <h2 class="section-title">Vue Annuelle ${cfg.year} — ${g.label}</h2>
+    <p class="section-desc" style="margin-bottom:12px;">Heatmap de présence — cliquez une cellule pour voir le détail du jour.</p>
+    <div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
+      <button data-mode="current" class="${mode==='current'?'active':''}">${CAL_VIEWS[g.calendarViewKey].year}</button>
+      <button data-mode="forecast" class="${mode==='forecast'?'active':''}">${CAL_VIEWS[g.forecastViewKey].year}</button>
+    </div>
+    <div class="card" style="padding:14px;">${buildHeatmap(cfg.year, cfg.people)}</div>
+    <div class="legend" style="margin-top:12px;padding:10px 16px;">${buildLegendColors(cfg.people)}</div>
+  `;
+  container.querySelector(`#${group}-annual-year-toggle`).addEventListener('click', (e)=>{
+    const btn = e.target.closest('button');
+    if(!btn) return;
+    annualYearState[group] = btn.dataset.mode;
+    renderAnnualViewForGroup(group);
+  });
+  container.querySelectorAll('.heatmap-cell[data-date]').forEach(cell=>{
+    cell.addEventListener('click', ()=> openAnnualDayDetail(cell.dataset.date, cfg.people, viewKey));
+    cell.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openAnnualDayDetail(cell.dataset.date, cfg.people, viewKey); }
+    });
+  });
+}
+
+/* ================================================================
+   16. INITIALISATION GÉNÉRALE
+   ================================================================ */
+function init(){
+  loadPersonColors();
+  loadData();
+  initNav();
+  initSettingsMenu();
+  initKeyboardShortcuts();
+  initCalendarInteractions();
+  updateDashboardNavBadge();
+  switchView('vets');
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
