@@ -940,6 +940,8 @@ function openEmailSettingsModal(){
         ${Object.entries(EMAIL_FREQUENCY_LABELS).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}
       </select>
       <p class="text-muted" style="font-size:11.5px;">Le vérificateur tourne tous les jours ; au-delà de la fréquence choisie, il n'envoie un email que s'il y a au moins une demande en attente.</p>
+      <button type="button" class="btn" id="email-send-now-btn" style="width:100%;justify-content:center;margin-top:4px;">📨 Envoyer maintenant (sans attendre la fréquence)</button>
+      <p id="email-send-now-result" style="font-size:12px;margin:8px 0 0;display:none;"></p>
     </div>
     <p id="email-settings-error" style="color:#B91C1C;font-size:12px;display:none;margin:10px 0 0;"></p>
     <div class="modal-actions" style="margin-top:16px;">
@@ -959,6 +961,33 @@ function openEmailSettingsModal(){
     box.querySelector('#email-current-value').textContent = settings.recipient_email;
     box.querySelector('#email-recipient-input').value = settings.recipient_email;
     box.querySelector('#email-frequency-select').value = settings.frequency;
+    box.querySelector('#email-send-now-btn').onclick = async ()=>{
+      const btn = box.querySelector('#email-send-now-btn');
+      const resultEl = box.querySelector('#email-send-now-result');
+      btn.disabled = true;
+      resultEl.style.display = 'none';
+      try{
+        const res = await fetch(`${SUPABASE_FUNCTIONS_URL}send-leave-recap`, {
+          method:'POST',
+          headers: supabaseHeaders({ 'Content-Type':'application/json' }),
+          body: JSON.stringify({}),
+        });
+        const result = await res.json();
+        if(!res.ok || !result.ok) throw new Error(result.error || `HTTP ${res.status}`);
+        resultEl.style.color = 'var(--color-primary)';
+        resultEl.textContent = result.sent
+          ? `Email envoyé à ${result.recipient} (${result.count} demande${result.count>1?'s':''} en attente).`
+          : 'Aucune demande en attente : rien à envoyer.';
+        resultEl.style.display = 'block';
+      }catch(e){
+        resultEl.style.color = '#B91C1C';
+        resultEl.textContent = 'Échec de l\'envoi (connexion impossible).';
+        resultEl.style.display = 'block';
+        console.warn(e);
+      }finally{
+        btn.disabled = false;
+      }
+    };
     box.querySelector('#email-settings-save').onclick = ()=>{
       const recipient = box.querySelector('#email-recipient-input').value.trim();
       const frequency = box.querySelector('#email-frequency-select').value;
@@ -1061,15 +1090,17 @@ async function changeGatePassword(currentPassword, newPassword){
   if(!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+// Appelle directement la fonction serverless qui envoie l'email (quelques secondes), au
+// lieu de poser un drapeau attendant le prochain passage d'un cron GitHub Actions.
 async function requestPasswordReset(){
-  const token = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + GATE_DURATION_MS).toISOString();
-  const res = await fetch(`${SUPABASE_URL}rpc/request_password_reset`, {
+  const res = await fetch(`${SUPABASE_FUNCTIONS_URL}send-password-reset`, {
     method:'POST',
     headers: supabaseHeaders({ 'Content-Type':'application/json' }),
-    body: JSON.stringify({ token, expires_at:expiresAt }),
+    body: JSON.stringify({}),
   });
   if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  const result = await res.json();
+  if(!result.ok) throw new Error(result.error || 'Échec de l\'envoi.');
 }
 async function completePasswordReset(token, newPassword){
   const res = await fetch(`${SUPABASE_URL}rpc/complete_password_reset`, {
@@ -1209,6 +1240,7 @@ function isSaturday(date){ return isoWeekday(date) === 5; }
 // base, pas par le secret) — c'est le fonctionnement normal d'une clé anon Supabase,
 // faite pour être embarquée dans du code client visible publiquement.
 const SUPABASE_URL = 'https://ubowqtowyqmpraoxbaoo.supabase.co/rest/v1/';
+const SUPABASE_FUNCTIONS_URL = 'https://ubowqtowyqmpraoxbaoo.supabase.co/functions/v1/';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVib3dxdG93eXFtcHJhb3hiYW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MzkzNjksImV4cCI6MjA5ODIxNTM2OX0.cC7vTWrK-Ykii5dtlg_6lA5quHe6rv78IRxZT-ArV_8';
 function supabaseHeaders(extra){
   return Object.assign({ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${SUPABASE_ANON_KEY}` }, extra || {});

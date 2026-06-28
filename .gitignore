@@ -1,2 +1,4 @@
 .DS_Store
 amivet-planning.backup-*.html
+.claude/
+supabase/.temp/

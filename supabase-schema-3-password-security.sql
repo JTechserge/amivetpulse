@@ -27,13 +27,14 @@ on conflict (id) do nothing;
 
 -- ⚠️ Remplacez 'CHANGEZ-MOI' ci-dessous avant d'exécuter ce fichier.
 update app_security
-set password_hash = encode(digest(password_salt || 'CHANGEZ-MOI', 'sha256'), 'hex')
+set password_hash = encode(digest((password_salt || 'CHANGEZ-MOI')::bytea, 'sha256'), 'hex')
 where id = 'singleton';
 
 alter table app_security enable row level security;
 -- Volontairement AUCUNE policy "select" : ni le navigateur ni le script GitHub Actions ne
 -- peuvent lire le hash/sel directement, seulement via les fonctions security definer
 -- ci-dessous (chacune ne renvoie que le strict nécessaire : vrai/faux, ou un token).
+drop policy if exists "allow anon update" on app_security;
 create policy "allow anon update" on app_security
   for update using (true);
 
@@ -42,9 +43,9 @@ create or replace function verify_gate_password(input text)
 returns boolean
 language sql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
-  select password_hash = encode(digest(password_salt || input, 'sha256'), 'hex')
+  select password_hash = encode(digest((password_salt || input)::bytea, 'sha256'), 'hex')
   from app_security where id = 'singleton';
 $$;
 grant execute on function verify_gate_password(text) to anon;
@@ -54,13 +55,13 @@ create or replace function change_gate_password(current_password text, new_passw
 returns boolean
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   ok boolean;
   new_salt text;
 begin
-  select password_hash = encode(digest(password_salt || current_password, 'sha256'), 'hex')
+  select password_hash = encode(digest((password_salt || current_password)::bytea, 'sha256'), 'hex')
   into ok
   from app_security where id = 'singleton';
   if not ok then
@@ -69,7 +70,7 @@ begin
   new_salt := encode(gen_random_bytes(16), 'hex');
   update app_security
   set password_salt = new_salt,
-      password_hash = encode(digest(new_salt || new_password, 'sha256'), 'hex'),
+      password_hash = encode(digest((new_salt || new_password)::bytea, 'sha256'), 'hex'),
       updated_at = now()
   where id = 'singleton';
   return true;
@@ -83,7 +84,7 @@ create or replace function request_password_reset(token text, expires_at timesta
 returns void
 language sql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   update app_security
   set reset_token = token, reset_token_expires_at = expires_at, reset_email_pending = true
@@ -97,7 +98,7 @@ create or replace function get_pending_password_reset()
 returns table(token text, expires_at timestamptz)
 language sql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select reset_token, reset_token_expires_at
   from app_security
@@ -109,7 +110,7 @@ create or replace function mark_password_reset_email_sent()
 returns void
 language sql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   update app_security set reset_email_pending = false where id = 'singleton';
 $$;
@@ -121,7 +122,7 @@ create or replace function complete_password_reset(in_token text, new_password t
 returns boolean
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   valid boolean;
@@ -135,7 +136,7 @@ begin
   new_salt := encode(gen_random_bytes(16), 'hex');
   update app_security
   set password_salt = new_salt,
-      password_hash = encode(digest(new_salt || new_password, 'sha256'), 'hex'),
+      password_hash = encode(digest((new_salt || new_password)::bytea, 'sha256'), 'hex'),
       reset_token = null,
       reset_token_expires_at = null,
       reset_email_pending = false,
