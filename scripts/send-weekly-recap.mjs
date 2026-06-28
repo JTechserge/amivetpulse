@@ -6,7 +6,7 @@
 const SUPABASE_URL = 'https://ubowqtowyqmpraoxbaoo.supabase.co/rest/v1/';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVib3dxdG93eXFtcHJhb3hiYW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MzkzNjksImV4cCI6MjA5ODIxNTM2OX0.cC7vTWrK-Ykii5dtlg_6lA5quHe6rv78IRxZT-ArV_8';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FREQUENCY_DAYS = { daily:1, weekly:7, biweekly:14, monthly:30 };
+const FREQUENCY_DAYS = { now:0, daily:1, weekly:7, biweekly:14, monthly:30 };
 const HEADERS = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` };
 
 async function loadEmailSettings(){
@@ -48,7 +48,7 @@ async function main(){
 
   const settings = await loadEmailSettings();
   const now = new Date();
-  const frequencyDays = FREQUENCY_DAYS[settings.frequency] || 7;
+  const frequencyDays = FREQUENCY_DAYS[settings.frequency] ?? 7;
   const lastRun = settings.last_run_at ? new Date(settings.last_run_at) : null;
   // Marge d'une heure pour absorber le décalage normal d'exécution d'un cron GitHub Actions.
   if(lastRun && (now - lastRun) < frequencyDays * 86400000 - 3600000){

@@ -901,7 +901,7 @@ function openChangePasswordModal(){
 // via Supabase puisque c'est le script GitHub Actions (côté serveur) qui les lit, pas
 // seulement ce navigateur. La modale affiche d'abord "Chargement…" puis se met à jour
 // avec la valeur réellement en vigueur dès que la requête répond.
-const EMAIL_FREQUENCY_LABELS = { daily:'Quotidienne', weekly:'Hebdomadaire', biweekly:'Toutes les 2 semaines', monthly:'Mensuelle' };
+const EMAIL_FREQUENCY_LABELS = { daily:'Quotidienne', weekly:'Hebdomadaire', biweekly:'Toutes les 2 semaines', monthly:'Mensuelle', now:'Immédiate (test) — envoie à chaque vérification' };
 async function fetchEmailSettings(){
   const res = await fetch(`${SUPABASE_URL}email_settings?select=*&id=eq.singleton`, { headers: supabaseHeaders() });
   if(!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -2008,7 +2008,7 @@ function buildOvertimeRowCells(year, month, days, people){
     const title = entries.length
       ? entries.map(e=> `${e.person.short} : +${formatNum(e.hours)}h`).join(' · ')
       : 'Cliquer pour saisir des heures supplémentaires';
-    html += `<td class="cal-cell overtime-row-cell" data-action="overtime-day" data-date="${iso}"
+    html += `<td class="cal-cell overtime-row-cell" colspan="2" data-action="overtime-day" data-date="${iso}"
       tabindex="0" role="button" title="${escapeHTML(title)}"
       aria-label="Heures supplémentaires du ${formatFR(iso)}. ${escapeHTML(title)}">${total>0 ? `<span class="ot-row-total">+${formatNum(total)}h</span>` : ''}</td>`;
   });
