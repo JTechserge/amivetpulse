@@ -292,6 +292,8 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-cell.overtime-row-cell{background:#fff;color:#7C3AED;cursor:pointer;}
 .cal-cell.overtime-row-cell:hover{background:var(--color-secondary);}
 .ot-row-total{font-size:8.5px;font-weight:800;}
+.cal-cell.cal-cell-locked{cursor:not-allowed;opacity:0.62;filter:grayscale(35%);}
+.cal-cell.cal-cell-locked:hover{filter:grayscale(35%);}
 
 /* ============================================================
    Légende
@@ -426,6 +428,8 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
   width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;
 }
 .asv-remove-btn:hover{background:var(--color-absent);color:var(--color-absent-text);}
+.signature-panel-rows{display:flex;flex-direction:column;gap:10px;}
+.signature-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:13px;}
 .person-card[data-person="david"]{border-top-color:var(--color-david);}
 .person-card[data-person="stephane"]{border-top-color:var(--color-stephane);}
 .person-card-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
@@ -510,7 +514,7 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 @page{margin:14mm 16mm;}
 @media print{
   .app-header,.sub-nav-row,.legend,.section-desc,.rollover-banner,.forecast-banner,
-  .cal-toolbar-actions,.cal-col-tools,#toast-container{display:none!important;}
+  .cal-toolbar-actions,.cal-col-tools,#toast-container,.signature-panel{display:none!important;}
   .cal-month-nav button{display:none!important;}
   body{background:#fff;}
   .app-main{padding:0 6mm;max-width:none;}
@@ -1472,6 +1476,48 @@ async function syncFromSupabase(){
     }
   }catch(e){ console.warn('Supabase inaccessible, données locales conservées.', e); }
 }
+// Signatures électroniques mensuelles (feuille de présence ASV) : un cache local simple
+// (clé "personId|year|month") rechargé au démarrage et après chaque signature/annulation —
+// pas besoin de la sophistication du sync push/pull de planning_data, ces écritures sont
+// rares et ponctuelles (quelques-unes par mois, pas par clic).
+const SIGNATURES = new Set();
+function signatureKey(personId, year, month){ return `${personId}|${year}|${month}`; }
+function isMonthSigned(personId, year, month){ return SIGNATURES.has(signatureKey(personId, year, month)); }
+const signatureDetails = new Map();
+function getSignatureDetail(personId, year, month){ return signatureDetails.get(signatureKey(personId, year, month)) || null; }
+async function loadSignatures(){
+  try{
+    const res = await fetch(`${SUPABASE_URL}monthly_signatures?select=*`, { headers: supabaseHeaders() });
+    if(!res.ok) return;
+    const rows = await res.json();
+    SIGNATURES.clear();
+    signatureDetails.clear();
+    rows.forEach(r=>{
+      const key = signatureKey(r.person_id, r.year, r.month);
+      SIGNATURES.add(key);
+      signatureDetails.set(key, { signedName:r.signed_name, signedAt:r.signed_at });
+    });
+    renderCurrentView();
+  }catch(e){ console.warn('Signatures inaccessibles (hors ligne ?).', e); }
+}
+async function signMonth(personId, year, month, signedName){
+  const res = await fetch(`${SUPABASE_URL}monthly_signatures`, {
+    method:'POST',
+    headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=minimal' }),
+    body: JSON.stringify({ person_id:personId, year, month, signed_name:signedName }),
+  });
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  await loadSignatures();
+}
+async function revokeSignature(personId, year, month){
+  const res = await fetch(`${SUPABASE_URL}monthly_signatures?person_id=eq.${encodeURIComponent(personId)}&year=eq.${year}&month=eq.${month}`, {
+    method:'DELETE',
+    headers: supabaseHeaders({ Prefer:'return=minimal' }),
+  });
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  await loadSignatures();
+}
+
 // Notifie le nombre de demandes de congé ASV en attente directement sur l'onglet "Tableau
 // de bord", visible depuis n'importe quelle page de l'app (pas seulement quand on y est).
 function updateDashboardNavBadge(){
@@ -2280,14 +2326,15 @@ function propagateLabelAcrossSunday(personId, slots, label){
 function buildPersonRowCells(year, month, days, personId){
   let html = '';
   let run = null;
+  const locked = isMonthSigned(personId, year, month);
   const flush = ()=>{
     if(!run) return;
     const first = run.slots[0], last = run.slots[run.slots.length-1];
     const ariaRange = run.slots.length>1 ? `du ${formatFR(first.iso)} au ${formatFR(last.iso)}` : formatFR(first.iso);
     const info = cellRenderInfo(first.iso, personId, first.slot);
-    html += `<td class="cal-cell state-${info.stateClass}" colspan="${run.colspan}"
-      data-slots='${JSON.stringify(run.slots)}' data-person="${personId}"
-      tabindex="0" role="button" title="${escapeHTML(info.title||'')}"
+    html += `<td class="cal-cell state-${info.stateClass}${locked?' cal-cell-locked':''}" colspan="${run.colspan}"
+      ${locked ? 'data-action="locked"' : `data-slots='${JSON.stringify(run.slots)}'`} data-person="${personId}"
+      tabindex="0" role="button" title="${escapeHTML(locked ? 'Feuille de présence signée — verrouillée' : (info.title||''))}"
       aria-label="${personOf(personId).short} ${ariaRange} — ${cellAriaLabel(first.iso, personId, first.slot)}">${info.html}</td>`;
     run = null;
   };
@@ -2330,9 +2377,9 @@ function buildPersonRowCells(year, month, days, personId){
         // case d'absence fusionnée (où il n'y aurait pas de jour précis à désigner).
         const overtime = slot === 'AM' ? getOvertimeHours(iso, personId) : 0;
         const otBadge = overtime > 0 ? `<span class="ot-badge" title="Heures supplémentaires : ${formatNum(overtime)}h">+${formatNum(overtime)}h</span>` : '';
-        html += `<td class="cal-cell state-${info.stateClass}" style="${info.style}"
-          data-date="${iso}" data-person="${personId}" data-slot="${slot}" data-slot-short="${slot==='M'?'M':'A'}"
-          tabindex="0" role="button" title="${escapeHTML(info.title||'')}"
+        html += `<td class="cal-cell state-${info.stateClass}${locked?' cal-cell-locked':''}" style="${info.style}"
+          data-date="${iso}" data-person="${personId}" data-slot="${slot}" data-slot-short="${slot==='M'?'M':'A'}" ${locked?'data-action="locked"':''}
+          tabindex="0" role="button" title="${escapeHTML(locked ? 'Feuille de présence signée — verrouillée' : (info.title||''))}"
           aria-label="${cellAriaLabel(iso, personId, slot)}${overtime>0?' — '+formatNum(overtime)+'h supplémentaires':''}">${info.html}${otBadge}</td>`;
       }
     });
@@ -2401,9 +2448,10 @@ function buildHalfTable(year, month, days, people){
 
   let bodyRows = '';
   people.forEach(person=>{
+    const locked = isMonthSigned(person.id, year, month);
     bodyRows += `
       <tr>
-        <th class="row-label" style="color:${person.color}">${person.short}</th>
+        <th class="row-label" style="color:${person.color}" ${locked?`title="Feuille de présence signée — verrouillée"`:''}>${person.short}${locked?' 🔒':''}</th>
         ${buildPersonRowCells(year, month, days, person.id)}
       </tr>
     `;
@@ -2469,6 +2517,75 @@ function buildLegend(people = PEOPLE){
   `;
 }
 
+// Panneau de signature électronique mensuelle (feuille de présence ASV) — uniquement sur
+// le calendrier réel de l'année en cours, jamais sur le prévisionnel (données spéculatives,
+// rien à certifier) ni côté vétérinaires (pas de feuille de présence pour eux ici).
+function buildSignaturePanelHtml(viewKey){
+  const cfg = CAL_VIEWS[viewKey];
+  if(viewKey !== 'asv-current') return '';
+  const month = cfg.navState.month;
+  const monthLabel = `${MONTH_NAMES[month]} ${cfg.year}`;
+  return `
+    <div class="card signature-panel" style="margin-top:16px;">
+      <h3 style="font-size:14px;margin-bottom:10px;">✍️ Feuille de présence — ${monthLabel}</h3>
+      <div class="signature-panel-rows">
+        ${cfg.people.map(p=>{
+          const detail = getSignatureDetail(p.id, cfg.year, month);
+          if(detail){
+            const signedDate = new Date(detail.signedAt).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+            return `<div class="signature-row"><span style="color:${p.color};font-weight:700;">${escapeHTML(p.short)}</span>
+              <span class="text-muted" style="font-size:12.5px;">✅ Signé par ${escapeHTML(detail.signedName)} le ${signedDate}</span></div>`;
+          }
+          return `<div class="signature-row"><span style="color:${p.color};font-weight:700;">${escapeHTML(p.short)}</span>
+            <button type="button" class="btn" data-sign-person="${p.id}" style="font-size:12.5px;padding:6px 12px;">Signer ma feuille de présence</button></div>`;
+        }).join('')}
+      </div>
+      <p class="text-muted" style="font-size:11px;margin-top:10px;">Une fois signé, le mois est verrouillé pour la personne concernée. Un vétérinaire peut annuler une signature depuis le Tableau de bord si une correction est nécessaire.</p>
+    </div>
+  `;
+}
+function openSignMonthModal(viewKey, personId){
+  const cfg = CAL_VIEWS[viewKey];
+  const month = cfg.navState.month;
+  const person = personOf(personId);
+  const monthLabel = `${MONTH_NAMES[month]} ${cfg.year}`;
+  const backdrop = document.getElementById('modal-backdrop');
+  const box = document.getElementById('modal-box');
+  box.innerHTML = `
+    <h3>✍️ Signer la feuille de présence</h3>
+    <p>${escapeHTML(person.short)} certifie que les informations de présence pour <strong>${monthLabel}</strong> sont exactes. Une fois signé, ce mois sera verrouillé.</p>
+    <input type="text" id="sign-name-input" placeholder="Tapez votre nom pour confirmer" value="${escapeHTML(person.short)}">
+    <p id="sign-error" style="color:#B91C1C;font-size:12px;display:none;margin:10px 0 0;"></p>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn" id="modal-cancel">Annuler</button>
+      <button class="btn btn-primary" id="sign-confirm">Signer</button>
+    </div>
+  `;
+  backdrop.classList.add('open');
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#modal-cancel').onclick = close;
+  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+  box.querySelector('#sign-name-input').focus();
+  box.querySelector('#sign-confirm').onclick = async ()=>{
+    const name = box.querySelector('#sign-name-input').value.trim();
+    const errorEl = box.querySelector('#sign-error');
+    if(!name){
+      errorEl.textContent = 'Merci de saisir un nom.';
+      errorEl.style.display = 'block';
+      return;
+    }
+    try{
+      await signMonth(personId, cfg.year, month, name);
+      close();
+      showToast(`Feuille de présence de ${person.short} signée`, '✍️');
+    }catch(e){
+      errorEl.textContent = 'Échec de la signature (connexion impossible).';
+      errorEl.style.display = 'block';
+      console.warn(e);
+    }
+  };
+}
+
 function renderCalendarView(viewKey){
   const cfg = CAL_VIEWS[viewKey];
   const container = document.getElementById(cfg.containerId);
@@ -2486,7 +2603,11 @@ function renderCalendarView(viewKey){
     ${buildCalendarToolbar(viewKey)}
     ${buildCalendarGrid(viewKey)}
     ${buildLegend(cfg.people)}
+    ${buildSignaturePanelHtml(viewKey)}
   `;
+  container.querySelectorAll('[data-sign-person]').forEach(btn=>{
+    btn.onclick = ()=> openSignMonthModal(viewKey, btn.dataset.signPerson);
+  });
 }
 VIEW_RENDERERS['vets'] = ()=> renderGroupSubPage('vets');
 VIEW_RENDERERS['asv'] = ()=> renderGroupSubPage('asv');
@@ -2703,16 +2824,19 @@ function openDayCommentPopover(iso, viewKey){
 function openOvertimeDayPopover(iso, people, viewKey){
   const backdrop = document.getElementById('popover-backdrop');
   const box = document.getElementById('popover-box');
+  const [y, m] = iso.split('-').map(Number);
   box.innerHTML = `
     <h4>⏱️ Heures supplémentaires<br><span class="text-muted" style="font-weight:500;font-size:12px;">${formatFR(iso)}</span></h4>
     <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
-      ${people.map(p=>`
+      ${people.map(p=>{
+        const locked = isMonthSigned(p.id, y, m-1);
+        return `
         <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;font-weight:700;color:var(--color-text);">
-          <span><span class="legend-swatch" style="background:${p.color};width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle;"></span>${p.short}</span>
-          <input type="number" min="0" step="0.5" data-overtime-popover-input data-person="${p.id}"
-            value="${getOvertimeHours(iso, p.id) || ''}" placeholder="0" style="width:80px;padding:7px 9px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:13px;">
+          <span><span class="legend-swatch" style="background:${p.color};width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle;"></span>${p.short}${locked?' 🔒':''}</span>
+          <input type="number" min="0" step="0.5" data-overtime-popover-input data-person="${p.id}" ${locked?'disabled title="Feuille de présence signée — verrouillée"':''}
+            value="${getOvertimeHours(iso, p.id) || ''}" placeholder="0" style="width:80px;padding:7px 9px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:13px;${locked?'opacity:0.55;':''}">
         </label>
-      `).join('')}
+      `;}).join('')}
     </div>
     <div class="popover-actions">
       <button class="btn" id="popover-cancel">Annuler</button>
@@ -2725,6 +2849,7 @@ function openOvertimeDayPopover(iso, people, viewKey){
   box.querySelector('#popover-save').onclick = ()=>{
     snapshotBeforeChange();
     box.querySelectorAll('[data-overtime-popover-input]').forEach(input=>{
+      if(input.disabled) return;
       setOvertimeHours(iso, input.dataset.person, input.value);
     });
     saveData();
@@ -2737,6 +2862,15 @@ function openOvertimeDayPopover(iso, people, viewKey){
 // --- Sidebar : édition rapide de toute la journée ---
 function sidebarPersonBlock(iso, person){
   const isASV = isASVPerson(person.id);
+  const [sy, sm] = iso.split('-').map(Number);
+  if(isASV && isMonthSigned(person.id, sy, sm-1)){
+    return `
+      <div class="sidebar-person-block">
+        <div class="sidebar-person-title"><span class="legend-swatch" style="background:${person.color};width:11px;height:11px;border-radius:50%;display:inline-block;"></span>${person.name}</div>
+        <p class="text-muted" style="font-size:12px;margin:8px 0 0;">🔒 Feuille de présence signée pour ce mois — verrouillée. Un vétérinaire peut annuler la signature depuis le Tableau de bord si besoin.</p>
+      </div>
+    `;
+  }
   return `
     <div class="sidebar-person-block">
       <div class="sidebar-person-title"><span class="legend-swatch" style="background:${person.color};width:11px;height:11px;border-radius:50%;display:inline-block;"></span>${person.name}</div>
@@ -3174,6 +3308,28 @@ function buildOvertimeTableASV(year){
   `;
 }
 
+// Vue d'ensemble des feuilles de présence signées par mois/ASV, avec annulation possible
+// (rouvre le mois correspondant à la modification dans le calendrier).
+function buildSignaturesTableASV(year){
+  let rows = '';
+  for(let m=0; m<12; m++){
+    const cells = ASV_PEOPLE.map(p=>{
+      const detail = getSignatureDetail(p.id, year, m);
+      if(!detail) return '<td class="text-muted">—</td>';
+      const signedDate = new Date(detail.signedAt).toLocaleDateString('fr-FR', { day:'numeric', month:'short' });
+      return `<td>✅ ${escapeHTML(detail.signedName)} (${signedDate})
+        <button type="button" class="asv-remove-btn" data-revoke-signature="${p.id}|${year}|${m}" title="Annuler cette signature" aria-label="Annuler cette signature">✕</button></td>`;
+    });
+    rows += `<tr><td>${MONTH_NAMES[m]}</td>${cells.join('')}</tr>`;
+  }
+  return `
+    <table class="recap-table">
+      <thead><tr><th>Mois</th>${ASV_PEOPLE.map(p=>`<th>${p.short}</th>`).join('')}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
 const dashSubState = { tab: 'stats' };
 function renderDashboard(){
   const container = document.getElementById('view-dashboard');
@@ -3261,11 +3417,30 @@ function renderDashboardStats(){
       <h3 style="font-size:16px;margin-bottom:10px;">Récapitulatif mensuel ASV ${year}</h3>
       ${buildRecapTableASV(year)}
     </div>
-    <div class="card">
+    <div class="card" style="margin-bottom:24px;">
       <h3 style="font-size:16px;margin-bottom:10px;">Heures supplémentaires ASV ${year}</h3>
       ${buildOvertimeTableASV(year)}
     </div>
+    <div class="card" id="dash-signatures-card">
+      <h3 style="font-size:16px;margin-bottom:10px;">Feuilles de présence signées ${year}</h3>
+      ${buildSignaturesTableASV(year)}
+    </div>
   `;
+  container.querySelectorAll('[data-revoke-signature]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const [personId, y, m] = btn.dataset.revokeSignature.split('|');
+      openConfirmModal({
+        title: 'Annuler cette signature ?',
+        message: `Le mois redeviendra modifiable pour ${personOf(personId).short}.`,
+        confirmLabel: 'Annuler la signature',
+        onConfirm: async ()=>{
+          await revokeSignature(personId, parseInt(y,10), parseInt(m,10));
+          renderDashboardStats();
+          showToast('Signature annulée', '🔓');
+        },
+      });
+    };
+  });
   container.querySelector('#dash-year-toggle').addEventListener('click', (e)=>{
     const btn = e.target.closest('button');
     if(!btn) return;
@@ -3553,6 +3728,7 @@ function init(){
   switchSubPage('asv', subNavState.asv);
   switchView(VIEW_RENDERERS[restoredView] ? restoredView : 'vets');
   syncFromSupabase();
+  loadSignatures();
 }
 document.addEventListener('DOMContentLoaded', init);
 </script>
