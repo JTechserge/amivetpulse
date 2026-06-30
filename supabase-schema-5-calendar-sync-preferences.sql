@@ -50,7 +50,9 @@ $$;
 grant execute on function revoke_calendar_sync_token(text) to anon;
 
 -- Renvoie l'état complet (jeton actif + préférences) pour réafficher le panneau de réglages
--- sans devoir tout régénérer à chaque fois.
+-- sans devoir tout régénérer à chaque fois. Le type de retour change (texte -> table), donc
+-- il faut d'abord supprimer l'ancienne version : "create or replace" seul ne le permet pas.
+drop function if exists get_calendar_sync_status(text);
 create or replace function get_calendar_sync_status(p_person_id text)
 returns table(token text, sync_presence boolean, sync_absences boolean, color text)
 language sql
