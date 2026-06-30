@@ -2897,12 +2897,12 @@ function buildRecapTable(year){
     totalD+=dDays; totalS+=sDays; totalSatD+=satD; totalSatS+=satS;
     const diff = dDays - sDays;
     const diffClass = diff>0 ? 'ecart-david' : diff<0 ? 'ecart-stephane' : 'ecart-equilibre';
-    const diffTxt = diff===0 ? 'Équilibre' : `${diff>0?'+':''}${formatNum(diff)} ${diff>0?'David':'Stéphane'}`;
+    const diffTxt = diff===0 ? 'Équilibre' : `${formatNum(Math.abs(diff))} jour${Math.abs(diff)>1?'s':''} en plus pour ${diff>0?'David':'Stéphane'}`;
     rows += `<tr><td>${MONTH_NAMES[m]}</td><td>${formatNum(dDays)}</td><td>${formatNum(sDays)}</td><td>${satD}</td><td>${satS}</td><td class="${diffClass}">${diffTxt}</td></tr>`;
   }
   const totalDiff = totalD - totalS;
   const totalDiffClass = totalDiff>0?'ecart-david':totalDiff<0?'ecart-stephane':'ecart-equilibre';
-  const totalDiffTxt = totalDiff===0?'Équilibre':`${totalDiff>0?'+':''}${formatNum(totalDiff)} ${totalDiff>0?'David':'Stéphane'}`;
+  const totalDiffTxt = totalDiff===0?'Équilibre':`${formatNum(Math.abs(totalDiff))} jour${Math.abs(totalDiff)>1?'s':''} en plus pour ${totalDiff>0?'David':'Stéphane'}`;
   return `
     <table class="recap-table">
       <thead><tr><th>Mois</th><th>David (j)</th><th>Stéphane (j)</th><th>Samedis David</th><th>Samedis Stéphane</th><th>Écart</th></tr></thead>
