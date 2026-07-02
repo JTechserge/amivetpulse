@@ -61,6 +61,15 @@ serve(async (req) => {
       });
     }
 
+    if (action === 'delete') {
+      const { user_id } = body;
+      if (!user_id) return new Response(JSON.stringify({ error: 'user_id requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      const { error: delError } = await adminClient.auth.admin.deleteUser(user_id);
+      if (delError) throw new Error(delError.message);
+      // user_profiles se supprime en cascade grâce à ON DELETE CASCADE
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     return new Response(JSON.stringify({ error: `Action inconnue : ${action}` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (e) {
