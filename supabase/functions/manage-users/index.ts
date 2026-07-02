@@ -1,0 +1,70 @@
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  try {
+    // Vérifier que l'appelant est authentifié et a le rôle admin
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) return new Response(JSON.stringify({ error: 'Non authentifié.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    // Client avec clé service pour les opérations admin
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    // Client avec le token de l'appelant pour vérifier son rôle
+    const callerClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: profile } = await callerClient.from('user_profiles').select('role').single();
+    if (!profile || profile.role !== 'admin') {
+      return new Response(JSON.stringify({ error: 'Accès réservé à l\'administrateur.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const body = await req.json();
+    const { action } = body;
+
+    if (action === 'invite') {
+      const { email, display_name, role, person_id } = body;
+      if (!email || !display_name || !role) {
+        return new Response(JSON.stringify({ error: 'email, display_name et role sont requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Inviter l'utilisateur — Supabase envoie un email avec le lien de définition du mot de passe
+      const { data: invited, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+        redirectTo: 'https://jtechserge.github.io/planningamivet/amivet-planning.html',
+        data: { display_name, role },
+      });
+      if (inviteError) throw new Error(inviteError.message);
+
+      // Créer le profil dans user_profiles
+      const { error: profileError } = await adminClient.from('user_profiles').upsert({
+        id: invited.user.id,
+        role,
+        display_name,
+        person_id: person_id || null,
+        can_edit_vet_calendar: false,
+        can_edit_all_asv: false,
+      });
+      if (profileError) throw new Error(profileError.message);
+
+      return new Response(JSON.stringify({ ok: true, user_id: invited.user.id }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(JSON.stringify({ error: `Action inconnue : ${action}` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+  } catch (e) {
+    console.error(e);
+    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+});

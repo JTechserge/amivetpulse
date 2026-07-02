@@ -546,6 +546,31 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
    Impression — ne garde que le calendrier mensuel affiché
    ============================================================ */
 @page{margin:14mm 16mm;}
+/* ============================================================
+   Écran de connexion
+   ============================================================ */
+#login-overlay{
+  position:fixed;inset:0;z-index:200;background:var(--color-secondary);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+}
+#login-overlay.hidden{display:none;}
+.login-card{
+  background:#fff;border-radius:var(--radius-card);box-shadow:var(--shadow-lg);
+  padding:36px 32px;width:100%;max-width:400px;text-align:center;
+}
+.login-card .login-logo{height:54px;margin-bottom:12px;}
+.login-card h1{font-size:20px;margin-bottom:3px;}
+.login-card .login-sub{font-size:13px;color:var(--color-text-muted);margin-bottom:26px;}
+.login-form{text-align:left;}
+.login-form input[type=email],.login-form input[type=password],.login-form input[type=text]{
+  width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;
+  font-size:14px;font-family:inherit;margin-bottom:10px;box-sizing:border-box;
+}
+.login-form input:focus{outline:2px solid var(--color-primary);border-color:var(--color-primary);}
+.login-error{color:#B91C1C;font-size:12.5px;margin:0 0 10px;}
+.login-footer{margin-top:14px;text-align:center;}
+/* Masque le bouton tableau de bord pour les utilisateurs ASV */
+body.role-asv [data-view="dashboard"]{display:none;}
 .print-signature-status{display:none;}
 @media print{
   .app-header,.sub-nav-row,.legend,.section-desc,.rollover-banner,.forecast-banner,
@@ -562,6 +587,14 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 </style>
 </head>
 <body>
+<div id="login-overlay">
+  <div class="login-card">
+    <img src="logo.png" class="login-logo" alt="Amivet">
+    <h1>Amivet Planning</h1>
+    <p class="login-sub">Clinique Vétérinaire — Dr. Pelois &amp; Dr. Maquinay</p>
+    <div id="login-content"></div>
+  </div>
+</div>
 <div id="app">
 
   <!-- ============================================================
@@ -586,24 +619,7 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
       <div class="header-actions">
         <div class="settings-wrap">
           <button class="btn-icon" id="settings-toggle" aria-label="Ouvrir le menu réglages" aria-haspopup="true" aria-expanded="false">⚙️</button>
-          <div class="settings-menu" id="settings-menu" role="menu">
-            <div class="settings-section-label">Personnalisation</div>
-            <button id="action-colors" role="menuitem">🎨 Couleurs des associés</button>
-            <hr>
-            <div class="settings-section-label">Sécurité</div>
-            <button id="action-change-password" role="menuitem">🔒 Modifier le mot de passe</button>
-            <hr>
-            <div class="settings-section-label">Notifications</div>
-            <button id="action-email-settings" role="menuitem">📧 Email récapitulatif des congés</button>
-            <hr>
-            <div class="settings-section-label">Synchronisation</div>
-            <button id="action-calendar-sync" role="menuitem">📅 Synchronisation calendrier</button>
-            <hr>
-            <div class="settings-section-label">Données</div>
-            <button id="action-export" role="menuitem">⬇️ Exporter JSON</button>
-            <button id="action-import" role="menuitem">⬆️ Importer JSON</button>
-            <input type="file" id="import-file-input" accept="application/json" class="hidden" aria-hidden="true">
-          </div>
+          <div class="settings-menu" id="settings-menu" role="menu"></div>
         </div>
       </div>
     </div>
@@ -905,15 +921,14 @@ function openColorPickerModal(){
 // Modale de changement du mot de passe protégeant les onglets Vétérinaires et Tableau de
 // bord. Demande l'ancien mot de passe pour autoriser le changement (protection légère,
 // pas un vrai contrôle d'accès serveur).
-function openChangePasswordModal(){
+function openChangeMyPasswordModal(){
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
   box.innerHTML = `
-    <h3>🔒 Modifier le mot de passe</h3>
-    <p>Protège l'accès aux onglets Vétérinaires et Tableau de bord.</p>
+    <h3>🔑 Changer mon mot de passe</h3>
+    <p>Choisissez un nouveau mot de passe pour votre compte <strong>${escapeHTML(currentUser?.email||'')}</strong>.</p>
     <div style="display:flex;flex-direction:column;gap:10px;">
-      <input type="password" id="pwd-current" placeholder="Mot de passe actuel" autocomplete="current-password">
       <input type="password" id="pwd-new" placeholder="Nouveau mot de passe" autocomplete="new-password">
       <input type="password" id="pwd-confirm" placeholder="Confirmer le nouveau mot de passe" autocomplete="new-password">
     </div>
@@ -926,40 +941,148 @@ function openChangePasswordModal(){
   backdrop.classList.add('open');
   const close = ()=> backdrop.classList.remove('open');
   box.querySelector('#modal-cancel').onclick = close;
+  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
   box.querySelector('#pwd-save').onclick = async ()=>{
-    const cur = box.querySelector('#pwd-current').value;
     const next = box.querySelector('#pwd-new').value;
-    const confirmVal = box.querySelector('#pwd-confirm').value;
+    const conf = box.querySelector('#pwd-confirm').value;
     const errorEl = box.querySelector('#pwd-error');
     const saveBtn = box.querySelector('#pwd-save');
-    let reason = null;
-    if(!next) reason = 'Le nouveau mot de passe ne peut pas être vide.';
-    else if(next !== confirmVal) reason = 'Les deux mots de passe ne correspondent pas.';
-    if(reason){
-      errorEl.textContent = reason;
-      errorEl.style.display = 'block';
-      return;
-    }
+    if(!next || next.length < 8){ errorEl.textContent='Le mot de passe doit faire au moins 8 caractères.'; errorEl.style.display='block'; return; }
+    if(next !== conf){ errorEl.textContent='Les deux mots de passe ne correspondent pas.'; errorEl.style.display='block'; return; }
     saveBtn.disabled = true;
     try{
-      const ok = await changeGatePassword(cur, next);
-      if(ok){
-        close();
-        showToast('Mot de passe modifié', '🔒');
-      } else {
-        errorEl.textContent = 'Mot de passe actuel incorrect.';
-        errorEl.style.display = 'block';
-      }
+      const s = getAuthSession();
+      await authUpdatePassword(s.access_token, next);
+      close(); showToast('Mot de passe mis à jour', '🔑');
     }catch(e){
-      errorEl.textContent = 'Connexion impossible. Réessayez plus tard.';
+      errorEl.textContent = 'Erreur : '+e.message;
       errorEl.style.display = 'block';
-      console.warn(e);
-    }finally{
       saveBtn.disabled = false;
     }
   };
+  box.querySelector('#pwd-new').focus();
+}
+
+function openManageUsersModal(){
+  const backdrop = document.getElementById('modal-backdrop');
+  const box = document.getElementById('modal-box');
+  box.className = 'modal-box modal-box-wide';
+  box.innerHTML = `<h3>👥 Gestion des collaborateurs</h3><p class="text-muted" style="font-size:13px;">Chargement…</p>`;
+  backdrop.classList.add('open');
+  const close = ()=> backdrop.classList.remove('open');
   backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
-  box.querySelector('#pwd-current').focus();
+
+  fetch(`${SUPABASE_URL}user_profiles?select=id,role,person_id,display_name,can_edit_vet_calendar,can_edit_all_asv`, { headers:supabaseHeaders() })
+    .then(r=>r.json()).then(users=>{
+      const roleLabels = { admin:'Admin', vet:'Vétérinaire', asv:'ASV' };
+      const rows = users.map(u=>`
+        <tr>
+          <td style="font-weight:600;">${escapeHTML(u.display_name)}</td>
+          <td style="font-size:12px;color:var(--color-text-muted);">${escapeHTML(u.role ? roleLabels[u.role]||u.role : '')}</td>
+          <td style="font-size:12px;">${u.can_edit_vet_calendar ? '✅' : '—'}</td>
+          <td style="font-size:12px;">${u.can_edit_all_asv ? '✅' : '—'}</td>
+          <td>
+            <button class="btn btn-sm" data-edit-user="${u.id}" style="font-size:11.5px;padding:4px 8px;">Modifier</button>
+          </td>
+        </tr>`).join('');
+      box.innerHTML = `
+        <h3>👥 Gestion des collaborateurs</h3>
+        <table class="recap-table" style="margin-bottom:16px;">
+          <thead><tr><th style="text-align:left;">Nom</th><th>Rôle</th><th title="Peut modifier le calendrier vétérinaires">Modif. vétos</th><th title="Peut modifier toutes les lignes ASV">Modif. ASV</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div style="border-top:1px solid var(--color-border);padding-top:14px;">
+          <h4 style="font-size:14px;margin-bottom:10px;">Inviter un collaborateur</h4>
+          <div style="display:grid;grid-template-columns:1fr 1fr 110px;gap:8px;align-items:end;">
+            <input type="text" id="invite-name" placeholder="Nom affiché" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
+            <input type="email" id="invite-email" placeholder="Adresse email" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
+            <select id="invite-role" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
+              <option value="vet">Vétérinaire</option>
+              <option value="asv">ASV</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <p id="invite-error" style="color:#B91C1C;font-size:12px;display:none;margin:8px 0 0;"></p>
+          <div class="modal-actions" style="margin-top:12px;">
+            <button class="btn" id="modal-cancel">Fermer</button>
+            <button class="btn btn-primary" id="invite-btn">Envoyer l'invitation</button>
+          </div>
+        </div>
+      `;
+      box.querySelector('#modal-cancel').onclick = close;
+      backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+      box.querySelectorAll('[data-edit-user]').forEach(btn=>{
+        btn.onclick = ()=> openEditUserModal(btn.dataset.editUser, users, close);
+      });
+      box.querySelector('#invite-btn').onclick = async ()=>{
+        const name = box.querySelector('#invite-name').value.trim();
+        const email = box.querySelector('#invite-email').value.trim();
+        const role = box.querySelector('#invite-role').value;
+        const errEl = box.querySelector('#invite-error');
+        if(!name || !email){ errEl.textContent='Nom et email requis.'; errEl.style.display='block'; return; }
+        box.querySelector('#invite-btn').disabled = true;
+        try{
+          const res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
+            method:'POST', headers:supabaseHeaders({'Content-Type':'application/json'}),
+            body:JSON.stringify({ action:'invite', email, display_name:name, role }),
+          });
+          if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
+          close(); showToast(`Invitation envoyée à ${email}`, '📧');
+        }catch(e){
+          errEl.textContent = e.message; errEl.style.display='block';
+          box.querySelector('#invite-btn').disabled = false;
+        }
+      };
+    }).catch(()=>{
+      box.innerHTML = `<h3>👥 Collaborateurs</h3><p class="text-muted">Impossible de charger la liste.</p><div class="modal-actions"><button class="btn" id="modal-cancel">Fermer</button></div>`;
+      box.querySelector('#modal-cancel').onclick = close;
+    });
+}
+
+function openEditUserModal(userId, users, onBack){
+  const user = users.find(u=>u.id===userId);
+  if(!user) return;
+  const backdrop = document.getElementById('modal-backdrop');
+  const box = document.getElementById('modal-box');
+  box.className = 'modal-box';
+  box.innerHTML = `
+    <h3>Modifier ${escapeHTML(user.display_name)}</h3>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+      <label style="font-size:13px;">
+        <span class="text-muted" style="display:block;margin-bottom:4px;">Modifier le calendrier vétos</span>
+        <input type="checkbox" id="edit-vet-cal" ${user.can_edit_vet_calendar?'checked':''}>
+        <span style="margin-left:6px;">Autorisé</span>
+      </label>
+      <label style="font-size:13px;">
+        <span class="text-muted" style="display:block;margin-bottom:4px;">Modifier toutes les lignes ASV</span>
+        <input type="checkbox" id="edit-all-asv" ${user.can_edit_all_asv?'checked':''}>
+        <span style="margin-left:6px;">Autorisé</span>
+      </label>
+    </div>
+    <p id="edit-error" style="color:#B91C1C;font-size:12px;display:none;"></p>
+    <div class="modal-actions">
+      <button class="btn" id="edit-back">← Retour</button>
+      <button class="btn btn-primary" id="edit-save">Enregistrer</button>
+    </div>
+  `;
+  box.querySelector('#edit-back').onclick = ()=>{ onBack(); openManageUsersModal(); };
+  box.querySelector('#edit-save').onclick = async ()=>{
+    const canVet = box.querySelector('#edit-vet-cal').checked;
+    const canAsv = box.querySelector('#edit-all-asv').checked;
+    const errEl = box.querySelector('#edit-error');
+    box.querySelector('#edit-save').disabled = true;
+    try{
+      const res = await fetch(`${SUPABASE_URL}user_profiles?id=eq.${userId}`, {
+        method:'PATCH', headers:supabaseHeaders({'Content-Type':'application/json','Prefer':'return=minimal'}),
+        body:JSON.stringify({ can_edit_vet_calendar:canVet, can_edit_all_asv:canAsv }),
+      });
+      if(!res.ok) throw new Error(`HTTP ${res.status}`);
+      backdrop.classList.remove('open'); showToast('Permissions mises à jour', '✅');
+    }catch(e){
+      errEl.textContent=e.message; errEl.style.display='block';
+      box.querySelector('#edit-save').disabled = false;
+    }
+  };
 }
 
 // Réglages de l'email récapitulatif des congés ASV (destinataire + fréquence), partagés
@@ -1286,56 +1409,6 @@ const GROUP_VIEWS = {
 // lui-même n'existe nulle part dans ce code source (public sur GitHub) : il est stocké
 // sous forme de hash dans Supabase, vérifié via des fonctions RPC qui ne renvoient que
 // vrai/faux (voir supabase-schema-3-password-security.sql).
-const GATED_VIEWS = ['dashboard'];
-const UNLOCK_SESSION_KEY = 'amivet_gate_unlocked_at';
-const GATE_DURATION_MS = 30*60*1000; // 30 minutes
-async function verifyGatePassword(input){
-  const res = await fetch(`${SUPABASE_URL}rpc/verify_gate_password`, {
-    method:'POST',
-    headers: supabaseHeaders({ 'Content-Type':'application/json' }),
-    body: JSON.stringify({ input }),
-  });
-  if(!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-async function changeGatePassword(currentPassword, newPassword){
-  const res = await fetch(`${SUPABASE_URL}rpc/change_gate_password`, {
-    method:'POST',
-    headers: supabaseHeaders({ 'Content-Type':'application/json' }),
-    body: JSON.stringify({ current_password:currentPassword, new_password:newPassword }),
-  });
-  if(!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-// Appelle directement la fonction serverless qui envoie l'email (quelques secondes), au
-// lieu de poser un drapeau attendant le prochain passage d'un cron GitHub Actions.
-async function requestPasswordReset(){
-  const res = await fetch(`${SUPABASE_FUNCTIONS_URL}send-password-reset`, {
-    method:'POST',
-    headers: supabaseHeaders({ 'Content-Type':'application/json' }),
-    body: JSON.stringify({}),
-  });
-  if(!res.ok) throw new Error(`HTTP ${res.status}`);
-  const result = await res.json();
-  if(!result.ok) throw new Error(result.error || 'Échec de l\'envoi.');
-}
-async function completePasswordReset(token, newPassword){
-  const res = await fetch(`${SUPABASE_URL}rpc/complete_password_reset`, {
-    method:'POST',
-    headers: supabaseHeaders({ 'Content-Type':'application/json' }),
-    body: JSON.stringify({ in_token:token, new_password:newPassword }),
-  });
-  if(!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-function isGateUnlocked(){
-  const t = parseInt(sessionStorage.getItem(UNLOCK_SESSION_KEY) || '0', 10);
-  return t > 0 && (Date.now() - t) < GATE_DURATION_MS;
-}
-function unlockGate(){ sessionStorage.setItem(UNLOCK_SESSION_KEY, String(Date.now())); }
-// Re-verrouille immédiatement sans attendre les 30 minutes — bouton posé une fois pour
-// toutes dans le HTML statique, à côté de la sous-navigation de chaque page protégée.
-function lockGate(){ sessionStorage.removeItem(UNLOCK_SESSION_KEY); }
 
 // ----------------------------------------------------------------
 // Bascule annuelle automatique (current -> current+1, forecast -> forecast+1)
@@ -1456,12 +1529,142 @@ function isSaturday(date){ return isoWeekday(date) === 5; }
 // Clé "anon" Supabase : volontairement non secrète (protégée par les policies RLS côté
 // base, pas par le secret) — c'est le fonctionnement normal d'une clé anon Supabase,
 // faite pour être embarquée dans du code client visible publiquement.
-const SUPABASE_URL = 'https://ubowqtowyqmpraoxbaoo.supabase.co/rest/v1/';
+const SUPABASE_URL      = 'https://ubowqtowyqmpraoxbaoo.supabase.co/rest/v1/';
+const SUPABASE_AUTH_URL = 'https://ubowqtowyqmpraoxbaoo.supabase.co/auth/v1/';
 const SUPABASE_FUNCTIONS_URL = 'https://ubowqtowyqmpraoxbaoo.supabase.co/functions/v1/';
 const CALENDAR_FEED_URL = `${SUPABASE_FUNCTIONS_URL}calendar-feed`;
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVib3dxdG93eXFtcHJhb3hiYW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MzkzNjksImV4cCI6MjA5ODIxNTM2OX0.cC7vTWrK-Ykii5dtlg_6lA5quHe6rv78IRxZT-ArV_8';
+
+// ----------------------------------------------------------------
+// Authentification — état global et gestion de session
+// ----------------------------------------------------------------
+let currentUser = null;
+// { id, email, role, person_id, display_name, can_edit_vet_calendar, can_edit_all_asv }
+let adminViewMode = 'vet'; // 'vet' | 'asv' — seulement pertinent pour le rôle admin
+const AUTH_SESSION_KEY = 'amivet_auth_session';
+
+function getAuthSession(){
+  try{ return JSON.parse(sessionStorage.getItem(AUTH_SESSION_KEY)); }catch{ return null; }
+}
+function saveAuthSession(s){ sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(s)); }
+function clearAuthSession(){ sessionStorage.removeItem(AUTH_SESSION_KEY); currentUser = null; }
+
 function supabaseHeaders(extra){
-  return Object.assign({ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${SUPABASE_ANON_KEY}` }, extra || {});
+  const session = getAuthSession();
+  const token = session?.access_token || SUPABASE_ANON_KEY;
+  return Object.assign({ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${token}` }, extra || {});
+}
+
+// ----------------------------------------------------------------
+// Fonctions d'authentification (Supabase Auth REST)
+// ----------------------------------------------------------------
+async function authSignIn(email, password){
+  const res = await fetch(`${SUPABASE_AUTH_URL}token?grant_type=password`, {
+    method:'POST',
+    headers:{ apikey:SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
+    body:JSON.stringify({ email, password }),
+  });
+  if(!res.ok){
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err.error_description || err.message || `Erreur ${res.status}`);
+  }
+  const session = await res.json();
+  saveAuthSession(session);
+  return session;
+}
+async function authSignOut(){
+  const s = getAuthSession();
+  if(s?.access_token){
+    await fetch(`${SUPABASE_AUTH_URL}logout`, {
+      method:'POST',
+      headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${s.access_token}` },
+    }).catch(()=>{});
+  }
+  clearAuthSession();
+}
+async function authRefreshSession(){
+  const s = getAuthSession();
+  if(!s?.refresh_token){ clearAuthSession(); return null; }
+  const res = await fetch(`${SUPABASE_AUTH_URL}token?grant_type=refresh_token`, {
+    method:'POST',
+    headers:{ apikey:SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
+    body:JSON.stringify({ refresh_token:s.refresh_token }),
+  });
+  if(!res.ok){ clearAuthSession(); return null; }
+  const session = await res.json();
+  saveAuthSession(session);
+  return session;
+}
+async function authUpdatePassword(accessToken, newPassword){
+  const res = await fetch(`${SUPABASE_AUTH_URL}user`, {
+    method:'PUT',
+    headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
+    body:JSON.stringify({ password:newPassword }),
+  });
+  if(!res.ok) throw new Error('Erreur lors de la mise à jour du mot de passe.');
+}
+async function authSendPasswordReset(email){
+  const res = await fetch(`${SUPABASE_AUTH_URL}recover`, {
+    method:'POST',
+    headers:{ apikey:SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
+    body:JSON.stringify({ email }),
+  });
+  if(!res.ok) throw new Error('Impossible d\'envoyer l\'email de réinitialisation.');
+}
+async function loadCurrentUser(){
+  const s = getAuthSession();
+  if(!s?.access_token) return null;
+  // Vérifier le token Supabase Auth
+  let authRes = await fetch(`${SUPABASE_AUTH_URL}user`, {
+    headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${s.access_token}` },
+  });
+  if(authRes.status === 401){
+    const refreshed = await authRefreshSession();
+    if(!refreshed) return null;
+    authRes = await fetch(`${SUPABASE_AUTH_URL}user`, {
+      headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${refreshed.access_token}` },
+    });
+  }
+  if(!authRes.ok) return null;
+  const authUser = await authRes.json();
+  // Charger le profil depuis user_profiles
+  const profRes = await fetch(`${SUPABASE_URL}user_profiles?id=eq.${authUser.id}&select=*`, {
+    headers: supabaseHeaders(),
+  });
+  if(!profRes.ok) return null;
+  const profiles = await profRes.json();
+  if(!profiles.length) return null;
+  const p = profiles[0];
+  currentUser = {
+    id: authUser.id, email: authUser.email,
+    role: p.role, person_id: p.person_id, display_name: p.display_name,
+    can_edit_vet_calendar: p.can_edit_vet_calendar,
+    can_edit_all_asv: p.can_edit_all_asv,
+  };
+  return currentUser;
+}
+
+// ----------------------------------------------------------------
+// Helpers de permissions
+// ----------------------------------------------------------------
+function effectiveRole(){
+  if(!currentUser) return null;
+  if(currentUser.role === 'admin') return adminViewMode === 'asv' ? 'asv' : 'vet';
+  return currentUser.role;
+}
+function canAccessDashboard(){ const r = effectiveRole(); return r === 'vet' || r === 'admin'; }
+function canAccessSettings(){ return currentUser?.role === 'admin' || currentUser?.role === 'vet'; }
+function canEditSlot(personId){
+  if(!currentUser) return false;
+  const role = effectiveRole();
+  if(role === 'vet') return true;
+  if(role === 'asv'){
+    if(isASVPerson(personId)){
+      return personId === currentUser.person_id || currentUser.can_edit_all_asv === true;
+    }
+    return currentUser.can_edit_vet_calendar === true;
+  }
+  return false;
 }
 let DATA = { version:2, slots:{} };
 
@@ -1758,9 +1961,45 @@ function openConfirmModal({title, message, confirmLabel='Confirmer', danger=true
 /* ----------------------------------------------------------------
    8. MENU RÉGLAGES (export / import / reset)
    ---------------------------------------------------------------- */
+function buildSettingsMenuHtml(){
+  const isVet = canAccessSettings();
+  const isAdmin = currentUser?.role === 'admin';
+  const userName = currentUser?.display_name || currentUser?.email || '';
+  return `
+    ${isVet ? `
+      <div class="settings-section-label">Personnalisation</div>
+      <button id="action-colors" role="menuitem">🎨 Couleurs des associés</button>
+      <hr>
+      <div class="settings-section-label">Notifications</div>
+      <button id="action-email-settings" role="menuitem">📧 Email récapitulatif des congés</button>
+      <hr>
+      <div class="settings-section-label">Synchronisation</div>
+      <button id="action-calendar-sync" role="menuitem">📅 Synchronisation calendrier</button>
+      <hr>
+      <div class="settings-section-label">Données</div>
+      <button id="action-export" role="menuitem">⬇️ Exporter JSON</button>
+      <button id="action-import" role="menuitem">⬆️ Importer JSON</button>
+      <input type="file" id="import-file-input" accept="application/json" class="hidden" aria-hidden="true">
+      <hr>
+      <div class="settings-section-label">Collaborateurs</div>
+      <button id="action-manage-users" role="menuitem">👥 Gérer les collaborateurs</button>
+      <hr>
+    ` : ''}
+    ${isAdmin ? `
+      <div class="settings-section-label">Mode d'affichage</div>
+      <button id="action-toggle-view" role="menuitem">👁 ${adminViewMode === 'asv' ? 'Passer en vue Vétérinaires' : 'Passer en vue ASV'}</button>
+      <hr>
+    ` : ''}
+    <div class="settings-section-label">Mon compte${userName ? ` — ${escapeHTML(userName)}` : ''}</div>
+    <button id="action-change-password" role="menuitem">🔑 Changer mon mot de passe</button>
+    <button id="action-logout" class="danger" role="menuitem">🚪 Se déconnecter</button>
+  `;
+}
 function initSettingsMenu(){
   const toggle = document.getElementById('settings-toggle');
   const menu = document.getElementById('settings-menu');
+  menu.innerHTML = buildSettingsMenuHtml();
+
   toggle.addEventListener('click', (e)=>{
     e.stopPropagation();
     const willOpen = !menu.classList.contains('open');
@@ -1774,64 +2013,66 @@ function initSettingsMenu(){
     }
   });
 
-  document.getElementById('action-colors').addEventListener('click', ()=>{
-    menu.classList.remove('open');
-    openColorPickerModal();
-  });
+  if(canAccessSettings()){
+    document.getElementById('action-colors').addEventListener('click', ()=>{
+      menu.classList.remove('open'); openColorPickerModal();
+    });
+    document.getElementById('action-email-settings').addEventListener('click', ()=>{
+      menu.classList.remove('open'); openEmailSettingsModal();
+    });
+    document.getElementById('action-calendar-sync').addEventListener('click', ()=>{
+      menu.classList.remove('open'); openCalendarSyncModal();
+    });
+    document.getElementById('action-export').addEventListener('click', ()=>{
+      const blob = new Blob([JSON.stringify(DATA, null, 2)], { type:'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `amivet_planning_${fmtISO(new Date())}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      menu.classList.remove('open'); showToast('Export JSON téléchargé', '⬇️');
+    });
+    const fileInput = document.getElementById('import-file-input');
+    document.getElementById('action-import').addEventListener('click', ()=>{ menu.classList.remove('open'); fileInput.click(); });
+    fileInput.addEventListener('change', (e)=>{
+      const file = e.target.files[0]; if(!file) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        try{
+          const parsed = JSON.parse(reader.result);
+          if(!parsed || typeof parsed.slots !== 'object') throw new Error('Format invalide');
+          snapshotBeforeChange(); DATA = parsed; saveData(false); renderCurrentView();
+          showToast('Import réussi', '⬆️');
+        }catch{ showToast('Fichier JSON invalide', '⚠️'); }
+        fileInput.value = '';
+      };
+      reader.readAsText(file);
+    });
+    document.getElementById('action-manage-users').addEventListener('click', ()=>{
+      menu.classList.remove('open'); openManageUsersModal();
+    });
+  }
+
+  if(currentUser?.role === 'admin'){
+    document.getElementById('action-toggle-view').addEventListener('click', ()=>{
+      adminViewMode = adminViewMode === 'asv' ? 'vet' : 'asv';
+      menu.classList.remove('open');
+      applyRoleToDOM();
+      initSettingsMenu();
+      if(!canAccessDashboard() && currentView === 'dashboard') switchView('vets');
+      else renderCurrentView();
+      showToast(`Vue basculée : ${adminViewMode === 'asv' ? 'ASV' : 'Vétérinaires'}`, '👁');
+    });
+  }
 
   document.getElementById('action-change-password').addEventListener('click', ()=>{
+    menu.classList.remove('open'); openChangeMyPasswordModal();
+  });
+  document.getElementById('action-logout').addEventListener('click', async ()=>{
     menu.classList.remove('open');
-    openChangePasswordModal();
+    await authSignOut();
+    renderLoginScreen();
   });
-
-  document.getElementById('action-email-settings').addEventListener('click', ()=>{
-    menu.classList.remove('open');
-    openEmailSettingsModal();
-  });
-
-  document.getElementById('action-calendar-sync').addEventListener('click', ()=>{
-    menu.classList.remove('open');
-    openCalendarSyncModal();
-  });
-
-  document.getElementById('action-export').addEventListener('click', ()=>{
-    const blob = new Blob([JSON.stringify(DATA, null, 2)], { type:'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `amivet_planning_${fmtISO(new Date())}.json`;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
-    menu.classList.remove('open');
-    showToast('Export JSON téléchargé', '⬇️');
-  });
-
-  const fileInput = document.getElementById('import-file-input');
-  document.getElementById('action-import').addEventListener('click', ()=>{
-    menu.classList.remove('open');
-    fileInput.click();
-  });
-  fileInput.addEventListener('change', (e)=>{
-    const file = e.target.files[0];
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = ()=>{
-      try{
-        const parsed = JSON.parse(reader.result);
-        if(!parsed || typeof parsed.slots !== 'object') throw new Error('Format invalide');
-        snapshotBeforeChange();
-        DATA = parsed;
-        saveData(false);
-        renderCurrentView();
-        showToast('Import réussi', '⬆️');
-      }catch(err){
-        showToast('Fichier JSON invalide', '⚠️');
-      }
-      fileInput.value = '';
-    };
-    reader.readAsText(file);
-  });
-
 }
 function openResetYearModal(year, isForecast){
   const label = isForecast ? `prévisionnel ${year}` : `année courante ${year}`;
@@ -1884,134 +2125,12 @@ function renderCurrentView(){
   renderRolloverBanner();
   const isForecastSubPage = (currentView === 'vets' && subNavState.vets === 'forecast') || (currentView === 'asv' && subNavState.asv === 'forecast');
   document.body.classList.toggle('forecast-theme', isForecastSubPage);
-  if(GATED_VIEWS.includes(currentView) && !isGateUnlocked()){
-    const group = GROUP_VIEWS[currentView];
-    if(group){
-      renderPasswordGate(activeSubContainer(currentView), ()=> renderGroupSubPage(currentView));
-    } else {
-      renderPasswordGate(`view-${currentView}`, renderCurrentView);
-    }
+  if(currentView === 'dashboard' && !canAccessDashboard()){
+    switchView('vets');
     return;
   }
   const renderer = VIEW_RENDERERS[currentView];
   if(renderer) renderer();
-}
-// Affiche un formulaire de mot de passe dans le conteneur ciblé. Le verrou est partagé
-// entre tous les onglets de GATED_VIEWS : une fois déverrouillé, il reste valable 30
-// minutes (ou jusqu'à la fermeture du navigateur, qui vide sessionStorage).
-function renderPasswordGate(containerId, onUnlock){
-  const container = document.getElementById(containerId);
-  if(!container) return;
-  container.innerHTML = `
-    <div class="gate-wrap">
-      <div class="gate-box card">
-        <h2 class="section-title">🔒 Accès protégé</h2>
-        <p class="section-desc">Cette section est réservée. Saisissez le mot de passe pour continuer.</p>
-        <input type="password" id="gate-password-input" placeholder="Mot de passe" autocomplete="current-password">
-        <p id="gate-error" class="gate-error hidden">Mot de passe incorrect.</p>
-        <button class="btn btn-primary" id="gate-submit" style="width:100%;justify-content:center;margin-top:14px;">Déverrouiller</button>
-        <button type="button" id="gate-forgot-link" class="link-button" style="margin-top:12px;">Mot de passe oublié ?</button>
-      </div>
-    </div>
-  `;
-  const input = container.querySelector('#gate-password-input');
-  const errorEl = container.querySelector('#gate-error');
-  const submitBtn = container.querySelector('#gate-submit');
-  const submit = async ()=>{
-    submitBtn.disabled = true;
-    try{
-      const ok = await verifyGatePassword(input.value);
-      if(ok){
-        unlockGate();
-        onUnlock();
-        return;
-      }
-      errorEl.textContent = 'Mot de passe incorrect.';
-      errorEl.classList.remove('hidden');
-      input.value = '';
-      input.focus();
-    }catch(e){
-      errorEl.textContent = 'Connexion impossible. Réessayez plus tard.';
-      errorEl.classList.remove('hidden');
-      console.warn(e);
-    }finally{
-      submitBtn.disabled = false;
-    }
-  };
-  submitBtn.onclick = submit;
-  input.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') submit(); });
-  input.focus();
-  container.querySelector('#gate-forgot-link').onclick = async ()=>{
-    const forgotBtn = container.querySelector('#gate-forgot-link');
-    forgotBtn.disabled = true;
-    try{
-      await requestPasswordReset();
-      container.querySelector('.gate-box').innerHTML = `
-        <h2 class="section-title">📧 Email envoyé</h2>
-        <p class="section-desc">Un lien de réinitialisation a été envoyé à l'adresse email configurée pour les notifications de la clinique. Cela peut prendre quelques minutes à arriver.</p>
-      `;
-    }catch(e){
-      errorEl.textContent = 'Impossible d\'envoyer la demande. Réessayez plus tard.';
-      errorEl.classList.remove('hidden');
-      forgotBtn.disabled = false;
-      console.warn(e);
-    }
-  };
-}
-
-// Page plein écran dédiée, affichée quand l'URL contient ?reset=<token> (lien reçu par
-// email). Remplace tout le contenu de la page tant que la réinitialisation n'est pas
-// terminée — volontairement séparée du reste de la navigation.
-function renderPasswordResetPage(token){
-  document.body.innerHTML = `
-    <div class="gate-wrap">
-      <div class="gate-box card" id="reset-box">
-        <h2 class="section-title">🔑 Réinitialiser le mot de passe</h2>
-        <p class="section-desc">Choisissez un nouveau mot de passe pour l'onglet Tableau de bord.</p>
-        <input type="password" id="reset-new-input" placeholder="Nouveau mot de passe" autocomplete="new-password">
-        <input type="password" id="reset-confirm-input" placeholder="Confirmer le mot de passe" autocomplete="new-password" style="margin-top:10px;">
-        <p id="reset-error" class="gate-error hidden"></p>
-        <button class="btn btn-primary" id="reset-submit" style="width:100%;justify-content:center;margin-top:14px;">Réinitialiser</button>
-      </div>
-    </div>
-  `;
-  const errorEl = document.getElementById('reset-error');
-  const submitBtn = document.getElementById('reset-submit');
-  submitBtn.onclick = async ()=>{
-    const next = document.getElementById('reset-new-input').value;
-    const confirmVal = document.getElementById('reset-confirm-input').value;
-    let reason = '';
-    if(!next) reason = 'Le nouveau mot de passe ne peut pas être vide.';
-    else if(next !== confirmVal) reason = 'Les deux mots de passe ne correspondent pas.';
-    if(reason){
-      errorEl.textContent = reason;
-      errorEl.classList.remove('hidden');
-      return;
-    }
-    submitBtn.disabled = true;
-    try{
-      const ok = await completePasswordReset(token, next);
-      if(ok){
-        document.getElementById('reset-box').innerHTML = `
-          <h2 class="section-title">✅ Mot de passe mis à jour</h2>
-          <p class="section-desc">Vous pouvez maintenant retourner sur le site et vous connecter avec ce nouveau mot de passe.</p>
-          <button class="btn btn-primary" id="reset-goto-app" style="width:100%;justify-content:center;">Retourner sur le site</button>
-        `;
-        document.getElementById('reset-goto-app').onclick = ()=>{
-          window.location.href = window.location.pathname;
-        };
-      } else {
-        errorEl.textContent = 'Ce lien est invalide ou a expiré. Demandez un nouveau lien depuis l\'écran de connexion.';
-        errorEl.classList.remove('hidden');
-        submitBtn.disabled = false;
-      }
-    }catch(e){
-      errorEl.textContent = 'Connexion impossible. Réessayez plus tard.';
-      errorEl.classList.remove('hidden');
-      submitBtn.disabled = false;
-      console.warn(e);
-    }
-  };
 }
 
 // Sous-pages "Calendrier mensuel" / "Vue annuelle" / "Prévisionnel" au sein d'un onglet
@@ -2068,12 +2187,6 @@ function initNav(){
     const btn = e.target.closest('.nav-tab');
     if(btn) switchView(btn.dataset.view);
   });
-  document.addEventListener('click', (e)=>{
-    if(e.target.closest('.lock-now-btn')){
-      lockGate();
-      renderCurrentView();
-    }
-  });
   document.querySelectorAll('.sub-nav').forEach(nav=>{
     const group = nav.id.replace('-sub-nav','');
     nav.addEventListener('click', (e)=>{
@@ -2089,10 +2202,6 @@ function initNav(){
 // Renvoie la clé CAL_VIEWS du calendrier mensuel actuellement affiché, ou null si la vue
 // courante n'est pas un calendrier (ex. tableau de bord, sous-page "Vue annuelle"...).
 function activeCalendarViewKey(){
-  // Si l'onglet courant est protégé et verrouillé, le calendrier n'est pas réellement
-  // affiché (un formulaire de mot de passe occupe le conteneur) : les raccourcis clavier
-  // ne doivent pas pouvoir naviguer ni rendre le calendrier dans son dos.
-  if(GATED_VIEWS.includes(currentView) && !isGateUnlocked()) return null;
   const g = GROUP_VIEWS[currentView];
   if(!g) return null;
   const sub = subNavState[currentView];
@@ -3026,18 +3135,20 @@ function initCalendarInteractions(){
   document.addEventListener('mousedown', (e)=>{
     const cell = e.target.closest('.cal-cell');
     if(!cell || cell.classList.contains('sunday-cell') || cell.dataset.slots || cell.dataset.action) return;
+    if(!canEditSlot(cell.dataset.person)) return;
     e.preventDefault();
     startDrag(cell);
   });
   document.addEventListener('mouseover', (e)=>{
     if(!dragCtx) return;
     const cell = e.target.closest('.cal-cell');
-    if(cell && !cell.classList.contains('sunday-cell') && !cell.dataset.slots && !cell.dataset.action) enterDragCell(cell);
+    if(cell && !cell.classList.contains('sunday-cell') && !cell.dataset.slots && !cell.dataset.action && canEditSlot(cell.dataset.person)) enterDragCell(cell);
   });
   document.addEventListener('mouseup', endDrag);
   document.addEventListener('touchstart', (e)=>{
     const cell = e.target.closest('.cal-cell');
     if(!cell || cell.classList.contains('sunday-cell') || cell.dataset.slots || cell.dataset.action) return;
+    if(!canEditSlot(cell.dataset.person)) return;
     startDrag(cell);
   }, { passive:true });
   document.addEventListener('touchmove', (e)=>{
@@ -3052,6 +3163,7 @@ function initCalendarInteractions(){
   document.addEventListener('contextmenu', (e)=>{
     const cell = e.target.closest('.cal-cell');
     if(!cell || cell.classList.contains('sunday-cell') || cell.dataset.action) return;
+    if(!canEditSlot(cell.dataset.person)) return;
     e.preventDefault();
     if(dragCtx){ clearTimeout(dragCtx.longPressTimer); dragCtx = null; }
     if(cell.dataset.slots){
@@ -3487,7 +3599,6 @@ function renderDashboard(){
         <button class="sub-tab ${dashSubState.tab==='requests'?'active':''}" data-sub="requests">📋 Demandes de congé${pendingCount>0?` <span class="nav-badge">${pendingCount}</span>`:''}</button>
         <button class="sub-tab ${dashSubState.tab==='signatures'?'active':''}" data-sub="signatures">✍️ Feuilles signées</button>
       </div>
-      <button class="btn-icon lock-now-btn" title="Verrouiller maintenant" aria-label="Verrouiller maintenant">🔒</button>
     </div>
     <div id="dash-sub-stats" class="sub-page ${dashSubState.tab!=='stats'?'hidden':''}"></div>
     <div id="dash-sub-requests" class="sub-page ${dashSubState.tab!=='requests'?'hidden':''}"></div>
@@ -3898,9 +4009,16 @@ function renderAnnualViewForGroup(group){
 /* ================================================================
    16. INITIALISATION GÉNÉRALE
    ================================================================ */
-function init(){
-  const resetToken = new URLSearchParams(window.location.search).get('reset');
-  if(resetToken){ renderPasswordResetPage(resetToken); return; }
+
+// Applique les classes CSS de rôle sur <body> et masque/affiche
+// le bouton Tableau de bord selon les droits de l'utilisateur.
+function applyRoleToDOM(){
+  document.body.classList.toggle('role-asv', effectiveRole() === 'asv');
+  document.body.classList.toggle('role-vet', effectiveRole() !== 'asv');
+}
+
+function initApp(){
+  applyRoleToDOM();
   loadASVRoster();
   loadPersonColors();
   loadData();
@@ -3910,17 +4028,136 @@ function init(){
   initCalendarInteractions();
   updateDashboardNavBadge();
   const restoredView = loadViewState();
-  // loadViewState() a déjà restauré subNavState/annualYearState dans les objets globaux,
-  // mais pas l'affichage (classes "hidden") des conteneurs de sous-page, qui par défaut
-  // dans le HTML statique montrent toujours "calendar". switchSubPage applique cette
-  // visibilité pour chaque groupe, indépendamment de l'onglet réellement affiché ensuite.
   switchSubPage('vets', subNavState.vets);
   switchSubPage('asv', subNavState.asv);
-  switchView(VIEW_RENDERERS[restoredView] ? restoredView : 'vets');
+  const startView = !canAccessDashboard() && restoredView === 'dashboard' ? 'vets' : restoredView;
+  switchView(VIEW_RENDERERS[startView] ? startView : 'vets');
   syncFromSupabase();
   loadSignatures();
+  document.getElementById('login-overlay').classList.add('hidden');
+}
+
+async function init(){
+  // Callback de réinitialisation de mot de passe : Supabase envoie le token dans le hash URL
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/,''));
+  const query = new URLSearchParams(window.location.search);
+  const type = hash.get('type') || query.get('type');
+  const accessToken = hash.get('access_token') || query.get('access_token');
+  if((type === 'recovery' || type === 'invite') && accessToken){
+    renderSetPasswordScreen(accessToken, type === 'invite');
+    return;
+  }
+
+  const session = getAuthSession();
+  if(!session){ renderLoginScreen(); return; }
+  const user = await loadCurrentUser();
+  if(!user){ clearAuthSession(); renderLoginScreen(); return; }
+  initApp();
 }
 document.addEventListener('DOMContentLoaded', init);
+
+/* ----------------------------------------------------------------
+   17. ÉCRANS D'AUTHENTIFICATION
+   ---------------------------------------------------------------- */
+function renderLoginContent(html){ document.getElementById('login-content').innerHTML = html; }
+
+function renderLoginScreen(errorMsg=''){
+  document.getElementById('login-overlay').classList.remove('hidden');
+  renderLoginContent(`
+    <form class="login-form" id="login-form" novalidate>
+      <input type="email" id="login-email" placeholder="Adresse email" required autocomplete="email">
+      <input type="password" id="login-password" placeholder="Mot de passe" required autocomplete="current-password">
+      ${errorMsg ? `<p class="login-error">${escapeHTML(errorMsg)}</p>` : ''}
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:2px;">Se connecter</button>
+    </form>
+    <div class="login-footer">
+      <button type="button" class="link-button" id="forgot-btn">Mot de passe oublié ?</button>
+    </div>
+  `);
+  document.getElementById('login-form').onsubmit = async (e)=>{
+    e.preventDefault();
+    const email = document.getElementById('login-email').value.trim();
+    const pwd = document.getElementById('login-password').value;
+    const btn = e.target.querySelector('button[type=submit]');
+    btn.disabled = true; btn.textContent = 'Connexion…';
+    try{
+      await authSignIn(email, pwd);
+      const user = await loadCurrentUser();
+      if(!user) throw new Error('Profil introuvable — contactez un administrateur.');
+      initApp();
+    }catch(err){ renderLoginScreen(err.message || 'Identifiants incorrects.'); }
+  };
+  document.getElementById('forgot-btn').onclick = renderForgotPasswordScreen;
+}
+
+function renderForgotPasswordScreen(){
+  renderLoginContent(`
+    <form class="login-form" id="forgot-form" novalidate>
+      <p style="font-size:13px;color:var(--color-text-muted);margin-bottom:14px;text-align:left;">
+        Saisissez votre adresse email pour recevoir un lien de réinitialisation.
+      </p>
+      <input type="email" id="forgot-email" placeholder="Adresse email" required autocomplete="email">
+      <p id="forgot-msg" style="font-size:12.5px;display:none;margin-bottom:8px;"></p>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">Envoyer le lien</button>
+    </form>
+    <div class="login-footer">
+      <button type="button" class="link-button" id="back-login">← Retour</button>
+    </div>
+  `);
+  document.getElementById('forgot-form').onsubmit = async (e)=>{
+    e.preventDefault();
+    const email = document.getElementById('forgot-email').value.trim();
+    const btn = e.target.querySelector('button[type=submit]');
+    const msg = document.getElementById('forgot-msg');
+    btn.disabled = true; btn.textContent = 'Envoi…';
+    try{
+      await authSendPasswordReset(email);
+      msg.textContent = 'Email envoyé ! Vérifiez votre boîte de réception.';
+      msg.style.color = 'var(--color-primary)'; msg.style.display = 'block';
+    }catch(err){
+      msg.textContent = err.message; msg.style.color = '#B91C1C'; msg.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Envoyer le lien';
+    }
+  };
+  document.getElementById('back-login').onclick = renderLoginScreen;
+}
+
+function renderSetPasswordScreen(accessToken, isFirstLogin=false){
+  document.getElementById('login-overlay').classList.remove('hidden');
+  renderLoginContent(`
+    <p style="font-size:13px;color:var(--color-text-muted);margin-bottom:14px;text-align:left;">
+      ${isFirstLogin ? 'Bienvenue ! Choisissez votre mot de passe pour activer votre compte.' : 'Choisissez votre nouveau mot de passe.'}
+    </p>
+    <form class="login-form" id="set-pwd-form" novalidate>
+      <input type="password" id="set-pwd-new" placeholder="Nouveau mot de passe (8 car. min.)" autocomplete="new-password">
+      <input type="password" id="set-pwd-confirm" placeholder="Confirmer le mot de passe" autocomplete="new-password">
+      <p id="set-pwd-error" class="login-error" style="display:none;"></p>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">Définir le mot de passe</button>
+    </form>
+  `);
+  document.getElementById('set-pwd-form').onsubmit = async (e)=>{
+    e.preventDefault();
+    const next = document.getElementById('set-pwd-new').value;
+    const conf = document.getElementById('set-pwd-confirm').value;
+    const errEl = document.getElementById('set-pwd-error');
+    const btn = e.target.querySelector('button[type=submit]');
+    if(next.length < 8){ errEl.textContent='Au moins 8 caractères.'; errEl.style.display='block'; return; }
+    if(next !== conf){ errEl.textContent='Les mots de passe ne correspondent pas.'; errEl.style.display='block'; return; }
+    btn.disabled = true; btn.textContent = 'Enregistrement…';
+    try{
+      await authUpdatePassword(accessToken, next);
+      // Nettoyer le hash de l'URL pour éviter de ré-entrer dans ce flux
+      history.replaceState(null,'', window.location.pathname);
+      // La session est maintenant valide, charger l'utilisateur
+      const user = await loadCurrentUser();
+      if(user){ initApp(); }
+      else { renderLoginScreen('Mot de passe défini. Connectez-vous.'); }
+    }catch(err){
+      errEl.textContent = err.message; errEl.style.display='block';
+      btn.disabled=false; btn.textContent='Définir le mot de passe';
+    }
+  };
+}
 </script>
 </body>
 </html>
