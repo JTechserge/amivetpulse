@@ -547,6 +547,40 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
    ============================================================ */
 @page{margin:14mm 16mm;}
 /* ============================================================
+   Vue semaine ASV (saisie horaire personnelle)
+   ============================================================ */
+.week-view-wrap{overflow-x:auto;}
+.week-nav{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+.week-nav-label{font-size:15px;font-weight:700;min-width:220px;text-align:center;}
+.week-asv-pick{padding:7px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;cursor:pointer;}
+.week-table{width:100%;border-collapse:collapse;min-width:560px;font-size:12px;}
+.week-table th,.week-table td{border:1px solid var(--color-border);vertical-align:top;}
+.week-th{background:var(--color-secondary);font-size:11.5px;font-weight:700;text-align:center;padding:8px 4px;min-width:80px;}
+.week-th.is-today{background:var(--color-primary);color:#fff;}
+.week-th.is-holiday{background:#FEF3C7;color:#92400E;}
+.week-th.is-sunday{background:#F1F5F9;color:var(--color-text-muted);}
+.week-time-label{width:52px;font-size:10px;color:var(--color-text-muted);text-align:right;padding:4px 5px 0 0;background:var(--color-secondary);font-weight:600;white-space:nowrap;}
+.week-vis-cell{
+  position:relative;cursor:pointer;
+  background:#fff;padding:0;overflow:hidden;
+}
+.week-vis-cell:hover{background:#f8fafc;}
+.week-vis-cell.no-edit{cursor:default;}
+.week-vis-cell .week-worked{
+  position:absolute;left:2px;right:2px;
+  border-radius:3px;opacity:0.7;pointer-events:none;
+}
+.week-vis-cell.is-sunday,.week-vis-cell.is-holiday{background:#f8fafc;cursor:default;}
+.week-break-label{background:#F0FDF9;font-size:10px;color:var(--color-text-muted);text-align:center;padding:4px 2px;font-style:italic;}
+.week-break-cell{background:#F0FDF9;font-size:10px;color:var(--color-text-muted);text-align:center;padding:4px;}
+.week-footer-label{background:var(--color-secondary);font-size:11px;font-weight:700;color:var(--color-text-muted);text-align:right;padding:5px 5px 5px 0;white-space:nowrap;}
+.week-footer-cell{padding:4px;text-align:center;font-size:12px;background:#fff;}
+.week-total-h{font-weight:700;color:var(--color-primary);}
+.week-ot-badge{font-size:10.5px;font-weight:700;}
+.week-ot-input{width:54px;padding:3px 5px;border:1px solid var(--color-border);border-radius:5px;font-size:12px;font-family:inherit;text-align:center;}
+.week-abs-chk{width:16px;height:16px;cursor:pointer;}
+.week-summary-pill{display:inline-flex;align-items:center;gap:4px;background:var(--color-secondary);color:var(--color-primary);padding:2px 8px 2px 6px;border-radius:999px;font-size:11px;font-weight:700;margin:1px;}
+/* ============================================================
    Écran de connexion
    ============================================================ */
 #login-overlay{
@@ -662,10 +696,12 @@ body.role-asv [data-view="dashboard"]{display:none;}
         <button class="sub-tab active" data-sub="calendar">📅 Calendrier mensuel</button>
         <button class="sub-tab" data-sub="annual">🗓️ Vue Annuelle</button>
         <button class="sub-tab" data-sub="forecast">🔮 Prévisionnel</button>
+        <button class="sub-tab" data-sub="week">⏱️ Semaine</button>
       </div>
       <div id="asv-sub-calendar" class="sub-page" data-cal-view="asv-current"></div>
       <div id="asv-sub-annual" class="sub-page hidden"></div>
       <div id="asv-sub-forecast" class="sub-page hidden" data-cal-view="asv-forecast"></div>
+      <div id="asv-sub-week" class="sub-page hidden"></div>
     </section>
 
     <!-- Vue Tableau de bord -->
@@ -1007,13 +1043,20 @@ function openManageUsersModal(){
         </table>
         <div style="border-top:1px solid var(--color-border);padding-top:14px;">
           <h4 style="font-size:14px;margin-bottom:10px;">Inviter un collaborateur</h4>
-          <div style="display:grid;grid-template-columns:1fr 1fr 110px;gap:8px;align-items:end;">
-            <input type="text" id="invite-name" placeholder="Nom affiché" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
-            <input type="email" id="invite-email" placeholder="Adresse email" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end;margin-bottom:8px;">
+            <input type="text" id="invite-name" placeholder="Nom affiché (ex. Stéphane)" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
+            <input type="email" id="invite-email" placeholder="Email (ex. stephmaq@hotmail.fr)" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end;">
             <select id="invite-role" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
               <option value="vet">Vétérinaire</option>
               <option value="asv">ASV</option>
               <option value="admin">Admin</option>
+            </select>
+            <select id="invite-person-id" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
+              <option value="">— Aucun profil lié —</option>
+              ${PEOPLE.map(p=>`<option value="${p.id}">${escapeHTML(p.short)} (Vétérinaire)</option>`).join('')}
+              ${ASV_PEOPLE.map(p=>`<option value="${p.id}">${escapeHTML(p.short)} (ASV)</option>`).join('')}
             </select>
           </div>
           <p id="invite-error" style="color:#B91C1C;font-size:12px;display:none;margin:8px 0 0;"></p>
@@ -1032,13 +1075,14 @@ function openManageUsersModal(){
         const name = box.querySelector('#invite-name').value.trim();
         const email = box.querySelector('#invite-email').value.trim();
         const role = box.querySelector('#invite-role').value;
+        const personId = box.querySelector('#invite-person-id').value || null;
         const errEl = box.querySelector('#invite-error');
         if(!name || !email){ errEl.textContent='Nom et email requis.'; errEl.style.display='block'; return; }
         box.querySelector('#invite-btn').disabled = true;
         try{
           const res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
             method:'POST', headers:supabaseHeaders({'Content-Type':'application/json'}),
-            body:JSON.stringify({ action:'invite', email, display_name:name, role }),
+            body:JSON.stringify({ action:'invite', email, display_name:name, role, person_id:personId }),
           });
           if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
           close(); showToast(`Invitation envoyée à ${email}`, '📧');
@@ -2164,6 +2208,7 @@ function renderGroupSubPage(group){
   const sub = subNavState[group];
   if(sub === 'calendar') renderCalendarView(g.calendarViewKey);
   else if(sub === 'forecast') renderCalendarView(g.forecastViewKey);
+  else if(sub === 'week' && group === 'asv') renderWeekViewASV();
   else renderAnnualViewForGroup(group);
 }
 function switchSubPage(group, subKey){
@@ -2175,8 +2220,260 @@ function switchSubPage(group, subKey){
   document.getElementById(g.calendarContainer).classList.toggle('hidden', subKey !== 'calendar');
   document.getElementById(g.annualContainer).classList.toggle('hidden', subKey !== 'annual');
   document.getElementById(g.forecastContainer).classList.toggle('hidden', subKey !== 'forecast');
+  const weekEl = document.getElementById('asv-sub-week');
+  if(weekEl) weekEl.classList.toggle('hidden', !(group === 'asv' && subKey === 'week'));
   renderCurrentView();
   saveViewState();
+}
+
+/* ================================================================
+   VUE SEMAINE ASV — saisie horaire personnelle
+   ================================================================ */
+function getWeekMondayDate(date){
+  const d = new Date(date);
+  const day = d.getDay();
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+function weekPersonId(){
+  // Admin/vét : l'ASV sélectionnée (ou la première par défaut)
+  // ASV : toujours soi-même
+  if(effectiveRole() === 'asv') return currentUser?.person_id || (ASV_PEOPLE[0]?.id);
+  return weekNavState.personId || (ASV_PEOPLE[0]?.id);
+}
+function buildWeekDayVisual(iso, personId, isEditable){
+  const p = personOf(personId);
+  const color = p?.color || '#0F766E';
+  const isSun = isSunday(new Date(iso+'T00:00:00'));
+  const hName = holidayName(iso);
+  if(isSun || hName) return { morning:'', afternoon:'' };
+
+  const mStart = getTE(iso,personId,'ms'), mEnd = getTE(iso,personId,'me');
+  const aStart = getTE(iso,personId,'as'), aEnd = getTE(iso,personId,'ae');
+
+  function block(wStart, wEnd, pStart, pDuration, cellH){
+    if(!wStart && !wEnd) return '';
+    const s = wStart || pStart, e = wEnd || pStart;
+    const top = Math.max(0,(timeToMins(s)-timeToMins(pStart))/pDuration*cellH);
+    const h   = Math.max(2,(timeToMins(e)-timeToMins(s))/pDuration*cellH);
+    return `<div class="week-worked" style="top:${top.toFixed(0)}px;height:${h.toFixed(0)}px;background:${color};"></div>`;
+  }
+  const MH = 180, AMH = 170;
+  return {
+    morning:  block(mStart, mEnd,  CLINIC_HOURS.mStart,  270, MH),
+    afternoon:block(aStart, aEnd,  CLINIC_HOURS.amStart, 255, AMH),
+  };
+}
+function renderWeekViewASV(){
+  const container = document.getElementById('asv-sub-week');
+  if(!container) return;
+  if(!weekNavState.mondayISO) weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
+  const monday = new Date(weekNavState.mondayISO+'T00:00:00');
+  const days = Array.from({length:6}, (_,i)=>{
+    const d = new Date(monday); d.setDate(d.getDate()+i); return d;
+  });
+  const pid = weekPersonId();
+  const p = personOf(pid);
+  const isVetUser = effectiveRole() !== 'asv';
+  const DAY_SHORT = ['Lu','Ma','Me','Je','Ve','Sa'];
+  // Header cells
+  const headerCells = days.map((d,i)=>{
+    const iso = fmtISO(d);
+    const isToday = iso === fmtISO(today);
+    const hName = holidayName(iso);
+    const cls = `week-th${isToday?' is-today':hName?' is-holiday':''}`;
+    return `<th class="${cls}">${DAY_SHORT[i]}<br><strong>${d.getDate()}</strong>${hName?`<br><span style="font-size:9px;">${escapeHTML(hName)}</span>`:''}`;
+  }).join('</th><th ');
+  // Morning visual rows
+  const morningCells = days.map(d=>{
+    const iso = fmtISO(d);
+    const isSun = isSunday(d), hName = holidayName(iso);
+    const canEdit = isVetUser || canEditSlot(pid);
+    if(isSun||hName) return `<td class="week-vis-cell is-${isSun?'sunday':'holiday'}" style="height:180px;"></td>`;
+    const vis = buildWeekDayVisual(iso, pid, canEdit);
+    return `<td class="week-vis-cell${canEdit?'':' no-edit'}" style="height:180px;" ${canEdit?`data-week-day="${iso}" data-week-pid="${pid}" data-week-session="morning"`:''} title="${canEdit?'Cliquer pour saisir les horaires':''}">${vis.morning}</td>`;
+  }).join('');
+  // Afternoon visual rows
+  const afternoonCells = days.map(d=>{
+    const iso = fmtISO(d);
+    const isSun = isSunday(d), hName = holidayName(iso);
+    const canEdit = isVetUser || canEditSlot(pid);
+    if(isSun||hName) return `<td class="week-vis-cell is-${isSun?'sunday':'holiday'}" style="height:170px;"></td>`;
+    const vis = buildWeekDayVisual(iso, pid, canEdit);
+    return `<td class="week-vis-cell${canEdit?'':' no-edit'}" style="height:170px;" ${canEdit?`data-week-day="${iso}" data-week-pid="${pid}" data-week-session="afternoon"`:''} title="${canEdit?'Cliquer pour saisir les horaires':''}">${vis.afternoon}</td>`;
+  }).join('');
+  // Footer rows: total, absence, heures sup
+  const totalCells = days.map(d=>{
+    const iso = fmtISO(d);
+    if(isSunday(d)||holidayName(iso)) return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;
+    const h = calcDayTE(iso, pid);
+    const ot = getOvertimeHours(iso, pid);
+    return `<td class="week-footer-cell">${h>0?`<span class="week-total-h">${formatNum(h)}h</span>`:'-'}${ot!==0?` <span class="week-ot-badge" style="color:${ot>0?'#16a34a':'#ea580c'}">${ot>0?'+':''}${formatNum(ot)}h</span>`:''}</td>`;
+  }).join('');
+  const absCells = days.map(d=>{
+    const iso = fmtISO(d);
+    if(isSunday(d)||holidayName(iso)) return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;
+    const canEdit = isVetUser || canEditSlot(pid);
+    const isAbsent = getSlotState(iso,pid,'M')==='absent' && getSlotState(iso,pid,'AM')==='absent';
+    return `<td class="week-footer-cell"><input type="checkbox" class="week-abs-chk" data-week-abs="${iso}" data-week-pid="${pid}" ${isAbsent?'checked':''} ${canEdit?'':'disabled'} title="${isAbsent?'Journée absente':'Marquer absent'}"></td>`;
+  }).join('');
+  const otCells = days.map(d=>{
+    const iso = fmtISO(d);
+    if(isSunday(d)||holidayName(iso)) return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;
+    const canEdit = isVetUser || canEditSlot(pid);
+    const ot = getOvertimeHours(iso, pid);
+    return `<td class="week-footer-cell"><input type="number" step="0.5" class="week-ot-input" data-week-ot="${iso}" data-week-pid="${pid}" value="${ot||''}" placeholder="0" ${canEdit?'':'disabled'} title="+ heures sup / − départ anticipé"></td>`;
+  }).join('');
+  // ASV picker for vets/admin
+  const asvPicker = isVetUser ? `
+    <select class="week-asv-pick" id="week-asv-pick" title="Choisir l'ASV">
+      ${ASV_PEOPLE.map(a=>`<option value="${a.id}" ${a.id===pid?'selected':''}>${escapeHTML(a.short)}</option>`).join('')}
+    </select>` : `<span style="font-weight:700;color:${p?.color||'inherit'}">${escapeHTML(p?.short||'')}</span>`;
+  // Week label
+  const endDay = days[5];
+  const weekLabel = `${monday.getDate()} ${MONTH_NAMES[monday.getMonth()].toLowerCase()} – ${endDay.getDate()} ${MONTH_NAMES[endDay.getMonth()].toLowerCase()} ${endDay.getFullYear()}`;
+
+  container.innerHTML = `
+    <h2 class="section-title">⏱️ Semaine — ${escapeHTML(p?.short||'')}</h2>
+    <p class="section-desc">Saisissez vos heures de présence par journée. Horaires d'ouverture : 8h30–13h00 et 15h00–19h15.</p>
+    <div class="week-nav">
+      <button class="btn-icon" id="week-prev" aria-label="Semaine précédente">←</button>
+      <span class="week-nav-label">${weekLabel}</span>
+      <button class="btn-icon" id="week-next" aria-label="Semaine suivante">→</button>
+      <button class="btn btn-sm" id="week-today-btn">Aujourd'hui</button>
+      ${asvPicker}
+    </div>
+    <div class="week-view-wrap card" style="padding:0;">
+      <table class="week-table">
+        <thead>
+          <tr>
+            <th class="week-time-label" style="font-size:9px;text-align:center;">Horaires</th>
+            <th ${headerCells}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="week-time-label">8h30<br><span style="color:var(--color-border);">|</span><br>13h00</td>
+            ${morningCells}
+          </tr>
+          <tr>
+            <td class="week-break-label">☕ Pause<br>13h–15h</td>
+            <td colspan="6" class="week-break-cell">Pause déjeuner 13h00 – 15h00</td>
+          </tr>
+          <tr>
+            <td class="week-time-label">15h00<br><span style="color:var(--color-border);">|</span><br>19h15</td>
+            ${afternoonCells}
+          </tr>
+          <tr>
+            <td class="week-footer-label">Heures</td>
+            ${totalCells}
+          </tr>
+          <tr>
+            <td class="week-footer-label">Absent</td>
+            ${absCells}
+          </tr>
+          <tr>
+            <td class="week-footer-label">H. +/−</td>
+            ${otCells}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  // Nav listeners
+  container.querySelector('#week-prev').onclick = ()=>{
+    const d = new Date(weekNavState.mondayISO+'T00:00:00'); d.setDate(d.getDate()-7);
+    weekNavState.mondayISO = fmtISO(d); renderWeekViewASV();
+  };
+  container.querySelector('#week-next').onclick = ()=>{
+    const d = new Date(weekNavState.mondayISO+'T00:00:00'); d.setDate(d.getDate()+7);
+    weekNavState.mondayISO = fmtISO(d); renderWeekViewASV();
+  };
+  container.querySelector('#week-today-btn').onclick = ()=>{
+    weekNavState.mondayISO = fmtISO(getWeekMondayDate(today)); renderWeekViewASV();
+  };
+  if(isVetUser) container.querySelector('#week-asv-pick').onchange = (e)=>{
+    weekNavState.personId = e.target.value; renderWeekViewASV();
+  };
+  // Click on visual cells → time entry popover
+  container.querySelectorAll('.week-vis-cell[data-week-day]').forEach(cell=>{
+    cell.addEventListener('click', ()=>{
+      openWeekTimePopover(cell.dataset.weekDay, cell.dataset.weekPid);
+    });
+  });
+  // Absence checkboxes
+  container.querySelectorAll('.week-abs-chk').forEach(chk=>{
+    chk.addEventListener('change', ()=>{
+      snapshotBeforeChange();
+      const iso = chk.dataset.weekAbs, pid2 = chk.dataset.weekPid;
+      SLOTS.forEach(slot=> setSlotState(iso, pid2, slot, chk.checked ? 'absent' : 'empty'));
+      saveData(); renderWeekViewASV();
+    });
+  });
+  // Overtime inputs
+  container.querySelectorAll('.week-ot-input').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      snapshotBeforeChange();
+      setOvertimeHours(inp.dataset.weekOt, inp.dataset.weekPid, inp.value);
+      saveData(); renderWeekViewASV();
+    });
+  });
+}
+
+function openWeekTimePopover(iso, pid){
+  const backdrop = document.getElementById('popover-backdrop');
+  const box = document.getElementById('popover-box');
+  const p = personOf(pid);
+  const ms = getTE(iso,pid,'ms')||CLINIC_HOURS.mStart;
+  const me = getTE(iso,pid,'me')||CLINIC_HOURS.mEnd;
+  const as = getTE(iso,pid,'as')||CLINIC_HOURS.amStart;
+  const ae = getTE(iso,pid,'ae')||CLINIC_HOURS.amEnd;
+  const hasEntries = hasTE(iso,pid);
+  box.innerHTML = `
+    <h4 style="margin-bottom:10px;">⏱️ ${escapeHTML(p?.short||pid)} — ${formatFR(iso)}</h4>
+    <div style="display:grid;grid-template-columns:auto 1fr auto 1fr;gap:6px 8px;align-items:center;margin-bottom:12px;font-size:13px;">
+      <label style="font-weight:600;color:var(--color-text-muted);">Matin :</label>
+      <input type="time" id="te-ms" value="${ms}" style="padding:5px 7px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:13px;">
+      <span style="text-align:center;">→</span>
+      <input type="time" id="te-me" value="${me}" style="padding:5px 7px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:13px;">
+      <label style="font-weight:600;color:var(--color-text-muted);">A-midi :</label>
+      <input type="time" id="te-as" value="${as}" style="padding:5px 7px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:13px;">
+      <span style="text-align:center;">→</span>
+      <input type="time" id="te-ae" value="${ae}" style="padding:5px 7px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:13px;">
+    </div>
+    <div id="te-preview" class="text-muted" style="font-size:12px;margin-bottom:12px;"></div>
+    <div class="popover-actions">
+      ${hasEntries?`<button class="btn btn-sm" id="te-clear" style="color:#B91C1C;border-color:#FCA5A5;">Effacer</button>`:'<div></div>'}
+      <button class="btn" id="popover-cancel">Annuler</button>
+      <button class="btn btn-primary" id="te-save">Enregistrer</button>
+    </div>
+  `;
+  backdrop.classList.add('open');
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#popover-cancel').onclick = close;
+  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+  if(hasEntries) box.querySelector('#te-clear').onclick = ()=>{
+    snapshotBeforeChange();
+    ['ms','me','as','ae'].forEach(f=>setTE(iso,pid,f,''));
+    saveData(); close(); renderWeekViewASV();
+  };
+  const updatePreview = ()=>{
+    const h = calcSessionH(box.querySelector('#te-ms').value, box.querySelector('#te-me').value)
+            + calcSessionH(box.querySelector('#te-as').value, box.querySelector('#te-ae').value);
+    box.querySelector('#te-preview').textContent = h > 0 ? `Total : ${formatNum(h)}h travaillées` : '';
+  };
+  box.querySelectorAll('input[type=time]').forEach(i=>i.addEventListener('input', updatePreview));
+  updatePreview();
+  box.querySelector('#te-save').onclick = ()=>{
+    snapshotBeforeChange();
+    setTE(iso,pid,'ms',box.querySelector('#te-ms').value);
+    setTE(iso,pid,'me',box.querySelector('#te-me').value);
+    setTE(iso,pid,'as',box.querySelector('#te-as').value);
+    setTE(iso,pid,'ae',box.querySelector('#te-ae').value);
+    saveData(); close(); renderWeekViewASV();
+  };
 }
 
 // Mémorise l'onglet et la sous-page affichés pour qu'un rechargement de page (F5) rouvre
@@ -3495,6 +3792,22 @@ function computeOvertimeStats(year){
 // ----------------------------------------------------------------
 const ANNUAL_FULLTIME_HOURS = 1607; // référence légale France (loi Aubry 2000)
 const HALFDAY_HOURS = 3.5;          // 35h / 5j / 2 demi-journées
+const CLINIC_HOURS = { mStart:'08:30', mEnd:'13:00', amStart:'15:00', amEnd:'19:15' };
+const CLINIC_M_H  = 4.5;   // 8h30→13h00
+const CLINIC_AM_H = 4.25;  // 15h00→19h15
+
+// Saisie horaire par jour/personne (vue semaine ASV)
+function teKey(iso,pid,f){ return `${iso}_${pid}_te_${f}`; }
+function getTE(iso,pid,f){ return DATA.slots[teKey(iso,pid,f)]||''; }
+function setTE(iso,pid,f,v){ if(v) DATA.slots[teKey(iso,pid,f)]=v; else delete DATA.slots[teKey(iso,pid,f)]; }
+function timeToMins(t){ if(!t)return 0; const[h,m]=t.split(':').map(Number); return h*60+(m||0); }
+function minsToH(m){ return Math.round(m/6)/10; } // round to .1h
+function calcSessionH(s,e){ if(!s||!e)return 0; const d=timeToMins(e)-timeToMins(s); return d>0?minsToH(d):0; }
+function calcDayTE(iso,pid){ return calcSessionH(getTE(iso,pid,'ms'),getTE(iso,pid,'me'))+calcSessionH(getTE(iso,pid,'as'),getTE(iso,pid,'ae')); }
+function hasTE(iso,pid){ return !!(getTE(iso,pid,'ms')||getTE(iso,pid,'me')||getTE(iso,pid,'as')||getTE(iso,pid,'ae')); }
+
+// État de navigation de la vue semaine
+const weekNavState = { mondayISO: null, personId: null };
 
 function getASVTimeFraction(personId){ return personOf(personId)?.timeFraction ?? 1.0; }
 function getASVQuota(personId){
@@ -3512,8 +3825,14 @@ function computeASVWorkedHours(personId, year, month = null){
     const nb = daysInMonth(year, m);
     for(let day = 1; day <= nb; day++){
       const iso = fmtISO(new Date(year, m, day));
-      if(getSlotState(iso, personId, 'M')  === 'present') total += HALFDAY_HOURS;
-      if(getSlotState(iso, personId, 'AM') === 'present') total += HALFDAY_HOURS;
+      if(hasTE(iso, personId)){
+        // Utiliser la saisie horaire précise (vue semaine)
+        total += calcDayTE(iso, personId);
+      } else {
+        // Fallback : demi-journées du calendrier mensuel
+        if(getSlotState(iso, personId, 'M')  === 'present') total += HALFDAY_HOURS;
+        if(getSlotState(iso, personId, 'AM') === 'present') total += HALFDAY_HOURS;
+      }
       total += getOvertimeHours(iso, personId);
     }
   }
@@ -3641,11 +3960,13 @@ function renderDashboard(){
       <div class="sub-nav" id="dash-sub-nav">
         <button class="sub-tab ${dashSubState.tab==='stats'?'active':''}" data-sub="stats">📊 Statistiques</button>
         <button class="sub-tab ${dashSubState.tab==='requests'?'active':''}" data-sub="requests">📋 Demandes de congé${pendingCount>0?` <span class="nav-badge">${pendingCount}</span>`:''}</button>
+        <button class="sub-tab ${dashSubState.tab==='hours'?'active':''}" data-sub="hours">⏱️ Heures ASV</button>
         <button class="sub-tab ${dashSubState.tab==='signatures'?'active':''}" data-sub="signatures">✍️ Feuilles signées</button>
       </div>
     </div>
     <div id="dash-sub-stats" class="sub-page ${dashSubState.tab!=='stats'?'hidden':''}"></div>
     <div id="dash-sub-requests" class="sub-page ${dashSubState.tab!=='requests'?'hidden':''}"></div>
+    <div id="dash-sub-hours" class="sub-page ${dashSubState.tab!=='hours'?'hidden':''}"></div>
     <div id="dash-sub-signatures" class="sub-page ${dashSubState.tab!=='signatures'?'hidden':''}"></div>
   `;
   container.querySelector('#dash-sub-nav').addEventListener('click', (e)=>{
@@ -3656,6 +3977,7 @@ function renderDashboard(){
     saveViewState();
   });
   if(dashSubState.tab === 'stats') renderDashboardStats();
+  else if(dashSubState.tab === 'hours') renderDashboardHours();
   else if(dashSubState.tab === 'signatures') renderDashboardSignatures();
   else renderLeaveRequestsPage();
 }
@@ -3732,7 +4054,6 @@ function renderDashboardStats(){
       <h3 style="font-size:16px;margin-bottom:10px;">Récapitulatif mensuel ASV ${year}</h3>
       ${buildRecapTableASV(year)}
     </div>
-    ${buildHoursControlCard(year)}
     <div class="card" style="margin-bottom:24px;">
       <h3 style="font-size:16px;margin-bottom:10px;">Ajustements d'heures ASV ${year}</h3>
       ${buildOvertimeTableASV(year)}
@@ -3817,6 +4138,82 @@ function renderDashboardSignatures(){
     if(!btn) return;
     dashState.year = parseInt(btn.dataset.year, 10);
     renderDashboardSignatures();
+  });
+}
+
+// --- Sous-page "Heures ASV" : suivi mensuel/annuel du temps de travail vs quota 1607h ---
+function renderDashboardHours(){
+  const container = document.getElementById('dash-sub-hours');
+  const year = dashState.year;
+  const cy = getCurrentYear();
+  const cm = today.getMonth();
+  if(!ASV_PEOPLE.length){
+    container.innerHTML = `<p class="text-muted" style="padding:20px;">Aucune ASV dans l'effectif.</p>`;
+    return;
+  }
+  function alertBadge(worked, quota){
+    const r = quota > 0 ? worked / quota : 0;
+    if(r > 1) return '<span style="color:#DC2626;font-weight:700;">🔴</span>';
+    if(r >= 0.9) return '<span style="color:#F59E0B;font-weight:700;">🟡</span>';
+    return '<span style="color:#16A34A;">🟢</span>';
+  }
+  function bar(worked, quota){
+    const pct = quota > 0 ? Math.min(100, Math.round(worked/quota*100)) : 0;
+    const color = pct > 100 ? '#DC2626' : pct >= 90 ? '#F59E0B' : 'var(--color-primary)';
+    return `<div style="width:100%;background:var(--color-border);border-radius:99px;height:5px;overflow:hidden;margin-top:3px;"><div style="width:${pct}%;background:${color};height:100%;border-radius:99px;"></div></div>`;
+  }
+  // Monthly rows
+  let monthlyRows = '';
+  for(let m = 0; m <= (year === cy ? cm : 11); m++){
+    const cols = ASV_PEOPLE.map(p=>{
+      const q = getASVQuota(p.id);
+      const worked = computeASVWorkedHours(p.id, year, m);
+      const qm = q.monthly;
+      return `<td style="padding:6px 10px;text-align:right;">${alertBadge(worked,qm)} ${formatNum(worked)}h<span class="text-muted" style="font-size:11px;"> / ${formatNum(qm)}h</span>${bar(worked,qm)}</td>`;
+    }).join('');
+    monthlyRows += `<tr><td style="padding:6px 10px;font-size:13px;">${MONTH_NAMES[m]}</td>${cols}</tr>`;
+  }
+  // Annual totals
+  const annualCols = ASV_PEOPLE.map(p=>{
+    const q = getASVQuota(p.id);
+    const worked = computeASVWorkedHours(p.id, year, null);
+    return `<td style="padding:8px 10px;text-align:right;font-weight:700;">${alertBadge(worked,q.annual)} ${formatNum(worked)}h<span class="text-muted" style="font-size:11px;"> / ${formatNum(q.annual)}h</span>${bar(worked,q.annual)}</td>`;
+  }).join('');
+  // Overtime summary
+  const otStats = computeOvertimeStats(year);
+  const otCols = ASV_PEOPLE.map(p=>{
+    const total = otStats[p.id].reduce((a,b)=>a+b,0);
+    const color = total > 0 ? '#16a34a' : total < 0 ? '#ea580c' : 'var(--color-text-muted)';
+    return `<td style="padding:8px 10px;text-align:right;font-weight:700;color:${color};">${total > 0 ? '+' : ''}${formatNum(total)}h</td>`;
+  }).join('');
+  container.innerHTML = `
+    <div class="year-toggle" id="dash-hours-year-toggle" style="margin-bottom:16px;">
+      <button data-year="${cy}" class="${year===cy?'active':''}">${cy}</button>
+      <button data-year="${cy+1}" class="${year===cy+1?'active':''}">${cy+1}</button>
+    </div>
+    <div class="card" style="margin-bottom:20px;overflow-x:auto;">
+      <h3 style="font-size:16px;margin-bottom:2px;">Temps de travail mensuel ${year}</h3>
+      <p class="text-muted" style="font-size:12px;margin-bottom:12px;">Heures travaillées vs quota mensuel moyen. 🟢 OK &nbsp;🟡 ≥ 90% &nbsp;🔴 dépassé</p>
+      <table class="recap-table" style="min-width:400px;">
+        <thead><tr><th style="text-align:left;">Mois</th>${ASV_PEOPLE.map(p=>`<th style="text-align:right;">${escapeHTML(p.short)} (${Math.round(getASVTimeFraction(p.id)*100)}%)</th>`).join('')}</tr></thead>
+        <tbody>${monthlyRows}</tbody>
+        <tfoot><tr><td style="font-weight:800;padding:8px 10px;">Total annuel</td>${annualCols}</tr></tfoot>
+      </table>
+    </div>
+    <div class="card" style="overflow-x:auto;">
+      <h3 style="font-size:16px;margin-bottom:2px;">Ajustements d'heures ${year}</h3>
+      <p class="text-muted" style="font-size:12px;margin-bottom:12px;">Cumul des heures supplémentaires et départs anticipés saisis dans le calendrier.</p>
+      <table class="recap-table" style="min-width:400px;">
+        <thead><tr><th style="text-align:left;">Total</th>${ASV_PEOPLE.map(p=>`<th style="text-align:right;">${escapeHTML(p.short)}</th>`).join('')}</tr></thead>
+        <tbody><tr><td style="padding:8px 10px;">Ajustement annuel</td>${otCols}</tr></tbody>
+      </table>
+    </div>
+  `;
+  container.querySelector('#dash-hours-year-toggle').addEventListener('click', (e)=>{
+    const btn = e.target.closest('button');
+    if(!btn) return;
+    dashState.year = parseInt(btn.dataset.year, 10);
+    renderDashboardHours();
   });
 }
 
@@ -4126,6 +4523,7 @@ function openASVImpersonationPicker(){
 }
 
 function initApp(){
+  weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
   applyRoleToDOM();
   loadASVRoster();
   loadPersonColors();
