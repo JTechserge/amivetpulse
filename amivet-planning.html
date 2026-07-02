@@ -1800,11 +1800,15 @@ function canEditSlot(personId){
   const role = effectiveRole();
   if(role === 'vet') return true;
   if(role === 'asv'){
-    // En mode impersonation admin, on prend l'identité de l'ASV choisie
-    const myId = currentUser.role === 'admin' ? adminImpersonatedPersonId : currentUser.person_id;
+    const isImpersonating = currentUser.role === 'admin' && adminViewMode === 'asv';
+    const myId = isImpersonating ? adminImpersonatedPersonId : currentUser.person_id;
     if(isASVPerson(personId)){
+      // En impersonation : strictement la ligne de la personne choisie, comme un vrai ASV
+      if(isImpersonating) return personId === myId;
       return personId === myId || currentUser.can_edit_all_asv === true;
     }
+    // Calendrier vétérinaires : jamais modifiable en impersonation
+    if(isImpersonating) return false;
     return currentUser.can_edit_vet_calendar === true;
   }
   return false;
