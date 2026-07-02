@@ -3009,12 +3009,15 @@ function openOvertimeDayPopover(iso, people, viewKey){
     <h4>⏱️ Ajustement d'heures<br><span class="text-muted" style="font-weight:500;font-size:12px;">${formatFR(iso)} — positif = heures sup, négatif = départ anticipé</span></h4>
     <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
       ${people.map(p=>{
-        const locked = isMonthSigned(p.id, y, m-1);
+        const signed = isMonthSigned(p.id, y, m-1);
+        const noRight = !canEditSlot(p.id);
+        const readonly = signed || noRight;
+        const readonlyTitle = signed ? 'Feuille de présence signée — verrouillée' : 'Lecture seule';
         return `
         <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;font-weight:700;color:var(--color-text);">
-          <span><span class="legend-swatch" style="background:${p.color};width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle;"></span>${p.short}${locked?' 🔒':''}</span>
-          <input type="number" step="0.5" data-overtime-popover-input data-person="${p.id}" ${locked?'disabled title="Feuille de présence signée — verrouillée"':''}
-            value="${getOvertimeHours(iso, p.id) || ''}" placeholder="0" style="width:80px;padding:7px 9px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:13px;${locked?'opacity:0.55;':''}">
+          <span><span class="legend-swatch" style="background:${p.color};width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle;"></span>${p.short}${signed?' 🔒':''}</span>
+          <input type="number" step="0.5" data-overtime-popover-input data-person="${p.id}" ${readonly?`disabled title="${readonlyTitle}"`:''}
+            value="${getOvertimeHours(iso, p.id) || ''}" placeholder="0" style="width:80px;padding:7px 9px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:13px;${readonly?'opacity:0.55;':''}">
         </label>
       `;}).join('')}
     </div>
@@ -3051,6 +3054,22 @@ function sidebarPersonBlock(iso, person){
       </div>
     `;
   }
+  if(!canEditSlot(person.id)){
+    // Lecture seule : afficher l'état sans permettre de le modifier
+    const stateLabel = (s)=>({ empty:'Vide', present:'Présent', absent: isASV?'Congé':'Absent' }[s]||s);
+    return `
+      <div class="sidebar-person-block">
+        <div class="sidebar-person-title"><span class="legend-swatch" style="background:${person.color};width:11px;height:11px;border-radius:50%;display:inline-block;"></span>${person.name}</div>
+        <p class="text-muted" style="font-size:11px;margin:6px 0 8px;">Lecture seule</p>
+        ${SLOTS.map(slot=>{
+          const state = getSlotState(iso, person.id, slot);
+          const label = getSlotLabel(iso, person.id, slot);
+          return `<p style="font-size:12.5px;margin:4px 0;"><strong>${SLOT_LABELS[slot]} :</strong> ${stateLabel(state)}${label ? ` — ${escapeHTML(label)}` : ''}</p>`;
+        }).join('')}
+        ${(()=>{ const h = getOvertimeHours(iso, person.id); return h !== 0 ? `<p class="text-muted" style="font-size:12px;margin:6px 0 0;">Ajustement : ${h>0?'+':''}${formatNum(h)}h</p>` : ''; })()}
+      </div>
+    `;
+  }
   return `
     <div class="sidebar-person-block">
       <div class="sidebar-person-title"><span class="legend-swatch" style="background:${person.color};width:11px;height:11px;border-radius:50%;display:inline-block;"></span>${person.name}</div>
@@ -3082,11 +3101,13 @@ function sidebarPersonBlock(iso, person){
           ${decisionNote}
         `;
       }).join('')}
-      ${isASV ? `
+      ${isASV && canEditSlot(person.id) ? `
         <p class="text-muted" style="font-size:11.5px;margin:14px 0 5px;font-weight:700;text-transform:uppercase;letter-spacing:0.03em;">Ajustement d'heures (ce jour)</p>
         <p class="text-muted" style="font-size:11px;margin:0 0 6px;">+ heures supplémentaires &nbsp;/&nbsp; − départ anticipé</p>
         <input type="number" step="0.5" data-overtime-input data-person="${person.id}"
           value="${getOvertimeHours(iso, person.id) || ''}" placeholder="Ex. 1.5 ou -1">
+      ` : isASV ? `
+        ${(()=>{ const h = getOvertimeHours(iso, person.id); return h !== 0 ? `<p class="text-muted" style="font-size:12px;margin:10px 0 0;">Ajustement : <strong>${h > 0 ? '+' : ''}${formatNum(h)}h</strong> (lecture seule)</p>` : ''; })()}
       ` : ''}
     </div>
   `;
