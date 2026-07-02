@@ -3700,6 +3700,8 @@ function initCalendarInteractions(){
         openOvertimeDayPopover(cell.dataset.date, CAL_VIEWS[calViewKeyOfEventTarget(cell)].people, calViewKeyOfEventTarget(cell));
       } else if(cell.dataset.action){
         // Autre case spéciale future sans comportement clavier dédié : ne rien faire.
+      } else if(!canEditSlot(cell.dataset.person)){
+        // Pas les droits sur cette ligne → ignorer la touche
       } else if(cell.dataset.slots){
         openAbsenceRangePopover(JSON.parse(cell.dataset.slots), cell.dataset.person, calViewKeyOfEventTarget(cell));
       } else {
@@ -3711,6 +3713,7 @@ function initCalendarInteractions(){
   document.addEventListener('click', (e)=>{
     const mergedCell = e.target.closest('.cal-cell[data-slots]');
     if(mergedCell){
+      if(!canEditSlot(mergedCell.dataset.person)) return;
       openAbsenceRangePopover(JSON.parse(mergedCell.dataset.slots), mergedCell.dataset.person, calViewKeyOfEventTarget(mergedCell));
       return;
     }
