@@ -293,8 +293,30 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-cell.overtime-row-cell{background:#fff;color:#7C3AED;cursor:pointer;}
 .cal-cell.overtime-row-cell:hover{background:var(--color-secondary);}
 .ot-row-total{font-size:8.5px;font-weight:800;}
+.cal-cell .ot-badge-neg{color:#EA580C;}
+.ot-row-total-neg{color:#EA580C;}
 .cal-cell.cal-cell-locked{cursor:not-allowed;opacity:0.62;filter:grayscale(35%);}
 .cal-cell.cal-cell-locked:hover{filter:grayscale(35%);}
+/* Contrôle du temps de travail ASV */
+.hours-control-grid{display:flex;flex-direction:column;gap:16px;}
+.hours-control-row{display:grid;grid-template-columns:90px 40px 1fr 1fr 1fr;gap:12px;align-items:start;}
+.hours-control-name{font-weight:700;font-size:13.5px;padding-top:2px;}
+.hours-control-fraction{font-size:11.5px;color:var(--color-text-muted);padding-top:4px;}
+.hours-control-item{display:flex;flex-direction:column;gap:3px;}
+.hours-control-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.03em;color:var(--color-text-muted);}
+.hours-control-value{font-size:13px;font-weight:600;}
+.hours-progress-bar{height:5px;background:var(--color-border);border-radius:99px;overflow:hidden;}
+.hours-progress-fill{height:100%;border-radius:99px;background:var(--color-primary);transition:width 0.3s;}
+.hours-control-item.warn .hours-progress-fill{background:#F59E0B;}
+.hours-control-item.warn .hours-control-value{color:#B45309;}
+.hours-control-item.over .hours-progress-fill{background:#DC2626;}
+.hours-control-item.over .hours-control-value{color:#DC2626;}
+/* Taux de travail */
+.fraction-select{
+  background:transparent;border:1px solid var(--color-border);border-radius:5px;
+  font-size:11px;color:var(--color-text-muted);cursor:pointer;padding:1px 3px;
+  font-family:inherit;
+}
 
 /* ============================================================
    Légende
@@ -665,9 +687,9 @@ const PEOPLE = [
   { id:'stephane', name:'Dr. Stéphane Maquinay', short:'Stéphane', color:'#7C3AED', initial:'S', present:PRESENT_SHADES[1] },
 ];
 const ASV_PEOPLE = [
-  { id:'marie',    name:'Marie',    short:'Marie',    color:'#DB2777', initial:'M',  present:PRESENT_SHADES[0] },
-  { id:'johanna',  name:'Johanna',  short:'Johanna',  color:'#EA580C', initial:'Jo', present:PRESENT_SHADES[1] },
-  { id:'julie',    name:'Julie',    short:'Julie',    color:'#059669', initial:'Ju', present:PRESENT_SHADES[2] },
+  { id:'marie',    name:'Marie',    short:'Marie',    color:'#DB2777', initial:'M',  present:PRESENT_SHADES[0], timeFraction:1.0 },
+  { id:'johanna',  name:'Johanna',  short:'Johanna',  color:'#EA580C', initial:'Jo', present:PRESENT_SHADES[1], timeFraction:1.0 },
+  { id:'julie',    name:'Julie',    short:'Julie',    color:'#059669', initial:'Ju', present:PRESENT_SHADES[2], timeFraction:0.75 },
 ];
 // Fonction plutôt que tableau figé : ASV_PEOPLE peut être modifié en place (ajout/retrait
 // d'une ASV depuis le tableau de bord), donc on recalcule à chaque appel pour ne jamais
@@ -707,7 +729,7 @@ function reindexPresentShades(){
   ASV_PEOPLE.forEach((p,i)=> p.present = PRESENT_SHADES[i % PRESENT_SHADES.length]);
 }
 function saveASVRoster(){
-  localStorage.setItem(ASV_ROSTER_KEY, JSON.stringify(ASV_PEOPLE.map(p=>({ id:p.id, name:p.name, short:p.short, initial:p.initial, color:p.color }))));
+  localStorage.setItem(ASV_ROSTER_KEY, JSON.stringify(ASV_PEOPLE.map(p=>({ id:p.id, name:p.name, short:p.short, initial:p.initial, color:p.color, timeFraction:p.timeFraction ?? 1.0 }))));
 }
 function loadASVRoster(){
   try{
@@ -716,11 +738,15 @@ function loadASVRoster(){
       const saved = JSON.parse(raw);
       if(Array.isArray(saved) && saved.length){
         ASV_PEOPLE.length = 0;
-        saved.forEach(p=> ASV_PEOPLE.push({ id:p.id, name:p.name, short:p.short, initial:p.initial, color:p.color, present:null }));
+        saved.forEach(p=> ASV_PEOPLE.push({ id:p.id, name:p.name, short:p.short, initial:p.initial, color:p.color, present:null, timeFraction:p.timeFraction ?? 1.0 }));
       }
     }
   }catch(e){ console.warn('Effectif ASV personnalisé illisible, valeurs par défaut conservées.', e); }
   reindexPresentShades();
+}
+function setASVTimeFraction(personId, fraction){
+  const p = ASV_PEOPLE.find(x=> x.id === personId);
+  if(p){ p.timeFraction = fraction; saveASVRoster(); }
 }
 // Ajoute une ASV au planning. Retourne la personne créée, ou null si le nom est vide.
 function addASVPerson(name){
@@ -1579,7 +1605,7 @@ function getOvertimeHours(isoDate, personId){ return parseFloat(DATA.slots[overt
 function setOvertimeHours(isoDate, personId, hours){
   const key = overtimeKey(isoDate, personId);
   const n = parseFloat(hours);
-  if(n > 0) DATA.slots[key] = n; else delete DATA.slots[key];
+  if(!isNaN(n) && n !== 0) DATA.slots[key] = n; else delete DATA.slots[key];
 }
 
 function getSlotState(isoDate, personId, slot){ return DATA.slots[slotKey(isoDate,personId,slot)] || 'empty'; }
@@ -2399,7 +2425,7 @@ function buildPersonRowCells(year, month, days, personId){
         // sur la case de l'après-midi, seulement quand elle n'est pas absorbée dans une
         // case d'absence fusionnée (où il n'y aurait pas de jour précis à désigner).
         const overtime = slot === 'AM' ? getOvertimeHours(iso, personId) : 0;
-        const otBadge = overtime > 0 ? `<span class="ot-badge" title="Heures supplémentaires : ${formatNum(overtime)}h">+${formatNum(overtime)}h</span>` : '';
+        const otBadge = overtime !== 0 ? `<span class="ot-badge${overtime < 0 ? ' ot-badge-neg' : ''}" title="${overtime < 0 ? 'Départ anticipé' : 'Heures supplémentaires'} : ${formatNum(Math.abs(overtime))}h">${overtime > 0 ? '+' : ''}${formatNum(overtime)}h</span>` : '';
         html += `<td class="cal-cell state-${info.stateClass}${locked?' cal-cell-locked':''}" style="${info.style}"
           data-date="${iso}" data-person="${personId}" data-slot="${slot}" data-slot-short="${slot==='M'?'M':'A'}" ${locked?'data-action="locked"':''}
           tabindex="0" role="button" title="${escapeHTML(locked ? 'Feuille de présence signée — verrouillée' : (info.title||''))}"
@@ -2423,14 +2449,14 @@ function buildOvertimeRowCells(year, month, days, people){
       html += `<td class="cal-cell sunday-cell" colspan="2" aria-hidden="true"></td>`;
       return;
     }
-    const entries = people.map(p=>({ person:p, hours:getOvertimeHours(iso, p.id) })).filter(e=> e.hours > 0);
+    const entries = people.map(p=>({ person:p, hours:getOvertimeHours(iso, p.id) })).filter(e=> e.hours !== 0);
     const total = entries.reduce((sum,e)=> sum + e.hours, 0);
     const title = entries.length
-      ? entries.map(e=> `${e.person.short} : +${formatNum(e.hours)}h`).join(' · ')
-      : 'Cliquer pour saisir des heures supplémentaires';
+      ? entries.map(e=> `${e.person.short} : ${e.hours > 0 ? '+' : ''}${formatNum(e.hours)}h`).join(' · ')
+      : 'Cliquer pour saisir des ajustements d\'heures';
     html += `<td class="cal-cell overtime-row-cell" colspan="2" data-action="overtime-day" data-date="${iso}"
       tabindex="0" role="button" title="${escapeHTML(title)}"
-      aria-label="Heures supplémentaires du ${formatFR(iso)}. ${escapeHTML(title)}">${total>0 ? `<span class="ot-row-total">+${formatNum(total)}h</span>` : ''}</td>`;
+      aria-label="Ajustement d'heures du ${formatFR(iso)}. ${escapeHTML(title)}">${total !== 0 ? `<span class="ot-row-total${total < 0 ? ' ot-row-total-neg' : ''}">${total > 0 ? '+' : ''}${formatNum(total)}h</span>` : ''}</td>`;
   });
   return html;
 }
@@ -2869,14 +2895,14 @@ function openOvertimeDayPopover(iso, people, viewKey){
   const box = document.getElementById('popover-box');
   const [y, m] = iso.split('-').map(Number);
   box.innerHTML = `
-    <h4>⏱️ Heures supplémentaires<br><span class="text-muted" style="font-weight:500;font-size:12px;">${formatFR(iso)}</span></h4>
+    <h4>⏱️ Ajustement d'heures<br><span class="text-muted" style="font-weight:500;font-size:12px;">${formatFR(iso)} — positif = heures sup, négatif = départ anticipé</span></h4>
     <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
       ${people.map(p=>{
         const locked = isMonthSigned(p.id, y, m-1);
         return `
         <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;font-weight:700;color:var(--color-text);">
           <span><span class="legend-swatch" style="background:${p.color};width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle;"></span>${p.short}${locked?' 🔒':''}</span>
-          <input type="number" min="0" step="0.5" data-overtime-popover-input data-person="${p.id}" ${locked?'disabled title="Feuille de présence signée — verrouillée"':''}
+          <input type="number" step="0.5" data-overtime-popover-input data-person="${p.id}" ${locked?'disabled title="Feuille de présence signée — verrouillée"':''}
             value="${getOvertimeHours(iso, p.id) || ''}" placeholder="0" style="width:80px;padding:7px 9px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:13px;${locked?'opacity:0.55;':''}">
         </label>
       `;}).join('')}
@@ -2946,9 +2972,10 @@ function sidebarPersonBlock(iso, person){
         `;
       }).join('')}
       ${isASV ? `
-        <p class="text-muted" style="font-size:11.5px;margin:14px 0 5px;font-weight:700;text-transform:uppercase;letter-spacing:0.03em;">Heures supplémentaires (ce jour)</p>
-        <input type="number" min="0" step="0.5" data-overtime-input data-person="${person.id}"
-          value="${getOvertimeHours(iso, person.id) || ''}" placeholder="Ex. 1.5">
+        <p class="text-muted" style="font-size:11.5px;margin:14px 0 5px;font-weight:700;text-transform:uppercase;letter-spacing:0.03em;">Ajustement d'heures (ce jour)</p>
+        <p class="text-muted" style="font-size:11px;margin:0 0 6px;">+ heures supplémentaires &nbsp;/&nbsp; − départ anticipé</p>
+        <input type="number" step="0.5" data-overtime-input data-person="${person.id}"
+          value="${getOvertimeHours(iso, person.id) || ''}" placeholder="Ex. 1.5 ou -1">
       ` : ''}
     </div>
   `;
@@ -3328,6 +3355,55 @@ function computeOvertimeStats(year){
   }
   return stats;
 }
+// ----------------------------------------------------------------
+// Contrôle du temps de travail ASV — quotas légaux et heures réelles
+// ----------------------------------------------------------------
+const ANNUAL_FULLTIME_HOURS = 1607; // référence légale France (loi Aubry 2000)
+const HALFDAY_HOURS = 3.5;          // 35h / 5j / 2 demi-journées
+
+function getASVTimeFraction(personId){ return personOf(personId)?.timeFraction ?? 1.0; }
+function getASVQuota(personId){
+  const f = getASVTimeFraction(personId);
+  return {
+    annual:  Math.round(ANNUAL_FULLTIME_HOURS * f * 10) / 10,
+    weekly:  Math.round(35 * f * 100) / 100,
+    monthly: Math.round(ANNUAL_FULLTIME_HOURS * f / 12 * 10) / 10,
+  };
+}
+function computeASVWorkedHours(personId, year, month = null){
+  const months = month !== null ? [month] : Array.from({length:12}, (_, i) => i);
+  let total = 0;
+  for(const m of months){
+    const nb = daysInMonth(year, m);
+    for(let day = 1; day <= nb; day++){
+      const iso = fmtISO(new Date(year, m, day));
+      if(getSlotState(iso, personId, 'M')  === 'present') total += HALFDAY_HOURS;
+      if(getSlotState(iso, personId, 'AM') === 'present') total += HALFDAY_HOURS;
+      total += getOvertimeHours(iso, personId);
+    }
+  }
+  return Math.round(total * 10) / 10;
+}
+function getWeekStart(date){
+  const d = new Date(date);
+  const day = d.getDay();
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+function computeASVWorkedHoursWeek(personId, weekStartDate){
+  let total = 0;
+  for(let d = 0; d < 7; d++){
+    const date = new Date(weekStartDate);
+    date.setDate(date.getDate() + d);
+    const iso = fmtISO(date);
+    if(getSlotState(iso, personId, 'M')  === 'present') total += HALFDAY_HOURS;
+    if(getSlotState(iso, personId, 'AM') === 'present') total += HALFDAY_HOURS;
+    total += getOvertimeHours(iso, personId);
+  }
+  return Math.round(total * 10) / 10;
+}
+
 function buildOvertimeTableASV(year){
   const stats = computeOvertimeStats(year);
   const totals = ASV_PEOPLE.map(()=>0);
@@ -3353,6 +3429,48 @@ function buildOvertimeTableASV(year){
 
 // Vue d'ensemble des feuilles de présence signées par mois/ASV, avec annulation possible
 // (rouvre le mois correspondant à la modification dans le calendrier).
+function buildHoursControlCard(year){
+  const cy = today.getFullYear();
+  const cm = today.getMonth();
+  const weekStart = getWeekStart(today);
+  function alertClass(worked, quota){
+    if(quota <= 0) return 'ok';
+    const r = worked / quota;
+    return r > 1 ? 'over' : r >= 0.9 ? 'warn' : 'ok';
+  }
+  function barPct(worked, quota){ return Math.min(100, quota > 0 ? Math.round(worked / quota * 100) : 0); }
+  function alertIcon(cls){ return cls === 'over' ? '🔴' : cls === 'warn' ? '🟡' : '🟢'; }
+  function hoursItem(label, worked, quota, cls){
+    return `
+      <div class="hours-control-item ${cls}">
+        <span class="hours-control-label">${label}</span>
+        <span class="hours-control-value">${formatNum(worked)}h / ${formatNum(quota)}h ${alertIcon(cls)}</span>
+        <div class="hours-progress-bar"><div class="hours-progress-fill" style="width:${barPct(worked,quota)}%;"></div></div>
+      </div>`;
+  }
+  const rows = ASV_PEOPLE.map(p => {
+    const q = getASVQuota(p.id);
+    const annual  = computeASVWorkedHours(p.id, year, null);
+    const monthly = computeASVWorkedHours(p.id, year === cy ? cy : year, year === cy ? cm : cm);
+    const weekly  = computeASVWorkedHoursWeek(p.id, weekStart);
+    return `
+      <div class="hours-control-row">
+        <div class="hours-control-name" style="color:${p.color};">${escapeHTML(p.short)}</div>
+        <div class="hours-control-fraction">${Math.round(getASVTimeFraction(p.id)*100)}%</div>
+        ${hoursItem('Semaine', weekly, q.weekly, alertClass(weekly, q.weekly))}
+        ${hoursItem('Mois en cours', monthly, q.monthly, alertClass(monthly, q.monthly))}
+        ${hoursItem(`Annuel ${year}`, annual, q.annual, alertClass(annual, q.annual))}
+      </div>`;
+  }).join('');
+  return `
+    <div class="card" style="margin-bottom:24px;" id="dash-hours-control-card">
+      <h3 style="font-size:16px;margin-bottom:4px;">Contrôle du temps de travail ${year}</h3>
+      <p class="text-muted" style="font-size:12.5px;margin-bottom:14px;">Base légale : ${formatNum(ANNUAL_FULLTIME_HOURS)}h/an temps plein (35h/semaine). Chaque demi-journée de présence = ${formatNum(HALFDAY_HOURS)}h + ajustements saisis.</p>
+      <div class="hours-control-grid">${rows}</div>
+    </div>
+  `;
+}
+
 function buildSignaturesTableASV(year){
   let rows = '';
   for(let m=0; m<12; m++){
@@ -3440,13 +3558,19 @@ function renderDashboardStats(){
     <div class="card" style="margin-bottom:18px;">
       <h3 style="font-size:16px;margin-bottom:10px;">Gérer les ASV</h3>
       <div class="flex" style="flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-        ${ASV_PEOPLE.map(p=>`
+        ${ASV_PEOPLE.map(p=>{
+          const f = p.timeFraction ?? 1.0;
+          const fractions = [[1,'100%'],[0.8,'80%'],[0.75,'75%'],[0.5,'50%']];
+          return `
           <span class="asv-roster-chip" style="border-color:${p.color};">
             <span class="legend-swatch" style="background:${p.color};width:10px;height:10px;border-radius:50%;display:inline-block;"></span>
             ${escapeHTML(p.short)}
+            <select class="fraction-select" data-fraction-asv="${p.id}" title="Taux de travail">
+              ${fractions.map(([v,l])=>`<option value="${v}" ${f===v?'selected':''}>${l}</option>`).join('')}
+            </select>
             <button type="button" class="asv-remove-btn" data-remove-asv="${p.id}" title="Retirer ${escapeHTML(p.short)}" aria-label="Retirer ${escapeHTML(p.short)}">✕</button>
-          </span>
-        `).join('') || `<span class="text-muted" style="font-size:13px;">Aucune ASV pour le moment.</span>`}
+          </span>`;
+        }).join('') || `<span class="text-muted" style="font-size:13px;">Aucune ASV pour le moment.</span>`}
       </div>
       <div class="flex gap-2">
         <input type="text" id="new-asv-name" placeholder="Nom de la nouvelle ASV" maxlength="30" style="flex:1;padding:9px 11px;border:1px solid var(--color-border);border-radius:8px;font-family:inherit;font-size:13px;">
@@ -3468,8 +3592,9 @@ function renderDashboardStats(){
       <h3 style="font-size:16px;margin-bottom:10px;">Récapitulatif mensuel ASV ${year}</h3>
       ${buildRecapTableASV(year)}
     </div>
+    ${buildHoursControlCard(year)}
     <div class="card" style="margin-bottom:24px;">
-      <h3 style="font-size:16px;margin-bottom:10px;">Heures supplémentaires ASV ${year}</h3>
+      <h3 style="font-size:16px;margin-bottom:10px;">Ajustements d'heures ASV ${year}</h3>
       ${buildOvertimeTableASV(year)}
     </div>
   `;
@@ -3478,6 +3603,12 @@ function renderDashboardStats(){
     if(!btn) return;
     dashState.year = parseInt(btn.dataset.year, 10);
     renderDashboardStats();
+  });
+  container.querySelectorAll('[data-fraction-asv]').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      setASVTimeFraction(sel.dataset.fractionAsv, parseFloat(sel.value));
+      renderDashboardStats();
+    });
   });
   container.querySelector('#add-asv-btn').onclick = ()=>{
     const input = container.querySelector('#new-asv-name');
