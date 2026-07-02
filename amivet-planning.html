@@ -297,6 +297,8 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .ot-row-total-neg{color:#EA580C;}
 .cal-cell.cal-cell-locked{cursor:not-allowed;opacity:0.62;filter:grayscale(35%);}
 .cal-cell.cal-cell-locked:hover{filter:grayscale(35%);}
+.cal-cell.cal-cell-readonly{cursor:default;opacity:0.70;filter:grayscale(20%);}
+.cal-cell.cal-cell-readonly:hover{filter:grayscale(20%);}
 /* Contrôle du temps de travail ASV */
 .hours-control-grid{display:flex;flex-direction:column;gap:16px;}
 .hours-control-row{display:grid;grid-template-columns:90px 40px 1fr 1fr 1fr;gap:12px;align-items:start;}
@@ -2950,15 +2952,19 @@ function propagateLabelAcrossSunday(personId, slots, label){
 function buildPersonRowCells(year, month, days, personId){
   let html = '';
   let run = null;
-  const locked = isMonthSigned(personId, year, month);
+  const locked  = isMonthSigned(personId, year, month);
+  const noEdit  = !canEditSlot(personId); // lecture seule (pas les droits sur cette ligne)
+  const blocked = locked || noEdit;       // data-action="locked" bloque TOUS les handlers
+  const blockCls = locked ? ' cal-cell-locked' : noEdit ? ' cal-cell-readonly' : '';
+  const blockTitle = locked ? 'Feuille de présence signée — verrouillée' : noEdit ? 'Lecture seule' : '';
   const flush = ()=>{
     if(!run) return;
     const first = run.slots[0], last = run.slots[run.slots.length-1];
     const ariaRange = run.slots.length>1 ? `du ${formatFR(first.iso)} au ${formatFR(last.iso)}` : formatFR(first.iso);
     const info = cellRenderInfo(first.iso, personId, first.slot);
-    html += `<td class="cal-cell state-${info.stateClass}${locked?' cal-cell-locked':''}" colspan="${run.colspan}"
-      ${locked ? 'data-action="locked"' : `data-slots='${JSON.stringify(run.slots)}'`} data-person="${personId}"
-      tabindex="0" role="button" title="${escapeHTML(locked ? 'Feuille de présence signée — verrouillée' : (info.title||''))}"
+    html += `<td class="cal-cell state-${info.stateClass}${blockCls}" colspan="${run.colspan}"
+      ${blocked ? 'data-action="locked"' : `data-slots='${JSON.stringify(run.slots)}'`} data-person="${personId}"
+      tabindex="0" role="button" title="${escapeHTML(blocked ? blockTitle : (info.title||''))}"
       aria-label="${personOf(personId).short} ${ariaRange} — ${cellAriaLabel(first.iso, personId, first.slot)}">${info.html}</td>`;
     run = null;
   };
@@ -3001,9 +3007,9 @@ function buildPersonRowCells(year, month, days, personId){
         // case d'absence fusionnée (où il n'y aurait pas de jour précis à désigner).
         const overtime = slot === 'AM' ? getOvertimeHours(iso, personId) : 0;
         const otBadge = overtime !== 0 ? `<span class="ot-badge${overtime < 0 ? ' ot-badge-neg' : ''}" title="${overtime < 0 ? 'Départ anticipé' : 'Heures supplémentaires'} : ${formatNum(Math.abs(overtime))}h">${overtime > 0 ? '+' : ''}${formatNum(overtime)}h</span>` : '';
-        html += `<td class="cal-cell state-${info.stateClass}${locked?' cal-cell-locked':''}" style="${info.style}"
-          data-date="${iso}" data-person="${personId}" data-slot="${slot}" data-slot-short="${slot==='M'?'M':'A'}" ${locked?'data-action="locked"':''}
-          tabindex="0" role="button" title="${escapeHTML(locked ? 'Feuille de présence signée — verrouillée' : (info.title||''))}"
+        html += `<td class="cal-cell state-${info.stateClass}${blockCls}" style="${info.style}"
+          data-date="${iso}" data-person="${personId}" data-slot="${slot}" data-slot-short="${slot==='M'?'M':'A'}" ${blocked?'data-action="locked"':''}
+          tabindex="0" role="button" title="${escapeHTML(blocked ? blockTitle : (info.title||''))}"
           aria-label="${cellAriaLabel(iso, personId, slot)}${overtime>0?' — '+formatNum(overtime)+'h supplémentaires':''}">${info.html}${otBadge}</td>`;
       }
     });
