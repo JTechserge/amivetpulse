@@ -2446,6 +2446,7 @@ function renderWeekViewASV(){
       <span class="week-nav-label">${wLabel}</span>
       <button class="btn-icon" id="week-next">→</button>
       <button class="btn btn-sm" id="week-today-btn">Aujourd'hui</button>
+      ${canEdit ? `<button class="btn btn-sm btn-danger" id="week-clear-btn" title="Effacer toutes les heures de la semaine">🗑️ Vider la semaine</button>` : ''}
       ${asvPicker}
     </div>
     <div class="week-view-wrap card" style="padding:0;">
@@ -2461,6 +2462,30 @@ function renderWeekViewASV(){
     weekNavState.mondayISO=fmtISO(d); renderWeekViewASV();
   };
   container.querySelector('#week-today-btn').onclick=()=>{ weekNavState.mondayISO=fmtISO(getWeekMondayDate(today)); renderWeekViewASV(); };
+  if(canEdit){
+    container.querySelector('#week-clear-btn').onclick=()=>{
+      const label=`${monday.getDate()} ${MONTH_NAMES[monday.getMonth()].toLowerCase()} – ${days[5].getDate()} ${MONTH_NAMES[days[5].getMonth()].toLowerCase()}`;
+      openConfirmModal({
+        title:`Vider la semaine du ${label} ?`,
+        message:`Toutes les heures saisies, absences, ajustements et notes de la semaine de ${escapeHTML(p?.short||'')} seront supprimés. Cette action est irréversible.`,
+        confirmLabel:'Vider la semaine',
+        onConfirm:()=>{
+          snapshotBeforeChange();
+          days.forEach(d=>{
+            const iso=fmtISO(d);
+            if(isSunday(d)) return;
+            ['ms','me','as','ae','ls','le'].forEach(f=>{ delete DATA.slots[teKey(iso,pid,f)]; });
+            setOvertimeHours(iso,pid,0);
+            setDayNote(iso,pid,'');
+            SLOTS.forEach(slot=>{ if(getSlotState(iso,pid,slot)!=='empty') setSlotState(iso,pid,slot,'empty'); });
+          });
+          saveData();
+          showToast(`Semaine vidée (${escapeHTML(p?.short||'')})`,'🗑️');
+          renderWeekViewASV();
+        },
+      });
+    };
+  }
   if(isVetUser) container.querySelector('#week-asv-pick').onchange=(e)=>{ weekNavState.personId=e.target.value; renderWeekViewASV(); };
 
   // Drag pour saisir les heures directement (clic-glisse, snap 15 min)
