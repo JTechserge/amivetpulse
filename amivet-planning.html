@@ -603,10 +603,6 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
             <button id="action-export" role="menuitem">⬇️ Exporter JSON</button>
             <button id="action-import" role="menuitem">⬆️ Importer JSON</button>
             <input type="file" id="import-file-input" accept="application/json" class="hidden" aria-hidden="true">
-            <hr>
-            <div class="settings-section-label">Réinitialisation</div>
-            <button class="danger" id="action-reset-current" role="menuitem">🗑️ Réinitialiser l'année courante</button>
-            <button class="danger" id="action-reset-forecast" role="menuitem">🗑️ Réinitialiser le prévisionnel</button>
           </div>
         </div>
       </div>
@@ -1836,37 +1832,20 @@ function initSettingsMenu(){
     reader.readAsText(file);
   });
 
-  document.getElementById('action-reset-current').addEventListener('click', ()=>{
-    menu.classList.remove('open');
-    const y = getCurrentYear();
-    openConfirmModal({
-      title:`Réinitialiser ${y} ?`,
-      message:`Toutes les présences, absences et commentaires de l'année ${y} seront définitivement supprimés. Cette action est irréversible.`,
-      confirmLabel:`Réinitialiser ${y}`,
-      onConfirm:()=>{
-        snapshotBeforeChange();
-        Object.keys(DATA.slots).filter(k=>k.startsWith(`${y}-`)).forEach(k=> delete DATA.slots[k]);
-        saveData();
-        renderCurrentView();
-        showToast(`Année ${y} réinitialisée`, '🗑️');
-      }
-    });
-  });
-  document.getElementById('action-reset-forecast').addEventListener('click', ()=>{
-    menu.classList.remove('open');
-    const y = getCurrentYear() + 1;
-    openConfirmModal({
-      title:`Réinitialiser ${y} ?`,
-      message:`Toutes les données prévisionnelles de l'année ${y} seront définitivement supprimées. Cette action est irréversible.`,
-      confirmLabel:`Réinitialiser ${y}`,
-      onConfirm:()=>{
-        snapshotBeforeChange();
-        Object.keys(DATA.slots).filter(k=>k.startsWith(`${y}-`)).forEach(k=> delete DATA.slots[k]);
-        saveData();
-        renderCurrentView();
-        showToast(`Année ${y} réinitialisée`, '🗑️');
-      }
-    });
+}
+function openResetYearModal(year, isForecast){
+  const label = isForecast ? `prévisionnel ${year}` : `année courante ${year}`;
+  openConfirmModal({
+    title:`Réinitialiser le ${label} ?`,
+    message:`Toutes les présences, absences${isForecast ? '' : ', commentaires'} et heures saisies pour ${year} seront définitivement supprimées. Cette action est irréversible.`,
+    confirmLabel:`Réinitialiser ${year}`,
+    onConfirm:()=>{
+      snapshotBeforeChange();
+      Object.keys(DATA.slots).filter(k=>k.startsWith(`${year}-`)).forEach(k=> delete DATA.slots[k]);
+      saveData();
+      renderCurrentView();
+      showToast(`${year} réinitialisé`, '🗑️');
+    }
   });
 }
 
@@ -3532,9 +3511,15 @@ function renderDashboardStats(){
   const year = dashState.year;
   const cy = getCurrentYear();
   container.innerHTML = `
-    <div class="year-toggle" id="dash-year-toggle">
-      <button data-year="${cy}" class="${year===cy?'active':''}">${cy}</button>
-      <button data-year="${cy+1}" class="${year===cy+1?'active':''}">${cy+1}</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:0;">
+      <div class="year-toggle" id="dash-year-toggle">
+        <button data-year="${cy}" class="${year===cy?'active':''}">${cy}</button>
+        <button data-year="${cy+1}" class="${year===cy+1?'active':''}">${cy+1}</button>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-sm btn-danger" id="dash-reset-current" title="Supprimer toutes les données ${cy}">🗑️ Réinitialiser ${cy}</button>
+        <button class="btn btn-sm btn-danger" id="dash-reset-forecast" title="Supprimer toutes les données ${cy+1}">🗑️ Réinitialiser ${cy+1}</button>
+      </div>
     </div>
     <div class="dash-grid" style="margin-top:18px;">
       ${PEOPLE.map(p=> buildPersonCard(year, p.id)).join('')}
@@ -3604,6 +3589,8 @@ function renderDashboardStats(){
     dashState.year = parseInt(btn.dataset.year, 10);
     renderDashboardStats();
   });
+  container.querySelector('#dash-reset-current').onclick = ()=> openResetYearModal(cy, false);
+  container.querySelector('#dash-reset-forecast').onclick = ()=> openResetYearModal(cy + 1, true);
   container.querySelectorAll('[data-fraction-asv]').forEach(sel=>{
     sel.addEventListener('change', ()=>{
       setASVTimeFraction(sel.dataset.fractionAsv, parseFloat(sel.value));
