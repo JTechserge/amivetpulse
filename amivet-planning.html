@@ -571,6 +571,19 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .login-footer{margin-top:14px;text-align:center;}
 /* Masque le bouton tableau de bord pour les utilisateurs ASV */
 body.role-asv [data-view="dashboard"]{display:none;}
+/* Bannière d'impersonation admin → ASV */
+#impersonation-banner{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  background:var(--color-primary);color:#fff;
+  padding:9px 20px;font-size:13px;font-weight:600;
+}
+#impersonation-banner.hidden{display:none;}
+#impersonation-banner .imp-back{
+  margin-left:auto;background:rgba(255,255,255,0.18);border:none;color:#fff;
+  padding:5px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;
+  font-family:inherit;
+}
+#impersonation-banner .imp-back:hover{background:rgba(255,255,255,0.3);}
 .print-signature-status{display:none;}
 @media print{
   .app-header,.sub-nav-row,.legend,.section-desc,.rollover-banner,.forecast-banner,
@@ -628,6 +641,7 @@ body.role-asv [data-view="dashboard"]{display:none;}
   <!-- ============================================================
        MAIN
        ============================================================ -->
+  <div id="impersonation-banner" class="hidden"></div>
   <main class="app-main" id="app-main">
 
     <!-- Onglet groupé Vétérinaires : Calendrier mensuel / Vue annuelle / Prévisionnel -->
@@ -1541,6 +1555,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 let currentUser = null;
 // { id, email, role, person_id, display_name, can_edit_vet_calendar, can_edit_all_asv }
 let adminViewMode = 'vet'; // 'vet' | 'asv' — seulement pertinent pour le rôle admin
+let adminImpersonatedPersonId = null; // quelle ASV l'admin imite en mode ASV
 const AUTH_SESSION_KEY = 'amivet_auth_session';
 
 function getAuthSession(){
@@ -1659,8 +1674,10 @@ function canEditSlot(personId){
   const role = effectiveRole();
   if(role === 'vet') return true;
   if(role === 'asv'){
+    // En mode impersonation admin, on prend l'identité de l'ASV choisie
+    const myId = currentUser.role === 'admin' ? adminImpersonatedPersonId : currentUser.person_id;
     if(isASVPerson(personId)){
-      return personId === currentUser.person_id || currentUser.can_edit_all_asv === true;
+      return personId === myId || currentUser.can_edit_all_asv === true;
     }
     return currentUser.can_edit_vet_calendar === true;
   }
@@ -2055,13 +2072,19 @@ function initSettingsMenu(){
 
   if(currentUser?.role === 'admin'){
     document.getElementById('action-toggle-view').addEventListener('click', ()=>{
-      adminViewMode = adminViewMode === 'asv' ? 'vet' : 'asv';
       menu.classList.remove('open');
-      applyRoleToDOM();
-      initSettingsMenu();
-      if(!canAccessDashboard() && currentView === 'dashboard') switchView('vets');
-      else renderCurrentView();
-      showToast(`Vue basculée : ${adminViewMode === 'asv' ? 'ASV' : 'Vétérinaires'}`, '👁');
+      if(adminViewMode === 'asv'){
+        // Déjà en mode ASV → retour immédiat
+        adminViewMode = 'vet';
+        adminImpersonatedPersonId = null;
+        applyRoleToDOM();
+        initSettingsMenu();
+        renderCurrentView();
+        showToast('Retour à la vue Vétérinaires', '👁');
+      } else {
+        // Passer en mode ASV → choisir qui imiter
+        openASVImpersonationPicker();
+      }
     });
   }
 
@@ -4010,11 +4033,75 @@ function renderAnnualViewForGroup(group){
    16. INITIALISATION GÉNÉRALE
    ================================================================ */
 
-// Applique les classes CSS de rôle sur <body> et masque/affiche
-// le bouton Tableau de bord selon les droits de l'utilisateur.
+function renderImpersonationBanner(){
+  const banner = document.getElementById('impersonation-banner');
+  if(!banner) return;
+  if(currentUser?.role === 'admin' && adminViewMode === 'asv' && adminImpersonatedPersonId){
+    const p = personOf(adminImpersonatedPersonId);
+    banner.classList.remove('hidden');
+    banner.innerHTML = `
+      <span>👁 Mode aperçu</span>
+      <span style="display:inline-flex;align-items:center;gap:6px;">
+        <span style="width:10px;height:10px;border-radius:50%;background:${p?.color||'#fff'};display:inline-block;"></span>
+        Vue de <strong>${escapeHTML(p?.short||adminImpersonatedPersonId)}</strong>
+      </span>
+      <button class="imp-back" id="imp-back-btn">← Retour à ma vue</button>
+    `;
+    document.getElementById('imp-back-btn').onclick = ()=>{
+      adminViewMode = 'vet';
+      adminImpersonatedPersonId = null;
+      applyRoleToDOM();
+      initSettingsMenu();
+      renderCurrentView();
+      showToast('Retour à la vue Vétérinaires', '👁');
+    };
+  } else {
+    banner.classList.add('hidden');
+    banner.innerHTML = '';
+  }
+}
+
+// Applique les classes CSS de rôle sur <body> et met à jour la bannière d'impersonation.
 function applyRoleToDOM(){
   document.body.classList.toggle('role-asv', effectiveRole() === 'asv');
   document.body.classList.toggle('role-vet', effectiveRole() !== 'asv');
+  renderImpersonationBanner();
+}
+
+function openASVImpersonationPicker(){
+  const backdrop = document.getElementById('modal-backdrop');
+  const box = document.getElementById('modal-box');
+  box.className = 'modal-box';
+  box.innerHTML = `
+    <h3>👁 Vue ASV — choisir</h3>
+    <p>Sélectionnez l'ASV dont vous souhaitez voir l'expérience :</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+      ${ASV_PEOPLE.map(p=>`
+        <button type="button" class="btn" data-pick-asv="${p.id}"
+          style="justify-content:flex-start;gap:10px;border-color:${p.color};">
+          <span style="width:10px;height:10px;border-radius:50%;background:${p.color};display:inline-block;"></span>
+          ${escapeHTML(p.short)}
+        </button>
+      `).join('')}
+    </div>
+    <div class="modal-actions"><button class="btn" id="modal-cancel">Annuler</button></div>
+  `;
+  backdrop.classList.add('open');
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#modal-cancel').onclick = close;
+  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+  box.querySelectorAll('[data-pick-asv]').forEach(btn=>{
+    btn.onclick = ()=>{
+      adminImpersonatedPersonId = btn.dataset.pickAsv;
+      adminViewMode = 'asv';
+      close();
+      applyRoleToDOM();
+      initSettingsMenu();
+      if(currentView === 'dashboard') switchView('vets');
+      else renderCurrentView();
+      showToast(`Vue ASV : ${personOf(adminImpersonatedPersonId)?.short}`, '👁');
+    };
+  });
 }
 
 function initApp(){
