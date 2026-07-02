@@ -563,12 +563,17 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .week-vis-cell{padding:0;overflow:hidden;vertical-align:top;}
 .week-vis-cell.is-sunday,.week-vis-cell.is-holiday{background:#f8fafc;cursor:default;}
 .week-cell-inner{display:flex;flex-direction:column;height:100%;}
-.week-vis-area{flex:1;position:relative;cursor:pointer;background:#fff;}
-.week-vis-area:hover{background:#f9f9f9;}
+.week-vis-area{flex:1;position:relative;cursor:crosshair;background:#fff;user-select:none;}
+.week-vis-area:hover{background:#f0fdf4;}
 .week-vis-area.no-edit{cursor:default;}
 .week-vis-area .week-worked{
   position:absolute;left:2px;right:2px;
   border-radius:3px;background:#22C55E;pointer-events:none;
+  display:flex;align-items:center;justify-content:center;
+}
+.week-worked .week-block-label{
+  font-size:10px;font-weight:700;color:#fff;white-space:nowrap;
+  pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.25);
 }
 .week-vis-area .week-worked-lunch{background:#F59E0B;}
 .week-time-row{
@@ -2289,16 +2294,10 @@ function renderWeekViewASV(){
   const isVetUser = effectiveRole() !== 'asv';
   const canEdit = isVetUser || canEditSlot(pid);
   const DAY_SHORT = ['Lu','Ma','Me','Je','Ve','Sa'];
-  const SESS_DEF = {
-    morning:  {s:'ms',e:'me',pS:CLINIC_HOURS.mStart, pE:CLINIC_HOURS.mEnd,  cls:''},
-    lunch:    {s:'ls',e:'le',pS:'13:00',              pE:'15:00',            cls:' week-worked-lunch'},
-    afternoon:{s:'as',e:'ae',pS:CLINIC_HOURS.amStart, pE:CLINIC_HOURS.amEnd, cls:''},
-  };
-
   function buildVisCell(d, session, height){
     const iso=fmtISO(d);
     if(isSunday(d)||holidayName(iso)) return `<td class="week-vis-cell" style="height:${height}px;background:#f8fafc;"></td>`;
-    const sess=SESS_DEF[session];
+    const sess=WEEK_SESSIONS[session];
     const sv=getTE(iso,pid,sess.s), ev=getTE(iso,pid,sess.e);
     const visH=canEdit?height-28:height;
     const pSM=timeToMins(sess.pS), pDur=timeToMins(sess.pE)-pSM;
@@ -2306,7 +2305,8 @@ function renderWeekViewASV(){
     if(sv&&ev){
       const top=Math.max(0,(timeToMins(sv)-pSM)/pDur*visH);
       const bH=Math.max(2,(timeToMins(ev)-timeToMins(sv))/pDur*visH);
-      block=`<div class="week-worked${sess.cls}" style="top:${top.toFixed(0)}px;height:${bH.toFixed(0)}px;"></div>`;
+      const label=bH>=22?`<span class="week-block-label">${sv} → ${ev}</span>`:'';
+      block=`<div class="week-worked${sess.cls}" style="top:${top.toFixed(0)}px;height:${bH.toFixed(0)}px;">${label}</div>`;
     }
     const da=`data-adj-iso="${iso}" data-adj-pid="${pid}"`;
     const ctrlRow=canEdit?`<div class="week-time-row">
@@ -2322,9 +2322,10 @@ function renderWeekViewASV(){
         <button class="week-adj" ${da} data-adj-f="${sess.e}" data-adj-d="+15">▴</button>
       </span>
     </div>`:'';
+    const visAttrs=canEdit?`data-open-popup="${iso}" data-open-pid="${pid}" data-week-sess="${session}"`:'';
     return `<td class="week-vis-cell${session==='lunch'?' week-lunch-cell':''}" style="height:${height}px;">
       <div class="week-cell-inner">
-        <div class="week-vis-area${canEdit?'':' no-edit'}" style="height:${visH}px;" ${canEdit?`data-open-popup="${iso}" data-open-pid="${pid}"`:''}>${block}</div>
+        <div class="week-vis-area${canEdit?'':' no-edit'}" style="height:${visH}px;" ${visAttrs}>${block}</div>
         ${ctrlRow}
       </div>
     </td>`;
@@ -2397,9 +2398,62 @@ function renderWeekViewASV(){
   container.querySelector('#week-today-btn').onclick=()=>{ weekNavState.mondayISO=fmtISO(getWeekMondayDate(today)); renderWeekViewASV(); };
   if(isVetUser) container.querySelector('#week-asv-pick').onchange=(e)=>{ weekNavState.personId=e.target.value; renderWeekViewASV(); };
 
+  // Drag pour saisir les heures directement (clic-glisse, snap 15 min)
+  function wkDragStart(e, el){
+    const iso2=el.dataset.openPopup, pid2=el.dataset.openPid, sess=el.dataset.weekSess;
+    if(!iso2||!pid2||!sess) return;
+    const rect=el.getBoundingClientRect();
+    const pct=Math.max(0,Math.min(1,(e.clientY-rect.top)/el.offsetHeight));
+    const {pS,pE}=WEEK_SESSIONS[sess];
+    const sm=Math.max(timeToMins(pS),Math.min(timeToMins(pE)-15,timePctToMins(pct,pS,pE)));
+    weekDragCtx={iso:iso2,pid:pid2,session:sess,startMin:sm,endMin:sm+15,el,startY:e.clientY};
+    wkDragBlock(el,sess,sm,sm+15);
+    e.preventDefault();
+  }
+  function wkDragMove(e){
+    if(!weekDragCtx) return;
+    const {el,session,startMin}=weekDragCtx;
+    const {pS,pE}=WEEK_SESSIONS[session];
+    const rect=el.getBoundingClientRect();
+    const pct=Math.max(0,Math.min(1,(e.clientY-rect.top)/el.offsetHeight));
+    const em=Math.max(startMin+15,Math.min(timeToMins(pE),timePctToMins(pct,pS,pE)));
+    weekDragCtx.endMin=em;
+    wkDragBlock(el,session,startMin,em);
+  }
+  function wkDragCommit(){
+    if(!weekDragCtx) return;
+    const {iso,pid:pid2,session,startMin,endMin,el,startY}=weekDragCtx;
+    weekDragCtx=null;
+    // Si quasi pas de glissement → ouvrir la popup
+    if(Math.abs(endMin-startMin)<=15 && el){
+      return openWeekTimePopover(iso,pid2);
+    }
+    const {pS,pE,s,e:ef}=WEEK_SESSIONS[session];
+    snapshotBeforeChange();
+    setTE(iso,pid2,s,minsToTimeStr(Math.max(timeToMins(pS),startMin)));
+    setTE(iso,pid2,ef,minsToTimeStr(Math.min(timeToMins(pE),endMin)));
+    syncTEToMonthly(iso,pid2); saveData(); renderWeekViewASV();
+  }
+  function wkDragBlock(el,session,sm,em){
+    const {pS,pE,cls}=WEEK_SESSIONS[session];
+    const pSM=timeToMins(pS), pDur=timeToMins(pE)-pSM, visH=el.offsetHeight;
+    const top=Math.max(0,(sm-pSM)/pDur*visH);
+    const bH=Math.max(4,(em-sm)/pDur*visH);
+    let bl=el.querySelector('.week-worked');
+    if(!bl){ bl=document.createElement('div'); bl.className='week-worked'+cls; el.appendChild(bl); }
+    bl.style.cssText=`top:${top.toFixed(0)}px;height:${bH.toFixed(0)}px;`;
+    bl.innerHTML=bH>=22?`<span class="week-block-label">${minsToTimeStr(sm)} → ${minsToTimeStr(em)}</span>`:'';
+    const row=el.closest('td')?.querySelector('.week-time-row');
+    if(row){ const d=row.querySelectorAll('.week-time-disp'); if(d[0])d[0].textContent=minsToTimeStr(sm); if(d[1])d[1].textContent=minsToTimeStr(em); }
+  }
   container.querySelectorAll('.week-vis-area[data-open-popup]').forEach(el=>{
-    el.addEventListener('click',()=>openWeekTimePopover(el.dataset.openPopup, el.dataset.openPid));
+    el.addEventListener('mousedown',(e)=>{ if(e.button!==0) return; wkDragStart(e,el); });
+    el.addEventListener('touchstart',(e)=>{ wkDragStart(e.touches[0],el); },{passive:false});
+    el.addEventListener('touchend',()=>wkDragCommit(),{passive:true});
   });
+  document.addEventListener('mousemove',(e)=>{ if(weekDragCtx) wkDragMove(e); });
+  document.addEventListener('mouseup',()=>{ if(weekDragCtx) wkDragCommit(); });
+  document.addEventListener('touchmove',(e)=>{ if(weekDragCtx){wkDragMove(e.touches[0]); e.preventDefault();} },{passive:false});
 
   container.addEventListener('click', e=>{
     const btn=e.target.closest('.week-adj'); if(!btn) return;
@@ -2445,17 +2499,17 @@ function openWeekTimePopover(iso, pid){
     <h4 style="margin-bottom:10px;">⏱️ ${escapeHTML(p?.short||pid)} — ${formatFR(iso)}</h4>
     <div style="display:grid;grid-template-columns:80px 1fr 16px 1fr;gap:6px 8px;align-items:center;margin-bottom:10px;font-size:13px;">
       <label style="font-weight:600;color:var(--color-text-muted);">Matin :</label>
-      <input type="time" id="te-ms" value="${tval('ms',CLINIC_HOURS.mStart)}" style="${iStyle}">
+      <input type="time" step="900" id="te-ms" value="${tval('ms',CLINIC_HOURS.mStart)}" style="${iStyle}">
       <span style="text-align:center;">→</span>
-      <input type="time" id="te-me" value="${tval('me',CLINIC_HOURS.mEnd)}" style="${iStyle}">
+      <input type="time" step="900" id="te-me" value="${tval('me',CLINIC_HOURS.mEnd)}" style="${iStyle}">
       <label style="font-weight:600;color:#F59E0B;">13h–15h :</label>
-      <input type="time" id="te-ls" value="${tval('ls','')}" placeholder="—" style="${iStyle}">
+      <input type="time" step="900" id="te-ls" value="${tval('ls','')}" placeholder="—" style="${iStyle}">
       <span style="text-align:center;">→</span>
-      <input type="time" id="te-le" value="${tval('le','')}" placeholder="—" style="${iStyle}">
+      <input type="time" step="900" id="te-le" value="${tval('le','')}" placeholder="—" style="${iStyle}">
       <label style="font-weight:600;color:var(--color-text-muted);">A-midi :</label>
-      <input type="time" id="te-as" value="${tval('as',CLINIC_HOURS.amStart)}" style="${iStyle}">
+      <input type="time" step="900" id="te-as" value="${tval('as',CLINIC_HOURS.amStart)}" style="${iStyle}">
       <span style="text-align:center;">→</span>
-      <input type="time" id="te-ae" value="${tval('ae',CLINIC_HOURS.amEnd)}" style="${iStyle}">
+      <input type="time" step="900" id="te-ae" value="${tval('ae',CLINIC_HOURS.amEnd)}" style="${iStyle}">
     </div>
     <p style="font-size:11px;color:var(--color-text-muted);margin:0 0 10px;">La plage 13h–15h est comptabilisée comme heures supplémentaires.</p>
     <div id="te-preview" style="font-size:12.5px;margin-bottom:10px;font-weight:600;color:var(--color-primary);"></div>
@@ -3846,21 +3900,20 @@ function calcAutoOT(iso,pid){
 function dayNoteKey(iso,pid){ return `${iso}_${pid}_day_note`; }
 function getDayNote(iso,pid){ return DATA.slots[dayNoteKey(iso,pid)]||''; }
 function setDayNote(iso,pid,v){ if(v) DATA.slots[dayNoteKey(iso,pid)]=v; else delete DATA.slots[dayNoteKey(iso,pid)]; }
-// Synchronise la saisie horaire vers le calendrier mensuel (M/AM slots)
+// Synchronise la saisie horaire vers le calendrier mensuel (M/AM slots + heures sup auto)
 function syncTEToMonthly(iso,pid){
   if(!isASVPerson(pid)) return;
   const hasM  = !!(getTE(iso,pid,'ms')||getTE(iso,pid,'me'));
   const hasAM = !!(getTE(iso,pid,'as')||getTE(iso,pid,'ae'));
-  ['M','AM'].forEach(slot=>{
-    const state = getSlotState(iso,pid,slot);
-    if(slot==='M'){
-      if(hasM  && state!=='absent') DATA.slots[slotKey(iso,pid,'M')]  = 'present';
-      if(!hasM && state==='present') delete DATA.slots[slotKey(iso,pid,'M')];
-    } else {
-      if(hasAM && state!=='absent') DATA.slots[slotKey(iso,pid,'AM')] = 'present';
-      if(!hasAM && state==='present') delete DATA.slots[slotKey(iso,pid,'AM')];
-    }
-  });
+  if(hasM  && getSlotState(iso,pid,'M')  !=='absent') DATA.slots[slotKey(iso,pid,'M')]  = 'present';
+  if(!hasM && getSlotState(iso,pid,'M')  ==='present') delete DATA.slots[slotKey(iso,pid,'M')];
+  if(hasAM && getSlotState(iso,pid,'AM') !=='absent') DATA.slots[slotKey(iso,pid,'AM')] = 'present';
+  if(!hasAM && getSlotState(iso,pid,'AM')==='present') delete DATA.slots[slotKey(iso,pid,'AM')];
+  // Copier l'auto-OT dans la ligne H. +/− pour qu'il soit visible sur le calendrier mensuel
+  const aOT = calcAutoOT(iso,pid);
+  const key = overtimeKey(iso,pid);
+  if(aOT !== 0) DATA.slots[key] = aOT;
+  else if(DATA.slots[key] && DATA.slots[key] === getOvertimeHours(iso,pid)) delete DATA.slots[key];
 }
 function adjTime(current, deltaMin, min, max){
   const mins = timeToMins(current||min) + deltaMin;
@@ -3868,6 +3921,18 @@ function adjTime(current, deltaMin, min, max){
   const h = Math.floor(clamped/60), m = clamped%60;
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
 }
+// Définition des sessions de la vue semaine (accessible en dehors de renderWeekViewASV)
+const WEEK_SESSIONS = {
+  morning:  {s:'ms',e:'me',pS:CLINIC_HOURS.mStart, pE:CLINIC_HOURS.mEnd,  cls:''},
+  lunch:    {s:'ls',e:'le',pS:'13:00',              pE:'15:00',            cls:' week-worked-lunch'},
+  afternoon:{s:'as',e:'ae',pS:CLINIC_HOURS.amStart, pE:CLINIC_HOURS.amEnd, cls:''},
+};
+function snapTo15(mins){ return Math.round(mins/15)*15; }
+function minsToTimeStr(m){ const h=Math.floor(m/60),mm=m%60; return `${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; }
+function timePctToMins(pct, pStartStr, pEndStr){
+  return snapTo15(timeToMins(pStartStr) + pct * (timeToMins(pEndStr)-timeToMins(pStartStr)));
+}
+let weekDragCtx = null; // { iso, pid, session, startMin, endMin, cell }
 // État de navigation de la vue semaine
 const weekNavState = { mondayISO: null, personId: null };
 
@@ -4204,6 +4269,48 @@ function renderDashboardSignatures(){
 }
 
 // --- Sous-page "Heures ASV" : suivi mensuel/annuel du temps de travail vs quota 1607h ---
+function buildDashWeekCard(){
+  if(!weekNavState.mondayISO) return '';
+  const monday = new Date(weekNavState.mondayISO+'T00:00:00');
+  const days = Array.from({length:6},(_,i)=>{ const d=new Date(monday); d.setDate(d.getDate()+i); return d; });
+  const DAY_SHORT=['Lu','Ma','Me','Je','Ve','Sa'];
+  let cols='';
+  for(let i=0;i<6;i++){
+    const d=days[i], iso=fmtISO(d);
+    if(isSunday(d)||holidayName(iso)){ cols+=`<td style="background:#f8fafc;text-align:center;padding:6px;font-size:12px;color:var(--color-text-muted);">—</td>`; continue; }
+    const isAbsent=ASV_PEOPLE.some(p=>getSlotState(iso,p.id,'M')==='absent');
+    const rows=ASV_PEOPLE.map(p=>{
+      const abs=getSlotState(iso,p.id,'M')==='absent'&&getSlotState(iso,p.id,'AM')==='absent';
+      const h=calcDayTE(iso,p.id)+calcLunchTE(iso,p.id);
+      const aOT=calcAutoOT(iso,p.id);
+      const note=getDayNote(iso,p.id);
+      return `<div style="margin:2px 0;font-size:12px;">
+        <span style="color:${p.color};font-weight:700;">${escapeHTML(p.short)}</span>
+        ${abs?'<span class="text-muted"> Absent</span>':h>0?`<span style="color:#22C55E;font-weight:600;"> ${formatNum(h)}h</span>${aOT>0?`<span style="color:#16a34a;font-size:10px;"> +${formatNum(aOT)}h</span>`:aOT<0?`<span style="color:#ea580c;font-size:10px;"> ${formatNum(aOT)}h</span>`:''}`:
+          '<span class="text-muted"> —</span>'}
+        ${note?`<br><span class="text-muted" style="font-size:10px;">${escapeHTML(note)}</span>`:''}
+      </div>`;
+    }).join('');
+    const isToday=iso===fmtISO(today);
+    cols+=`<td style="padding:6px 8px;vertical-align:top;border-left:1px solid var(--color-border);${isToday?'background:#f0fdf4;':''}">
+      <div style="font-size:11px;font-weight:700;color:${isToday?'var(--color-primary)':'var(--color-text-muted)'};">${DAY_SHORT[i]} ${d.getDate()}</div>
+      ${rows}
+    </td>`;
+  }
+  const endDay=days[5];
+  const wLabel=`${monday.getDate()} ${MONTH_NAMES[monday.getMonth()].toLowerCase()} – ${endDay.getDate()} ${MONTH_NAMES[endDay.getMonth()].toLowerCase()}`;
+  return `<div class="card" style="margin-bottom:20px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <h3 style="font-size:16px;margin:0;">Semaine ${wLabel}</h3>
+      <button class="btn-icon" id="dash-week-prev" title="Semaine précédente">←</button>
+      <button class="btn-icon" id="dash-week-next" title="Semaine suivante">→</button>
+      <button class="btn btn-sm" id="dash-week-today">Aujourd'hui</button>
+    </div>
+    <table style="width:100%;border-collapse:collapse;">
+      <tbody><tr>${cols}</tr></tbody>
+    </table>
+  </div>`;
+}
 function renderDashboardHours(){
   const container = document.getElementById('dash-sub-hours');
   const year = dashState.year;
@@ -4248,7 +4355,9 @@ function renderDashboardHours(){
     const color = total > 0 ? '#16a34a' : total < 0 ? '#ea580c' : 'var(--color-text-muted)';
     return `<td style="padding:8px 10px;text-align:right;font-weight:700;color:${color};">${total > 0 ? '+' : ''}${formatNum(total)}h</td>`;
   }).join('');
+  if(!weekNavState.mondayISO) weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
   container.innerHTML = `
+    ${buildDashWeekCard()}
     <div class="year-toggle" id="dash-hours-year-toggle" style="margin-bottom:16px;">
       <button data-year="${cy}" class="${year===cy?'active':''}">${cy}</button>
       <button data-year="${cy+1}" class="${year===cy+1?'active':''}">${cy+1}</button>
@@ -4272,11 +4381,15 @@ function renderDashboardHours(){
     </div>
   `;
   container.querySelector('#dash-hours-year-toggle').addEventListener('click', (e)=>{
-    const btn = e.target.closest('button');
-    if(!btn) return;
-    dashState.year = parseInt(btn.dataset.year, 10);
-    renderDashboardHours();
+    const btn = e.target.closest('button'); if(!btn) return;
+    dashState.year = parseInt(btn.dataset.year, 10); renderDashboardHours();
   });
+  const wPrev=container.querySelector('#dash-week-prev');
+  const wNext=container.querySelector('#dash-week-next');
+  const wTod=container.querySelector('#dash-week-today');
+  if(wPrev) wPrev.onclick=()=>{ const d=new Date(weekNavState.mondayISO+'T00:00:00'); d.setDate(d.getDate()-7); weekNavState.mondayISO=fmtISO(d); renderDashboardHours(); };
+  if(wNext) wNext.onclick=()=>{ const d=new Date(weekNavState.mondayISO+'T00:00:00'); d.setDate(d.getDate()+7); weekNavState.mondayISO=fmtISO(d); renderDashboardHours(); };
+  if(wTod)  wTod.onclick=()=>{ weekNavState.mondayISO=fmtISO(getWeekMondayDate(today)); renderDashboardHours(); };
 }
 
 // --- Sous-page "Demandes de congé" : liste groupée, triée en attente -> approuvées ->
