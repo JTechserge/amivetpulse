@@ -3194,15 +3194,18 @@ function buildSignaturePanelHtml(viewKey){
                 return `<span class="text-muted" style="font-size:12.5px;">✅ Signé par ${escapeHTML(detail.signedName)} le ${signedDate}</span>`;
               })()
             : '';
-          // Le bouton n'est visible que pour l'ASV elle-même (pas admin en impersonation)
           const isOwn = currentUser?.person_id === p.id && currentUser?.role === 'asv';
+          const isAdminOrVet = currentUser?.role === 'admin' || currentUser?.role === 'vet';
           const signBtn = isOwn && !detail
             ? `<button type="button" class="btn" data-sign-person="${p.id}" style="font-size:12.5px;padding:6px 12px;">Signer ma feuille de présence</button>`
+            : '';
+          const adminBtn = isAdminOrVet && !detail
+            ? `<button type="button" class="btn" data-admin-request-sign="${p.id}" style="font-size:12.5px;padding:6px 12px;">📧 Demander la signature</button>`
             : '';
           return `<div class="signature-row">
             <span style="color:${p.color};font-weight:700;">${escapeHTML(p.short)}</span>
             ${signedNote}
-            ${signBtn}
+            ${signBtn}${adminBtn}
           </div>`;
         }).join('')}
       </div>
@@ -3224,6 +3227,29 @@ function buildPrintSignatureStatusHtml(viewKey){
   });
   return `<p class="print-signature-status">✍️ ${parts.join('&nbsp;&nbsp;—&nbsp;&nbsp;')}</p>`;
 }
+// Admin/vet demande la signature d'une ASV : envoie l'email à son compte.
+async function adminRequestSignature(viewKey, personId){
+  const cfg = CAL_VIEWS[viewKey];
+  const month = cfg.navState.month;
+  const btn = document.querySelector(`[data-admin-request-sign="${personId}"]`);
+  if(btn){ btn.disabled = true; btn.textContent = 'Envoi…'; }
+  try{
+    const res = await fetch(`${SUPABASE_FUNCTIONS_URL}request-signature`, {
+      method: 'POST',
+      headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ year: cfg.year, month, person_id: personId }),
+    });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || 'Erreur inconnue');
+    const person = personOf(personId);
+    showToast(`Email de signature envoyé à ${person.short}`, '📧');
+    renderCalendarView(viewKey);
+  }catch(e){
+    showToast(`Échec de l'envoi — ${e.message || 'erreur réseau'}`, '❌');
+    if(btn){ btn.disabled = false; btn.textContent = '📧 Demander la signature'; }
+  }
+}
+
 // Demande de signature : envoie un email à l'ASV avec le récap du mois + lien unique.
 // La vraie signature n'est enregistrée que lorsqu'elle clique ce lien (confirm-signature).
 async function requestSignatureEmail(viewKey, personId){
@@ -3317,6 +3343,9 @@ function renderCalendarView(viewKey){
   `;
   container.querySelectorAll('[data-sign-person]').forEach(btn=>{
     btn.onclick = ()=> requestSignatureEmail(viewKey, btn.dataset.signPerson);
+  });
+  container.querySelectorAll('[data-admin-request-sign]').forEach(btn=>{
+    btn.onclick = ()=> adminRequestSignature(viewKey, btn.dataset.adminRequestSign);
   });
 }
 VIEW_RENDERERS['vets'] = ()=> renderGroupSubPage('vets');

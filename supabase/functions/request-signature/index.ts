@@ -47,23 +47,55 @@ Deno.serve(async (req) => {
     }
     const authUser = await userRes.json();
 
-    // Récupérer le profil (person_id, rôle)
+    // Récupérer le profil du demandeur (person_id, rôle)
     const profRes = await fetch(`${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${authUser.id}&select=person_id,display_name,role`, {
       headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
     });
-    const profiles = await profRes.json();
-    const profile = profiles[0];
-    if(!profile || profile.role !== 'asv' || !profile.person_id){
-      return new Response(JSON.stringify({ error: 'Réservé aux ASV avec un profil lié.' }), { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+    const profile = (await profRes.json())[0];
+    if(!profile){
+      return new Response(JSON.stringify({ error: 'Profil introuvable.' }), { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
     }
 
-    const { year, month } = await req.json();
+    const { year, month, person_id: requestedPersonId } = await req.json();
     if(typeof year !== 'number' || typeof month !== 'number'){
       return new Response(JSON.stringify({ error: 'year et month sont requis.' }), { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
     }
 
-    const personId: string = profile.person_id;
-    const displayName: string = profile.display_name || authUser.email;
+    let personId: string;
+    let displayName: string;
+    let targetEmail: string;
+
+    if(profile.role === 'asv'){
+      // L'ASV signe pour elle-même
+      if(!profile.person_id) return new Response(JSON.stringify({ error: 'Profil ASV sans person_id.' }), { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+      personId = profile.person_id;
+      displayName = profile.display_name || authUser.email;
+      targetEmail = authUser.email;
+    } else if(profile.role === 'admin' || profile.role === 'vet'){
+      // Admin/vétérinaire demande la signature d'une ASV spécifique
+      if(!requestedPersonId){
+        return new Response(JSON.stringify({ error: 'person_id requis pour admin/vet.' }), { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+      }
+      // Récupérer le profil de l'ASV ciblée
+      const asvProfRes = await fetch(`${SUPABASE_URL}/rest/v1/user_profiles?person_id=eq.${encodeURIComponent(requestedPersonId)}&select=id,display_name,role`, {
+        headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
+      });
+      const [asvProfile] = await asvProfRes.json();
+      if(!asvProfile || asvProfile.role !== 'asv'){
+        return new Response(JSON.stringify({ error: 'ASV introuvable pour ce person_id.' }), { status: 404, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+      }
+      // Récupérer l'email de l'ASV via l'API admin Auth
+      const asvUserRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${asvProfile.id}`, {
+        headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
+      });
+      if(!asvUserRes.ok) throw new Error(`Récupération email ASV HTTP ${asvUserRes.status}`);
+      const asvUser = await asvUserRes.json();
+      personId = requestedPersonId;
+      displayName = asvProfile.display_name || asvUser.email;
+      targetEmail = asvUser.email;
+    } else {
+      return new Response(JSON.stringify({ error: 'Rôle non autorisé.' }), { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+    }
     const now = new Date();
 
     // Réutiliser un token valide existant pour ce mois (évite les doublons si l'ASV clique
@@ -181,7 +213,7 @@ Deno.serve(async (req) => {
       headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         from: 'Amivet PULSE <onboarding@resend.dev>',
-        to: [authUser.email],
+        to: [targetEmail],
         subject: `Amivet PULSE — Signature feuille de présence ${monthLabel}`,
         text,
         html,
