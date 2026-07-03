@@ -2,8 +2,8 @@
 // des congés), aligné sur la charte graphique du site (mêmes couleurs que :root dans
 // amivet-planning.html). Tableaux + styles en ligne uniquement : c'est ce qui rend le mieux
 // de façon fiable dans les clients mail (Gmail, Outlook, Apple Mail...).
-export const LOGO_URL = 'https://jtechserge.github.io/planningamivet/logo.png';
-export const APP_URL = 'https://jtechserge.github.io/planningamivet/amivet-planning.html';
+export const LOGO_URL = 'https://jtechserge.github.io/amivetpulse/logo.png';
+export const APP_URL = 'https://jtechserge.github.io/amivetpulse/amivet-pulse.html';
 export const COLORS = {
   primary: '#0F766E',
   primaryLight: '#14B8A6',
@@ -27,7 +27,7 @@ export function wrapEmailHtml(bodyHtml: string): string {
         <tr><td style="background:${COLORS.primary};padding:22px 28px;">
           <table role="presentation" cellpadding="0" cellspacing="0"><tr>
             <td><img src="${LOGO_URL}" width="36" height="36" alt="" style="display:block;border-radius:8px;"></td>
-            <td style="padding-left:12px;color:#FFFFFF;font-size:17px;font-weight:700;">Amivet Planning</td>
+            <td style="padding-left:12px;color:#FFFFFF;font-size:17px;font-weight:700;">Amivet PULSE</td>
           </tr></table>
         </td></tr>
         <tr><td style="padding:28px;">

@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
     const overtimeEntries = Object.entries(overtimeByPerson).sort((a, b) => a[0].localeCompare(b[0]));
     const periodLabel = `${frequencyDays} derniers jours`;
 
-    const subject = `Amivet Planning — ${groups.length} demande(s) de congé ASV en attente`;
+    const subject = `Amivet PULSE — ${groups.length} demande(s) de congé ASV en attente`;
     const text = [
       'Bonjour,',
       '',
@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
       '',
       'Merci de traiter ces demandes depuis le Tableau de bord de l\'application (onglet "Demandes de congé").',
       '',
-      '— Amivet Planning',
+      '— Amivet PULSE',
     ].join('\n');
 
     const groupsHtml = groups.map(g => {
@@ -166,14 +166,14 @@ Deno.serve(async (req) => {
         <h2 style="font-size:14px;color:${COLORS.text};margin:0 0 12px;">⏱️ Heures supplémentaires ASV — ${periodLabel}</h2>
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${overtimeRowsHtml}</table>
       </div>
-      <div style="margin-top:24px;">${buttonHtml(APP_URL, 'Ouvrir Amivet Planning')}</div>
+      <div style="margin-top:24px;">${buttonHtml(APP_URL, 'Ouvrir Amivet PULSE')}</div>
     `);
 
     const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: 'Amivet Planning <onboarding@resend.dev>',
+        from: 'Amivet PULSE <onboarding@resend.dev>',
         to: [recipient],
         subject,
         text,

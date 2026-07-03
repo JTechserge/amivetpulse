@@ -40,7 +40,7 @@ serve(async (req) => {
 
       // Inviter l'utilisateur — Supabase envoie un email avec le lien de définition du mot de passe
       const { data: invited, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-        redirectTo: 'https://jtechserge.github.io/planningamivet/amivet-planning.html',
+        redirectTo: 'https://jtechserge.github.io/amivetpulse/amivet-pulse.html',
         data: { display_name, role },
       });
       if (inviteError) throw new Error(inviteError.message);

@@ -33,7 +33,7 @@ function addDaysIso(iso: string, days: number){
 }
 function emptyCalendar(personLabel: string){
   return [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Amivet Planning//Calendar Sync//FR',
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Amivet PULSE//Calendar Sync//FR',
     'CALSCALE:GREGORIAN', `X-WR-CALNAME:${icsEscape(`Amivet — ${personLabel}`)}`,
     'REFRESH-INTERVAL;VALUE=DURATION:PT4H', 'X-PUBLISHED-TTL:PT4H', 'END:VCALENDAR',
   ].join('\r\n');
@@ -128,7 +128,7 @@ Deno.serve(async (req) => {
     const lines: string[] = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//Amivet Planning//Calendar Sync//FR',
+      'PRODID:-//Amivet PULSE//Calendar Sync//FR',
       'CALSCALE:GREGORIAN',
       `X-WR-CALNAME:${icsEscape(`Amivet — ${personLabel}`)}`,
       `X-APPLE-CALENDAR-COLOR:${hexColor}`,
@@ -138,7 +138,7 @@ Deno.serve(async (req) => {
     ];
     for(const ev of events){
       const summary = ev.status === 'present' ? 'Présent — Clinique Amivet' : `Absent${ev.label ? ' — ' + ev.label : ''}`;
-      const uid = `${personId}-${ev.start}-${ev.status}@amivet-planning`;
+      const uid = `${personId}-${ev.start}-${ev.status}@amivet-pulse`;
       lines.push(
         'BEGIN:VEVENT',
         `UID:${uid}`,
@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
     return new Response(lines.join('\r\n'), {
       headers: {
         'Content-Type': 'text/calendar; charset=utf-8',
-        'Content-Disposition': 'inline; filename="amivet-planning.ics"',
+        'Content-Disposition': 'inline; filename="amivet-pulse.ics"',
         'Cache-Control': 'no-cache',
       },
     });

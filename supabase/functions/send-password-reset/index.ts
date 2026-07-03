@@ -45,14 +45,14 @@ Deno.serve(async (req) => {
     const text = [
       'Bonjour,',
       '',
-      'Une réinitialisation du mot de passe de l\'onglet Tableau de bord d\'Amivet Planning a été demandée.',
+      'Une réinitialisation du mot de passe de l\'onglet Tableau de bord d\'Amivet PULSE a été demandée.',
       '',
       'Cliquez sur ce lien pour choisir un nouveau mot de passe (valable 30 minutes) :',
       resetLink,
       '',
       'Si vous n\'êtes pas à l\'origine de cette demande, ignorez cet email : aucun changement ne sera effectué.',
       '',
-      '— Amivet Planning (envoi automatique)',
+      '— Amivet PULSE (envoi automatique)',
     ].join('\n');
     const html = wrapEmailHtml(`
       <h1 style="font-size:18px;color:${COLORS.text};margin:0 0 12px;">🔑 Réinitialisation du mot de passe</h1>
@@ -67,9 +67,9 @@ Deno.serve(async (req) => {
       method: 'POST',
       headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: 'Amivet Planning <onboarding@resend.dev>',
+        from: 'Amivet PULSE <onboarding@resend.dev>',
         to: [recipient],
-        subject: 'Amivet Planning — Réinitialisation du mot de passe',
+        subject: 'Amivet PULSE — Réinitialisation du mot de passe',
         text,
         html,
       }),
