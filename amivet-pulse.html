@@ -1237,13 +1237,6 @@ function openEditUserModal(userId, users, onBack){
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
 
-  const isASV = user.role === 'asv';
-  const personOptions = [
-    `<option value="">— Aucun profil lié —</option>`,
-    ...PEOPLE.map(p=>`<option value="${p.id}" ${user.person_id===p.id?'selected':''}>${escapeHTML(p.short)} (Vétérinaire)</option>`),
-    ...ASV_PEOPLE.map(p=>`<option value="${p.id}" ${user.person_id===p.id?'selected':''}>${escapeHTML(p.short)} (ASV)</option>`),
-  ].join('');
-
   box.innerHTML = `
     <h3>Modifier ${escapeHTML(user.display_name||user.email||'collaborateur')}</h3>
     <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
@@ -1264,14 +1257,10 @@ function openEditUserModal(userId, users, onBack){
         </select>
       </div>
       <div>
-        <label class="text-muted" style="font-size:12px;display:block;margin-bottom:4px;">Profil planning lié</label>
-        <select id="edit-person-id" style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">${personOptions}</select>
-      </div>
-      <div id="edit-asv-perms" style="${isASV?'':'display:none;'}">
-        <label class="text-muted" style="font-size:12px;display:block;margin-bottom:8px;">Droits supplémentaires (ASV)</label>
+        <label class="text-muted" style="font-size:12px;display:block;margin-bottom:8px;">Droits de modification des plannings</label>
         <label style="font-size:13px;display:flex;align-items:center;gap:8px;margin-bottom:6px;">
           <input type="checkbox" id="edit-vet-cal" ${user.can_edit_vet_calendar?'checked':''}>
-          Peut modifier le calendrier vétérinaires
+          Peut modifier le planning vétérinaires
         </label>
         <label style="font-size:13px;display:flex;align-items:center;gap:8px;">
           <input type="checkbox" id="edit-all-asv" ${user.can_edit_all_asv?'checked':''}>
@@ -1294,17 +1283,11 @@ function openEditUserModal(userId, users, onBack){
     </div>
   `;
 
-  // Show/hide ASV perms when role changes
-  box.querySelector('#edit-role').addEventListener('change', e=>{
-    box.querySelector('#edit-asv-perms').style.display = e.target.value==='asv' ? '' : 'none';
-  });
-
   box.querySelector('#edit-back').onclick = ()=> onBack();
   box.querySelector('#edit-save').onclick = async ()=>{
     const displayName = box.querySelector('#edit-display-name').value.trim();
     const email = box.querySelector('#edit-email').value.trim();
     const role = box.querySelector('#edit-role').value;
-    const personId = box.querySelector('#edit-person-id').value || null;
     const canVet = box.querySelector('#edit-vet-cal').checked;
     const canAsv = box.querySelector('#edit-all-asv').checked;
     const errEl = box.querySelector('#edit-error');
@@ -1313,7 +1296,7 @@ function openEditUserModal(userId, users, onBack){
     try{
       const payload = {
         action:'update', user_id:userId,
-        display_name:displayName, role, person_id:personId,
+        display_name:displayName, role,
         can_edit_vet_calendar:canVet, can_edit_all_asv:canAsv,
       };
       if(email && email !== user.email) payload.email = email;
