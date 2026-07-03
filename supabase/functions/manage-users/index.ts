@@ -16,15 +16,22 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-    // Client avec clé service pour les opérations admin
+    // Client avec clé service pour les opérations admin (bypass RLS)
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
-    // Client avec le token de l'appelant pour vérifier son rôle
-    const callerClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
-      global: { headers: { Authorization: authHeader } },
-    });
 
-    const { data: profile } = await callerClient.from('user_profiles').select('role').single();
+    // Vérifier l'identité du demandeur via l'API Auth (évite la récursion RLS de user_profiles)
+    const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: { apikey: anonKey, Authorization: authHeader },
+    });
+    if (!userRes.ok) {
+      return new Response(JSON.stringify({ error: 'Token invalide.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    const authUser = await userRes.json();
+
+    // Lire le profil via service role (bypass RLS) pour éviter la récursion infinie
+    const { data: profile } = await adminClient.from('user_profiles').select('role').eq('id', authUser.id).single();
     if (!profile || profile.role !== 'admin') {
       return new Response(JSON.stringify({ error: 'Accès réservé à l\'administrateur.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
