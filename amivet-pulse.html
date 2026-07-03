@@ -1874,6 +1874,7 @@ async function syncFromSupabase(){
 // pas besoin de la sophistication du sync push/pull de planning_data, ces écritures sont
 // rares et ponctuelles (quelques-unes par mois, pas par clic).
 const SIGNATURES = new Set();
+let pendingSignToken = null; // token ?sign=UUID capturé dans l'URL avant authentification
 let INTERVIEWS = [];
 function signatureKey(personId, year, month){ return `${personId}|${year}|${month}`; }
 function isMonthSigned(personId, year, month){ return SIGNATURES.has(signatureKey(personId, year, month)); }
@@ -3193,10 +3194,15 @@ function buildSignaturePanelHtml(viewKey){
                 return `<span class="text-muted" style="font-size:12.5px;">✅ Signé par ${escapeHTML(detail.signedName)} le ${signedDate}</span>`;
               })()
             : '';
+          // Le bouton n'est visible que pour l'ASV elle-même (pas admin en impersonation)
+          const isOwn = currentUser?.person_id === p.id && currentUser?.role === 'asv';
+          const signBtn = isOwn && !detail
+            ? `<button type="button" class="btn" data-sign-person="${p.id}" style="font-size:12.5px;padding:6px 12px;">Signer ma feuille de présence</button>`
+            : '';
           return `<div class="signature-row">
             <span style="color:${p.color};font-weight:700;">${escapeHTML(p.short)}</span>
             ${signedNote}
-            <button type="button" class="btn" data-sign-person="${p.id}" style="font-size:12.5px;padding:6px 12px;" ${detail?'disabled title="Déjà signé — verrouillé"':''}>Signer ma feuille de présence</button>
+            ${signBtn}
           </div>`;
         }).join('')}
       </div>
@@ -3218,45 +3224,73 @@ function buildPrintSignatureStatusHtml(viewKey){
   });
   return `<p class="print-signature-status">✍️ ${parts.join('&nbsp;&nbsp;—&nbsp;&nbsp;')}</p>`;
 }
-function openSignMonthModal(viewKey, personId){
+// Demande de signature : envoie un email à l'ASV avec le récap du mois + lien unique.
+// La vraie signature n'est enregistrée que lorsqu'elle clique ce lien (confirm-signature).
+async function requestSignatureEmail(viewKey, personId){
   const cfg = CAL_VIEWS[viewKey];
   const month = cfg.navState.month;
-  const person = personOf(personId);
-  const monthLabel = `${MONTH_NAMES[month]} ${cfg.year}`;
+  const btn = document.querySelector(`[data-sign-person="${personId}"]`);
+  if(btn){ btn.disabled = true; btn.textContent = 'Envoi…'; }
+  try{
+    const res = await fetch(`${SUPABASE_FUNCTIONS_URL}request-signature`, {
+      method: 'POST',
+      headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ year: cfg.year, month }),
+    });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || 'Erreur inconnue');
+    showToast(`Email de signature envoyé à ${currentUser.email}`, '📧');
+    renderCalendarView(viewKey);
+  }catch(e){
+    showToast(`Échec de l'envoi — ${e.message || 'erreur réseau'}`, '❌');
+    if(btn){ btn.disabled = false; btn.textContent = 'Signer ma feuille de présence'; }
+  }
+}
+
+// Affiche le modal de confirmation de signature (déclenché après ouverture du lien email).
+function openSignConfirmModal(tokenId){
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
   box.innerHTML = `
-    <h3>✍️ Signer la feuille de présence</h3>
-    <p>${escapeHTML(person.short)} certifie que les informations de présence pour <strong>${monthLabel}</strong> sont exactes. Une fois signé, ce mois sera verrouillé.</p>
-    <input type="text" id="sign-name-input" placeholder="Tapez votre nom pour confirmer" value="${escapeHTML(person.short)}">
-    <p id="sign-error" style="color:#B91C1C;font-size:12px;display:none;margin:10px 0 0;"></p>
-    <div class="modal-actions" style="margin-top:16px;">
+    <h3>✍️ Confirmer ma signature</h3>
+    <p style="margin-bottom:12px;">Vous allez signer électroniquement votre feuille de présence. Votre identité, email et l'horodatage seront enregistrés de façon permanente.</p>
+    <div style="background:#F0FDF9;border:1px solid #99F6E4;border-radius:8px;padding:12px 14px;font-size:13px;color:#0F766E;margin-bottom:14px;line-height:1.6;">
+      <strong>Signataire :</strong> ${escapeHTML(currentUser.display_name || currentUser.email)}<br>
+      <strong>Email :</strong> ${escapeHTML(currentUser.email)}
+    </div>
+    <p id="sign-confirm-error" style="color:#B91C1C;font-size:12px;display:none;margin:0 0 10px;"></p>
+    <div class="modal-actions" style="margin-top:4px;">
       <button class="btn" id="modal-cancel">Annuler</button>
-      <button class="btn btn-primary" id="sign-confirm">Signer</button>
+      <button class="btn btn-primary" id="sign-do-confirm">✍️ Confirmer ma signature</button>
     </div>
   `;
   backdrop.classList.add('open');
   const close = ()=> backdrop.classList.remove('open');
   box.querySelector('#modal-cancel').onclick = close;
   backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
-  box.querySelector('#sign-name-input').focus();
-  box.querySelector('#sign-confirm').onclick = async ()=>{
-    const name = box.querySelector('#sign-name-input').value.trim();
-    const errorEl = box.querySelector('#sign-error');
-    if(!name){
-      errorEl.textContent = 'Merci de saisir un nom.';
-      errorEl.style.display = 'block';
-      return;
-    }
+  box.querySelector('#sign-do-confirm').onclick = async ()=>{
+    const confirmBtn = box.querySelector('#sign-do-confirm');
+    const errorEl = box.querySelector('#sign-confirm-error');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Signature en cours…';
     try{
-      await signMonth(personId, cfg.year, month, name);
+      const res = await fetch(`${SUPABASE_FUNCTIONS_URL}confirm-signature`, {
+        method: 'POST',
+        headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ token_id: tokenId }),
+      });
+      const data = await res.json();
+      if(!data.ok) throw new Error(data.error || 'Erreur inconnue');
       close();
-      showToast(`Feuille de présence de ${person.short} signée`, '✍️');
+      await loadSignatures();
+      renderCalendarView('asv-current');
+      showToast('Feuille de présence signée — email de confirmation envoyé', '✅');
     }catch(e){
-      errorEl.textContent = 'Échec de la signature (connexion impossible).';
+      errorEl.textContent = e.message || 'Échec de la signature.';
       errorEl.style.display = 'block';
-      console.warn(e);
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = '✍️ Confirmer ma signature';
     }
   };
 }
@@ -3282,7 +3316,7 @@ function renderCalendarView(viewKey){
     ${buildSignaturePanelHtml(viewKey)}
   `;
   container.querySelectorAll('[data-sign-person]').forEach(btn=>{
-    btn.onclick = ()=> openSignMonthModal(viewKey, btn.dataset.signPerson);
+    btn.onclick = ()=> requestSignatureEmail(viewKey, btn.dataset.signPerson);
   });
 }
 VIEW_RENDERERS['vets'] = ()=> renderGroupSubPage('vets');
@@ -4984,6 +5018,12 @@ function initApp(){
   loadSignatures();
   loadInterviews();
   document.getElementById('login-overlay').classList.add('hidden');
+  // Ouvrir le modal de confirmation si l'utilisateur vient d'un lien de signature email
+  if(pendingSignToken){
+    const token = pendingSignToken;
+    pendingSignToken = null;
+    openSignConfirmModal(token);
+  }
 }
 
 async function init(){
@@ -4995,6 +5035,16 @@ async function init(){
   if((type === 'recovery' || type === 'invite') && accessToken){
     renderSetPasswordScreen(accessToken, type === 'invite');
     return;
+  }
+
+  // Lien de signature reçu par email (?sign=UUID) — stocker le token avant l'auth,
+  // puis le traiter dans initApp() une fois l'utilisateur identifié.
+  const signToken = query.get('sign');
+  if(signToken){
+    pendingSignToken = signToken;
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete('sign');
+    history.replaceState({}, '', cleanUrl.toString());
   }
 
   const session = getAuthSession();
