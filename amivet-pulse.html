@@ -299,6 +299,9 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-cell.cal-cell-locked:hover{filter:grayscale(35%);}
 .cal-cell.cal-cell-readonly{cursor:default;opacity:0.70;filter:grayscale(20%);}
 .cal-cell.cal-cell-readonly:hover{filter:grayscale(20%);}
+.cal-row-archived .cal-cell{opacity:0.40;filter:grayscale(60%);}
+.cal-row-archived .cal-cell:hover{filter:grayscale(60%);}
+.row-label-archived{font-style:italic;opacity:0.55;}
 /* Contrôle du temps de travail ASV */
 .hours-control-grid{display:flex;flex-direction:column;gap:16px;}
 .hours-control-row{display:grid;grid-template-columns:90px 40px 1fr 1fr 1fr;gap:12px;align-items:start;}
@@ -811,7 +814,7 @@ function reindexPresentShades(){
   ASV_PEOPLE.forEach((p,i)=> p.present = PRESENT_SHADES[i % PRESENT_SHADES.length]);
 }
 function saveASVRoster(){
-  localStorage.setItem(ASV_ROSTER_KEY, JSON.stringify(ASV_PEOPLE.map(p=>({ id:p.id, name:p.name, short:p.short, initial:p.initial, color:p.color, timeFraction:p.timeFraction ?? 1.0 }))));
+  localStorage.setItem(ASV_ROSTER_KEY, JSON.stringify(ASV_PEOPLE.map(p=>({ id:p.id, name:p.name, short:p.short, initial:p.initial, color:p.color, timeFraction:p.timeFraction ?? 1.0, archived:p.archived ?? false }))));
 }
 function loadASVRoster(){
   try{
@@ -820,7 +823,7 @@ function loadASVRoster(){
       const saved = JSON.parse(raw);
       if(Array.isArray(saved) && saved.length){
         ASV_PEOPLE.length = 0;
-        saved.forEach(p=> ASV_PEOPLE.push({ id:p.id, name:p.name, short:p.short, initial:p.initial, color:p.color, present:null, timeFraction:p.timeFraction ?? 1.0 }));
+        saved.forEach(p=> ASV_PEOPLE.push({ id:p.id, name:p.name, short:p.short, initial:p.initial, color:p.color, present:null, timeFraction:p.timeFraction ?? 1.0, archived:p.archived ?? false }));
       }
     }
   }catch(e){ console.warn('Effectif ASV personnalisé illisible, valeurs par défaut conservées.', e); }
@@ -848,13 +851,19 @@ function addASVPerson(name){
   applyPersonColorVars();
   return person;
 }
-// Retire une ASV du planning. Ses données saisies (présences, demandes de congé) restent
-// dans le stockage local mais ne sont plus affichées nulle part — elles seraient
-// récupérables en recréant une ASV avec exactement le même identifiant interne.
-function removeASVPerson(id){
-  const idx = ASV_PEOPLE.findIndex(p=>p.id===id);
-  if(idx === -1) return;
-  ASV_PEOPLE.splice(idx,1);
+// Archive une ASV : la ligne reste dans le calendrier mais devient grisée et en lecture
+// seule pour tout le monde. Les données de présence sont conservées.
+function archiveASVPerson(id){
+  const p = ASV_PEOPLE.find(x=>x.id===id);
+  if(!p) return;
+  p.archived = true;
+  reindexPresentShades();
+  saveASVRoster();
+}
+function unarchiveASVPerson(id){
+  const p = ASV_PEOPLE.find(x=>x.id===id);
+  if(!p) return;
+  p.archived = false;
   reindexPresentShades();
   saveASVRoster();
 }
@@ -1042,141 +1051,183 @@ function openManageUsersModal(){
   const close = ()=> backdrop.classList.remove('open');
   backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
 
-  fetch(`${SUPABASE_URL}user_profiles?select=id,role,person_id,display_name,can_edit_vet_calendar,can_edit_all_asv`, { headers:supabaseHeaders() })
-    .then(r=>r.json()).then(users=>{
-      const roleLabels = { admin:'Admin', vet:'Vétérinaire', asv:'ASV' };
-      const rows = users.map(u=>`
-        <tr>
-          <td style="font-weight:600;">${escapeHTML(u.display_name)}</td>
-          <td style="font-size:12px;color:var(--color-text-muted);">${escapeHTML(u.role ? roleLabels[u.role]||u.role : '')}</td>
-          <td style="font-size:12px;">${u.can_edit_vet_calendar ? '✅' : '—'}</td>
-          <td style="font-size:12px;">${u.can_edit_all_asv ? '✅' : '—'}</td>
-          <td style="display:flex;gap:5px;padding:6px;">
-            <button class="btn btn-sm" data-edit-user="${u.id}" style="font-size:11.5px;padding:4px 8px;">Modifier</button>
-            <button class="btn btn-sm" data-delete-user="${u.id}" data-delete-name="${escapeHTML(u.display_name)}" style="font-size:11.5px;padding:4px 8px;color:#B91C1C;border-color:#FCA5A5;" title="Supprimer ce compte">🗑️</button>
-          </td>
-        </tr>`).join('');
-      box.innerHTML = `
-        <h3>👥 Gestion des collaborateurs</h3>
-        <table class="recap-table" style="margin-bottom:16px;">
-          <thead><tr><th style="text-align:left;">Nom</th><th>Rôle</th><th title="Peut modifier le calendrier vétérinaires">Modif. vétos</th><th title="Peut modifier toutes les lignes ASV">Modif. ASV</th><th></th></tr></thead>
-          <tbody>${rows}</tbody>
+  fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
+    method:'POST', headers:supabaseHeaders({'Content-Type':'application/json'}),
+    body:JSON.stringify({ action:'list' }),
+  }).then(r=>r.json()).then(data=>{
+    if(!data.ok) throw new Error(data.error||'Erreur');
+    const users = data.users;
+    const roleLabels = { admin:'Admin', vet:'Vétérinaire', asv:'ASV' };
+
+    const rows = users.map(u=>{
+      const isASV = u.role === 'asv';
+      return `<tr>
+        <td style="font-weight:600;">${escapeHTML(u.display_name||'—')}</td>
+        <td style="font-size:12px;color:var(--color-text-muted);">${roleLabels[u.role]||u.role||'—'}</td>
+        <td style="font-size:12px;color:var(--color-text-muted);">${escapeHTML(u.email||'—')}</td>
+        <td style="font-size:12px;text-align:center;">${isASV ? (u.can_edit_vet_calendar ? '✅' : '—') : '<span style="color:var(--color-text-muted)">N/A</span>'}</td>
+        <td style="font-size:12px;text-align:center;">${isASV ? (u.can_edit_all_asv ? '✅' : '—') : '<span style="color:var(--color-text-muted)">N/A</span>'}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-sm" data-edit-user="${u.id}" style="font-size:11.5px;padding:4px 8px;margin-right:4px;">Modifier</button>
+          <button class="btn btn-sm" data-delete-user="${u.id}" data-delete-name="${escapeHTML(u.display_name||u.email||u.id)}" style="font-size:11.5px;padding:4px 8px;color:#B91C1C;border-color:#FCA5A5;" title="Supprimer ce compte">🗑️</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    const activeASV = ASV_PEOPLE.filter(p=>!p.archived);
+    const archivedASV = ASV_PEOPLE.filter(p=>p.archived);
+
+    const activeChips = activeASV.map(p=>{
+      const f = p.timeFraction??1.0;
+      return `<span class="asv-roster-chip" style="border-color:${p.color};">
+        <span style="width:9px;height:9px;border-radius:50%;background:${p.color};display:inline-block;flex-shrink:0;"></span>
+        ${escapeHTML(p.short)}
+        <select class="fraction-select" data-manage-fraction="${p.id}" style="background:transparent;border:1px solid var(--color-border);border-radius:5px;font-size:11px;padding:1px 3px;font-family:inherit;">
+          ${[[1,'100%'],[0.8,'80%'],[0.75,'75%'],[0.5,'50%']].map(([v,l])=>`<option value="${v}" ${f===v?'selected':''}>${l}</option>`).join('')}
+        </select>
+        <button type="button" class="asv-remove-btn" data-manage-archive-asv="${p.id}" title="Archiver ${escapeHTML(p.short)} (ligne grisée, lecture seule)">✕</button>
+      </span>`;
+    }).join('') || `<span class="text-muted" style="font-size:12px;">Aucune ASV active.</span>`;
+
+    const archivedSection = archivedASV.length ? `
+      <p class="text-muted" style="font-size:12px;margin:10px 0 6px;">Archivées (lecture seule dans le calendrier) :</p>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${archivedASV.map(p=>`
+          <span class="asv-roster-chip" style="border-color:var(--color-border);opacity:0.6;">
+            <span style="width:9px;height:9px;border-radius:50%;background:var(--color-text-muted);display:inline-block;flex-shrink:0;"></span>
+            <span style="font-style:italic;">${escapeHTML(p.short)}</span>
+            <button type="button" class="asv-remove-btn" data-manage-unarchive-asv="${p.id}" title="Restaurer ${escapeHTML(p.short)} dans le planning" style="color:var(--color-primary);">↩</button>
+          </span>`).join('')}
+      </div>` : '';
+
+    box.innerHTML = `
+      <h3>👥 Gestion des collaborateurs</h3>
+      <div style="overflow-x:auto;margin-bottom:16px;">
+        <table class="recap-table" style="min-width:600px;">
+          <thead><tr>
+            <th style="text-align:left;">Nom</th>
+            <th style="text-align:left;">Rôle</th>
+            <th style="text-align:left;">Email</th>
+            <th title="Peut modifier le calendrier vétérinaires">Modif. vétos</th>
+            <th title="Peut modifier toutes les lignes ASV">Modif. ASV</th>
+            <th></th>
+          </tr></thead>
+          <tbody>${rows||'<tr><td colspan="6" class="text-muted" style="text-align:center;padding:16px;">Aucun collaborateur.</td></tr>'}</tbody>
         </table>
-        <div style="border-top:1px solid var(--color-border);padding-top:14px;margin-bottom:14px;">
-          <h4 style="font-size:14px;margin-bottom:10px;">Effectif ASV (planning)</h4>
-          <p class="text-muted" style="font-size:12px;margin-bottom:10px;">Taux de travail et ajout/retrait du planning (indépendant du compte de connexion).</p>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-            ${ASV_PEOPLE.map(p=>{
-              const f=p.timeFraction??1.0;
-              return `<span class="asv-roster-chip" style="border-color:${p.color};">
-                <span style="width:9px;height:9px;border-radius:50%;background:${p.color};display:inline-block;"></span>
-                ${escapeHTML(p.short)}
-                <select class="fraction-select" data-manage-fraction="${p.id}" style="background:transparent;border:1px solid var(--color-border);border-radius:5px;font-size:11px;padding:1px 3px;font-family:inherit;">
-                  ${[[1,'100%'],[0.8,'80%'],[0.75,'75%'],[0.5,'50%']].map(([v,l])=>`<option value="${v}" ${f===v?'selected':''}>${l}</option>`).join('')}
-                </select>
-                <button type="button" class="asv-remove-btn" data-manage-remove-asv="${p.id}" title="Retirer ${escapeHTML(p.short)} du planning">✕</button>
-              </span>`;
-            }).join('')||`<span class="text-muted" style="font-size:12px;">Aucune ASV.</span>`}
-          </div>
-          <div style="display:flex;gap:8px;">
-            <input type="text" id="manage-asv-name" placeholder="Ajouter une ASV au planning…" maxlength="30" style="flex:1;padding:7px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
-            <button class="btn btn-primary" id="manage-asv-add">+ Ajouter</button>
-          </div>
+      </div>
+      <div style="border-top:1px solid var(--color-border);padding-top:14px;margin-bottom:14px;">
+        <h4 style="font-size:14px;margin-bottom:6px;">Effectif ASV (planning)</h4>
+        <p class="text-muted" style="font-size:12px;margin-bottom:10px;">Taux de travail et archivage du planning (indépendant du compte de connexion).</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px;">${activeChips}</div>
+        ${archivedSection}
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <input type="text" id="manage-asv-name" placeholder="Ajouter une ASV au planning…" maxlength="30" style="flex:1;padding:7px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
+          <button class="btn btn-primary" id="manage-asv-add">+ Ajouter</button>
         </div>
-        <div style="border-top:1px solid var(--color-border);padding-top:14px;">
-          <h4 style="font-size:14px;margin-bottom:10px;">Inviter un collaborateur</h4>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end;margin-bottom:8px;">
-            <input type="text" id="invite-name" placeholder="Nom affiché (ex. Stéphane)" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
-            <input type="email" id="invite-email" placeholder="Email (ex. stephmaq@hotmail.fr)" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end;">
-            <select id="invite-role" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
-              <option value="vet">Vétérinaire</option>
-              <option value="asv">ASV</option>
-              <option value="admin">Admin</option>
-            </select>
-            <select id="invite-person-id" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
-              <option value="">— Aucun profil lié —</option>
-              ${PEOPLE.map(p=>`<option value="${p.id}">${escapeHTML(p.short)} (Vétérinaire)</option>`).join('')}
-              ${ASV_PEOPLE.map(p=>`<option value="${p.id}">${escapeHTML(p.short)} (ASV)</option>`).join('')}
-            </select>
-          </div>
-          <p id="invite-error" style="color:#B91C1C;font-size:12px;display:none;margin:8px 0 0;"></p>
-          <div class="modal-actions" style="margin-top:12px;">
-            <button class="btn" id="modal-cancel">Fermer</button>
-            <button class="btn btn-primary" id="invite-btn">Envoyer l'invitation</button>
-          </div>
+      </div>
+      <div style="border-top:1px solid var(--color-border);padding-top:14px;">
+        <h4 style="font-size:14px;margin-bottom:10px;">Inviter un collaborateur</h4>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end;margin-bottom:8px;">
+          <input type="text" id="invite-name" placeholder="Nom affiché" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
+          <input type="email" id="invite-email" placeholder="Email" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
+          <select id="invite-role" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
+            <option value="vet">Vétérinaire</option>
+            <option value="asv">ASV</option>
+            <option value="admin">Admin</option>
+          </select>
         </div>
-      `;
-      box.querySelector('#modal-cancel').onclick = close;
-      backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
-      box.querySelectorAll('[data-edit-user]').forEach(btn=>{
-        btn.onclick = ()=> openEditUserModal(btn.dataset.editUser, users, close);
-      });
-      box.querySelectorAll('[data-delete-user]').forEach(btn=>{
-        btn.onclick = ()=> openConfirmModal({
-          title:`Supprimer le compte de ${btn.dataset.deleteName} ?`,
-          message:`Le compte sera définitivement supprimé. Cette action est irréversible. Les données de planning restent enregistrées.`,
-          confirmLabel:'Supprimer le compte',
-          danger:true,
-          onConfirm: async ()=>{
-            try{
-              const res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
-                method:'POST', headers:supabaseHeaders({'Content-Type':'application/json'}),
-                body:JSON.stringify({ action:'delete', user_id:btn.dataset.deleteUser }),
-              });
-              if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
-              showToast(`Compte supprimé`, '🗑️');
-              openManageUsersModal();
-            }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
-          },
-        });
-      });
-      // Effectif ASV — taux de travail
-      box.querySelectorAll('[data-manage-fraction]').forEach(sel=>{
-        sel.addEventListener('change',()=>{ setASVTimeFraction(sel.dataset.manageFraction,parseFloat(sel.value)); showToast('Taux mis à jour','✅'); });
-      });
-      // Effectif ASV — retrait
-      box.querySelectorAll('[data-manage-remove-asv]').forEach(btn=>{
-        btn.onclick=()=> openConfirmModal({
-          title:`Retirer ${personOf(btn.dataset.manageRemoveAsv)?.short||''} du planning ?`,
-          message:`Cette personne n'apparaîtra plus dans les calendriers. Ses données restent enregistrées.`,
-          confirmLabel:'Retirer', danger:true,
-          onConfirm:()=>{ removeASVPerson(btn.dataset.manageRemoveAsv); openManageUsersModal(); showToast('ASV retirée du planning','🗑️'); }
-        });
-      });
-      // Effectif ASV — ajout
-      const asvNameInput=box.querySelector('#manage-asv-name');
-      box.querySelector('#manage-asv-add').onclick=()=>{
-        const p=addASVPerson(asvNameInput.value);
-        if(!p){ asvNameInput.focus(); return; }
-        openManageUsersModal(); showToast(`${p.short} ajoutée au planning`,'➕');
-      };
-      asvNameInput.addEventListener('keydown',(e)=>{ if(e.key==='Enter') box.querySelector('#manage-asv-add').click(); });
-      box.querySelector('#invite-btn').onclick = async ()=>{
-        const name = box.querySelector('#invite-name').value.trim();
-        const email = box.querySelector('#invite-email').value.trim();
-        const role = box.querySelector('#invite-role').value;
-        const personId = box.querySelector('#invite-person-id').value || null;
-        const errEl = box.querySelector('#invite-error');
-        if(!name || !email){ errEl.textContent='Nom et email requis.'; errEl.style.display='block'; return; }
-        box.querySelector('#invite-btn').disabled = true;
-        try{
-          const res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
-            method:'POST', headers:supabaseHeaders({'Content-Type':'application/json'}),
-            body:JSON.stringify({ action:'invite', email, display_name:name, role, person_id:personId }),
-          });
-          if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
-          close(); showToast(`Invitation envoyée à ${email}`, '📧');
-        }catch(e){
-          errEl.textContent = e.message; errEl.style.display='block';
-          box.querySelector('#invite-btn').disabled = false;
-        }
-      };
-    }).catch(()=>{
-      box.innerHTML = `<h3>👥 Collaborateurs</h3><p class="text-muted">Impossible de charger la liste.</p><div class="modal-actions"><button class="btn" id="modal-cancel">Fermer</button></div>`;
-      box.querySelector('#modal-cancel').onclick = close;
+        <p id="invite-error" style="color:#B91C1C;font-size:12px;display:none;margin:4px 0 0;"></p>
+        <div class="modal-actions" style="margin-top:12px;">
+          <button class="btn" id="modal-cancel">Fermer</button>
+          <button class="btn btn-primary" id="invite-btn">📧 Envoyer l'invitation</button>
+        </div>
+      </div>
+    `;
+
+    box.querySelector('#modal-cancel').onclick = close;
+    backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+
+    box.querySelectorAll('[data-edit-user]').forEach(btn=>{
+      btn.onclick = ()=> openEditUserModal(btn.dataset.editUser, users, ()=> openManageUsersModal());
     });
+    box.querySelectorAll('[data-delete-user]').forEach(btn=>{
+      btn.onclick = ()=> openConfirmModal({
+        title:`Supprimer le compte de ${btn.dataset.deleteName} ?`,
+        message:`Le compte sera définitivement supprimé. Cette action est irréversible. Les données de planning restent enregistrées.`,
+        confirmLabel:'Supprimer le compte',
+        danger:true,
+        onConfirm: async ()=>{
+          try{
+            const res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
+              method:'POST', headers:supabaseHeaders({'Content-Type':'application/json'}),
+              body:JSON.stringify({ action:'delete', user_id:btn.dataset.deleteUser }),
+            });
+            if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
+            showToast(`Compte supprimé`, '🗑️');
+            openManageUsersModal();
+          }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
+        },
+      });
+    });
+
+    // Effectif ASV — taux de travail
+    box.querySelectorAll('[data-manage-fraction]').forEach(sel=>{
+      sel.addEventListener('change',()=>{ setASVTimeFraction(sel.dataset.manageFraction,parseFloat(sel.value)); showToast('Taux mis à jour','✅'); });
+    });
+
+    // Effectif ASV — archivage
+    box.querySelectorAll('[data-manage-archive-asv]').forEach(btn=>{
+      btn.onclick=()=> openConfirmModal({
+        title:`Archiver ${personOf(btn.dataset.manageArchiveAsv)?.short||''} ?`,
+        message:`La ligne restera visible dans le calendrier, grisée et en lecture seule. Ses données sont conservées. Vous pourrez la restaurer à tout moment.`,
+        confirmLabel:'Archiver', danger:false,
+        onConfirm:()=>{ archiveASVPerson(btn.dataset.manageArchiveAsv); openManageUsersModal(); showToast('ASV archivée','🗃️'); }
+      });
+    });
+
+    // Effectif ASV — restauration
+    box.querySelectorAll('[data-manage-unarchive-asv]').forEach(btn=>{
+      btn.onclick=()=>{ unarchiveASVPerson(btn.dataset.manageUnarchiveAsv); openManageUsersModal(); showToast('ASV restaurée','✅'); };
+    });
+
+    // Effectif ASV — ajout
+    const asvNameInput = box.querySelector('#manage-asv-name');
+    box.querySelector('#manage-asv-add').onclick=()=>{
+      const p = addASVPerson(asvNameInput.value);
+      if(!p){ asvNameInput.focus(); return; }
+      openManageUsersModal(); showToast(`${p.short} ajoutée au planning`,'➕');
+    };
+    asvNameInput.addEventListener('keydown',(e)=>{ if(e.key==='Enter') box.querySelector('#manage-asv-add').click(); });
+
+    // Invitation
+    box.querySelector('#invite-btn').onclick = async ()=>{
+      const name = box.querySelector('#invite-name').value.trim();
+      const email = box.querySelector('#invite-email').value.trim();
+      const role = box.querySelector('#invite-role').value;
+      const errEl = box.querySelector('#invite-error');
+      if(!name || !email){ errEl.textContent='Nom et email requis.'; errEl.style.display='block'; return; }
+      box.querySelector('#invite-btn').disabled = true;
+      try{
+        const res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
+          method:'POST', headers:supabaseHeaders({'Content-Type':'application/json'}),
+          body:JSON.stringify({ action:'invite', email, display_name:name, role }),
+        });
+        if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
+        showToast(`Invitation envoyée à ${email}`, '📧');
+        box.querySelector('#invite-name').value='';
+        box.querySelector('#invite-email').value='';
+        errEl.style.display='none';
+        box.querySelector('#invite-btn').disabled = false;
+        openManageUsersModal();
+      }catch(e){
+        errEl.textContent = e.message; errEl.style.display='block';
+        box.querySelector('#invite-btn').disabled = false;
+      }
+    };
+  }).catch(err=>{
+    box.innerHTML = `<h3>👥 Collaborateurs</h3><p class="text-muted">Impossible de charger la liste : ${escapeHTML(err.message)}.</p><div class="modal-actions"><button class="btn" id="modal-cancel">Fermer</button></div>`;
+    box.querySelector('#modal-cancel').onclick = close;
+  });
 }
 
 function openEditUserModal(userId, users, onBack){
@@ -1185,44 +1236,126 @@ function openEditUserModal(userId, users, onBack){
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
+
+  const isASV = user.role === 'asv';
+  const personOptions = [
+    `<option value="">— Aucun profil lié —</option>`,
+    ...PEOPLE.map(p=>`<option value="${p.id}" ${user.person_id===p.id?'selected':''}>${escapeHTML(p.short)} (Vétérinaire)</option>`),
+    ...ASV_PEOPLE.map(p=>`<option value="${p.id}" ${user.person_id===p.id?'selected':''}>${escapeHTML(p.short)} (ASV)</option>`),
+  ].join('');
+
   box.innerHTML = `
-    <h3>Modifier ${escapeHTML(user.display_name)}</h3>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
-      <label style="font-size:13px;">
-        <span class="text-muted" style="display:block;margin-bottom:4px;">Modifier le calendrier vétos</span>
-        <input type="checkbox" id="edit-vet-cal" ${user.can_edit_vet_calendar?'checked':''}>
-        <span style="margin-left:6px;">Autorisé</span>
-      </label>
-      <label style="font-size:13px;">
-        <span class="text-muted" style="display:block;margin-bottom:4px;">Modifier toutes les lignes ASV</span>
-        <input type="checkbox" id="edit-all-asv" ${user.can_edit_all_asv?'checked':''}>
-        <span style="margin-left:6px;">Autorisé</span>
-      </label>
+    <h3>Modifier ${escapeHTML(user.display_name||user.email||'collaborateur')}</h3>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
+      <div>
+        <label class="text-muted" style="font-size:12px;display:block;margin-bottom:4px;">Nom affiché</label>
+        <input type="text" id="edit-display-name" value="${escapeHTML(user.display_name||'')}" style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;box-sizing:border-box;">
+      </div>
+      <div>
+        <label class="text-muted" style="font-size:12px;display:block;margin-bottom:4px;">Adresse email</label>
+        <input type="email" id="edit-email" value="${escapeHTML(user.email||'')}" style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;box-sizing:border-box;">
+      </div>
+      <div>
+        <label class="text-muted" style="font-size:12px;display:block;margin-bottom:4px;">Rôle</label>
+        <select id="edit-role" style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
+          <option value="vet" ${user.role==='vet'?'selected':''}>Vétérinaire</option>
+          <option value="asv" ${user.role==='asv'?'selected':''}>ASV</option>
+          <option value="admin" ${user.role==='admin'?'selected':''}>Admin</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-muted" style="font-size:12px;display:block;margin-bottom:4px;">Profil planning lié</label>
+        <select id="edit-person-id" style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">${personOptions}</select>
+      </div>
+      <div id="edit-asv-perms" style="${isASV?'':'display:none;'}">
+        <label class="text-muted" style="font-size:12px;display:block;margin-bottom:8px;">Droits supplémentaires (ASV)</label>
+        <label style="font-size:13px;display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <input type="checkbox" id="edit-vet-cal" ${user.can_edit_vet_calendar?'checked':''}>
+          Peut modifier le calendrier vétérinaires
+        </label>
+        <label style="font-size:13px;display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="edit-all-asv" ${user.can_edit_all_asv?'checked':''}>
+          Peut modifier toutes les lignes ASV
+        </label>
+      </div>
+      <div style="border-top:1px solid var(--color-border);padding-top:12px;">
+        <label class="text-muted" style="font-size:12px;display:block;margin-bottom:8px;">Accès au compte</label>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" id="edit-send-invite" style="font-size:12px;">📧 Renvoyer l'invitation</button>
+          <button class="btn" id="edit-send-reset" style="font-size:12px;">🔑 Réinitialiser le mot de passe</button>
+        </div>
+        <p id="edit-access-msg" style="font-size:12px;margin:6px 0 0;display:none;"></p>
+      </div>
     </div>
-    <p id="edit-error" style="color:#B91C1C;font-size:12px;display:none;"></p>
+    <p id="edit-error" style="color:#B91C1C;font-size:12px;display:none;margin-bottom:8px;"></p>
     <div class="modal-actions">
       <button class="btn" id="edit-back">← Retour</button>
       <button class="btn btn-primary" id="edit-save">Enregistrer</button>
     </div>
   `;
-  box.querySelector('#edit-back').onclick = ()=>{ onBack(); openManageUsersModal(); };
+
+  // Show/hide ASV perms when role changes
+  box.querySelector('#edit-role').addEventListener('change', e=>{
+    box.querySelector('#edit-asv-perms').style.display = e.target.value==='asv' ? '' : 'none';
+  });
+
+  box.querySelector('#edit-back').onclick = ()=> onBack();
   box.querySelector('#edit-save').onclick = async ()=>{
+    const displayName = box.querySelector('#edit-display-name').value.trim();
+    const email = box.querySelector('#edit-email').value.trim();
+    const role = box.querySelector('#edit-role').value;
+    const personId = box.querySelector('#edit-person-id').value || null;
     const canVet = box.querySelector('#edit-vet-cal').checked;
     const canAsv = box.querySelector('#edit-all-asv').checked;
     const errEl = box.querySelector('#edit-error');
+    if(!displayName){ errEl.textContent='Le nom est requis.'; errEl.style.display='block'; return; }
     box.querySelector('#edit-save').disabled = true;
     try{
-      const res = await fetch(`${SUPABASE_URL}user_profiles?id=eq.${userId}`, {
-        method:'PATCH', headers:supabaseHeaders({'Content-Type':'application/json','Prefer':'return=minimal'}),
-        body:JSON.stringify({ can_edit_vet_calendar:canVet, can_edit_all_asv:canAsv }),
+      const payload = {
+        action:'update', user_id:userId,
+        display_name:displayName, role, person_id:personId,
+        can_edit_vet_calendar:canVet, can_edit_all_asv:canAsv,
+      };
+      if(email && email !== user.email) payload.email = email;
+      const res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
+        method:'POST', headers:supabaseHeaders({'Content-Type':'application/json'}),
+        body:JSON.stringify(payload),
       });
-      if(!res.ok) throw new Error(`HTTP ${res.status}`);
-      backdrop.classList.remove('open'); showToast('Permissions mises à jour', '✅');
+      if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
+      showToast('Collaborateur mis à jour', '✅');
+      onBack();
     }catch(e){
       errEl.textContent=e.message; errEl.style.display='block';
       box.querySelector('#edit-save').disabled = false;
     }
   };
+
+  const sendAccessEmail = async (type)=>{
+    const msgEl = box.querySelector('#edit-access-msg');
+    msgEl.style.display='none';
+    box.querySelector('#edit-send-invite').disabled = true;
+    box.querySelector('#edit-send-reset').disabled = true;
+    try{
+      const res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
+        method:'POST', headers:supabaseHeaders({'Content-Type':'application/json'}),
+        body:JSON.stringify({ action:'send_access_email', user_id:userId, type }),
+      });
+      if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
+      const d = await res.json();
+      msgEl.style.color='var(--color-primary)';
+      msgEl.textContent=`Email envoyé à ${d.email||user.email}`;
+      msgEl.style.display='block';
+    }catch(e){
+      msgEl.style.color='#B91C1C';
+      msgEl.textContent='Erreur : '+e.message;
+      msgEl.style.display='block';
+    }finally{
+      box.querySelector('#edit-send-invite').disabled = false;
+      box.querySelector('#edit-send-reset').disabled = false;
+    }
+  };
+  box.querySelector('#edit-send-invite').onclick = ()=> sendAccessEmail('invite');
+  box.querySelector('#edit-send-reset').onclick = ()=> sendAccessEmail('recovery');
 }
 
 // Réglages de l'email récapitulatif des congés ASV (destinataire + fréquence), partagés
@@ -1797,6 +1930,8 @@ function canAccessDashboard(){ const r = effectiveRole(); return r === 'vet' || 
 function canAccessSettings(){ return currentUser?.role === 'admin' || currentUser?.role === 'vet'; }
 function canEditSlot(personId){
   if(!currentUser) return false;
+  const asvPerson = ASV_PEOPLE.find(p=>p.id===personId);
+  if(asvPerson?.archived) return false;
   const role = effectiveRole();
   if(role === 'vet') return true;
   if(role === 'asv'){
@@ -3106,9 +3241,13 @@ function buildHalfTable(year, month, days, people){
   let bodyRows = '';
   people.forEach(person=>{
     const locked = isMonthSigned(person.id, year, month);
+    const archived = person.archived === true;
+    const labelColor = archived ? 'var(--color-text-muted)' : person.color;
+    const labelText = `${person.short}${locked?' 🔒':''}${archived?' (archivé)':''}`;
+    const labelTitle = archived ? 'Archivé — lecture seule' : locked ? 'Feuille de présence signée — verrouillée' : '';
     bodyRows += `
-      <tr>
-        <th class="row-label" style="color:${person.color}" ${locked?`title="Feuille de présence signée — verrouillée"`:''}>${person.short}${locked?' 🔒':''}</th>
+      <tr${archived ? ' class="cal-row-archived"' : ''}>
+        <th class="row-label${archived ? ' row-label-archived' : ''}" style="color:${labelColor}" ${labelTitle ? `title="${labelTitle}"` : ''}>${labelText}</th>
         ${buildPersonRowCells(year, month, days, person.id)}
       </tr>
     `;

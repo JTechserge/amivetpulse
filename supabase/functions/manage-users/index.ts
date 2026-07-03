@@ -39,20 +39,37 @@ serve(async (req) => {
 
     const { data: profile } = await adminClient.from('user_profiles').select('role').eq('id', authUser.id).single();
     if (!profile || profile.role !== 'admin') {
-      return new Response(JSON.stringify({ error: 'Accès réservé à l\'administrateur.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: "Accès réservé à l'administrateur." }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const body = await req.json();
     const { action } = body;
 
+    // --- LIST ---
+    if (action === 'list') {
+      const [{ data: profiles }, { data: authData }] = await Promise.all([
+        adminClient.from('user_profiles').select('id,role,person_id,display_name,can_edit_vet_calendar,can_edit_all_asv'),
+        adminClient.auth.admin.listUsers({ perPage: 1000 }),
+      ]);
+
+      const emailByUserId = new Map((authData?.users || []).map((u) => [u.id, u.email]));
+      const result = (profiles || []).map((p) => ({
+        ...p,
+        email: emailByUserId.get(p.id) || null,
+      }));
+
+      return new Response(JSON.stringify({ ok: true, users: result }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // --- INVITE ---
     if (action === 'invite') {
-      const { email, display_name, role, person_id } = body;
+      const { email, display_name, role } = body;
       if (!email || !display_name || !role) {
         return new Response(JSON.stringify({ error: 'email, display_name et role sont requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // generateLink crée l'utilisateur ET retourne le lien d'invitation SANS envoyer
-      // l'email Supabase par défaut — on envoie notre propre email aux couleurs du site.
       const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
         type: 'invite',
         email,
@@ -63,18 +80,16 @@ serve(async (req) => {
       const inviteLink = linkData.properties.action_link;
       const userId = linkData.user.id;
 
-      // Créer le profil dans user_profiles
       const { error: profileError } = await adminClient.from('user_profiles').upsert({
         id: userId,
         role,
         display_name,
-        person_id: person_id || null,
+        person_id: null,
         can_edit_vet_calendar: false,
         can_edit_all_asv: false,
       });
       if (profileError) throw new Error(profileError.message);
 
-      // Email d'invitation personnalisé via Resend
       const roleLabel = ROLE_LABELS[role] || role;
       const html = wrapEmailHtml(`
         <h1 style="font-size:18px;color:${COLORS.text};margin:0 0 4px;">👋 Bienvenue sur Amivet PULSE</h1>
@@ -122,6 +137,111 @@ serve(async (req) => {
       });
     }
 
+    // --- UPDATE ---
+    if (action === 'update') {
+      const { user_id, email, display_name, role, person_id, can_edit_vet_calendar, can_edit_all_asv } = body;
+      if (!user_id) return new Response(JSON.stringify({ error: 'user_id requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      if (email !== undefined) {
+        const { error: emailError } = await adminClient.auth.admin.updateUserById(user_id, { email });
+        if (emailError) throw new Error(`Email : ${emailError.message}`);
+      }
+
+      const profileUpdates: Record<string, unknown> = {};
+      if (display_name !== undefined) profileUpdates.display_name = display_name;
+      if (role !== undefined) profileUpdates.role = role;
+      if ('person_id' in body) profileUpdates.person_id = person_id || null;
+      if (can_edit_vet_calendar !== undefined) profileUpdates.can_edit_vet_calendar = can_edit_vet_calendar;
+      if (can_edit_all_asv !== undefined) profileUpdates.can_edit_all_asv = can_edit_all_asv;
+
+      if (Object.keys(profileUpdates).length > 0) {
+        const { error: profileError } = await adminClient.from('user_profiles').update(profileUpdates).eq('id', user_id);
+        if (profileError) throw new Error(`Profil : ${profileError.message}`);
+      }
+
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // --- SEND_ACCESS_EMAIL ---
+    if (action === 'send_access_email') {
+      const { user_id, type: emailType } = body;
+      if (!user_id) return new Response(JSON.stringify({ error: 'user_id requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      const { data: targetUserData, error: targetError } = await adminClient.auth.admin.getUserById(user_id);
+      if (targetError || !targetUserData) throw new Error('Utilisateur introuvable.');
+
+      const { data: targetProfile } = await adminClient.from('user_profiles').select('display_name').eq('id', user_id).single();
+      const displayName = targetProfile?.display_name || targetUserData.user.email || 'Collaborateur';
+      const targetEmail = targetUserData.user.email!;
+
+      const linkType: 'invite' | 'recovery' = emailType === 'invite' ? 'invite' : 'recovery';
+      const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+        type: linkType,
+        email: targetEmail,
+        options: { redirectTo: APP_URL },
+      });
+      if (linkError) throw new Error(linkError.message);
+
+      const accessLink = linkData.properties.action_link;
+      const isInvite = linkType === 'invite';
+      const subject = isInvite ? 'Amivet PULSE — Votre invitation' : 'Amivet PULSE — Réinitialisation de votre mot de passe';
+      const title = isInvite ? '👋 Bienvenue sur Amivet PULSE' : '🔑 Réinitialisation de votre mot de passe';
+      const bodyText = isInvite
+        ? `Vous avez été invité(e) à rejoindre Amivet PULSE. Cliquez sur le bouton ci-dessous pour créer votre espace et choisir votre mot de passe.`
+        : `Une réinitialisation de votre mot de passe a été demandée. Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe.`;
+      const btnLabel = isInvite ? 'Créer mon espace' : 'Choisir mon nouveau mot de passe';
+
+      const html = wrapEmailHtml(`
+        <h1 style="font-size:18px;color:${COLORS.text};margin:0 0 4px;">${title}</h1>
+        <p style="font-size:14px;color:${COLORS.textMuted};line-height:1.6;margin:0 0 20px;">
+          Bonjour <strong>${displayName}</strong>,<br>
+          ${bodyText}
+        </p>
+        ${buttonHtml(accessLink, btnLabel)}
+        <p style="font-size:12.5px;color:${COLORS.textMuted};margin:0 0 8px;">
+          Ce lien est à usage unique. Si le bouton ne fonctionne pas, copiez ce lien :
+        </p>
+        <p style="font-size:12px;color:${COLORS.primary};word-break:break-all;margin:0 0 20px;">${accessLink}</p>
+        <p style="font-size:12px;color:${COLORS.textFaint};margin:0;">
+          Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.
+        </p>
+      `);
+
+      const textLines = [
+        `Bonjour ${displayName},`,
+        '',
+        bodyText,
+        '',
+        `${isInvite ? "Lien d'invitation" : 'Lien de réinitialisation'} (à usage unique) :`,
+        accessLink,
+        '',
+        '— Amivet PULSE',
+      ].join('\n');
+
+      const emailRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: 'Amivet PULSE <onboarding@resend.dev>',
+          to: [targetEmail],
+          subject,
+          text: textLines,
+          html,
+        }),
+      });
+      if (!emailRes.ok) {
+        const errBody = await emailRes.text();
+        throw new Error(`Email non envoyé (Resend HTTP ${emailRes.status}: ${errBody})`);
+      }
+
+      return new Response(JSON.stringify({ ok: true, email: targetEmail }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // --- DELETE ---
     if (action === 'delete') {
       const { user_id } = body;
       if (!user_id) return new Response(JSON.stringify({ error: 'user_id requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -131,9 +251,8 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ error: `Action inconnue : ${action}` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-
   } catch (e) {
     console.error(e);
-    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
