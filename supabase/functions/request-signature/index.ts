@@ -208,20 +208,27 @@ Deno.serve(async (req) => {
       '— Amivet PULSE',
     ].join('\n');
 
-    const emailRes = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: 'Amivet PULSE <onboarding@resend.dev>',
-        to: [targetEmail],
-        subject: `Amivet PULSE — Signature feuille de présence ${monthLabel}`,
-        text,
-        html,
-      }),
-    });
-    if(!emailRes.ok) throw new Error(`Resend HTTP ${emailRes.status} — ${await emailRes.text()}`);
+    // Tenter l'envoi email — si Resend refuse (plan gratuit limité à l'email du compte),
+    // on renvoie quand même le lien de signature pour que l'admin puisse le partager manuellement.
+    let emailSent = false;
+    let emailError = '';
+    try{
+      const emailRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: 'Amivet PULSE <onboarding@resend.dev>',
+          to: [targetEmail],
+          subject: `Amivet PULSE — Signature feuille de présence ${monthLabel}`,
+          text,
+          html,
+        }),
+      });
+      if(emailRes.ok){ emailSent = true; }
+      else { emailError = `Resend HTTP ${emailRes.status}`; }
+    }catch(err){ emailError = String((err as Error)?.message || err); }
 
-    return new Response(JSON.stringify({ ok: true }), {
+    return new Response(JSON.stringify({ ok: true, email_sent: emailSent, email_error: emailError, signing_link: signingLink }), {
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   }catch(e){

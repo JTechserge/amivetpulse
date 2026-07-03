@@ -3242,12 +3242,50 @@ async function adminRequestSignature(viewKey, personId){
     const data = await res.json();
     if(!data.ok) throw new Error(data.error || 'Erreur inconnue');
     const person = personOf(personId);
-    showToast(`Email de signature envoyé à ${person.short}`, '📧');
-    renderCalendarView(viewKey);
+    if(data.email_sent){
+      showToast(`Email de signature envoyé à ${person.short}`, '📧');
+      renderCalendarView(viewKey);
+    } else {
+      openSigningLinkModal(data.signing_link, person.short);
+      renderCalendarView(viewKey);
+    }
   }catch(e){
-    showToast(`Échec de l'envoi — ${e.message || 'erreur réseau'}`, '❌');
+    showToast(`Échec — ${e.message || 'erreur réseau'}`, '❌');
     if(btn){ btn.disabled = false; btn.textContent = '📧 Demander la signature'; }
   }
+}
+
+// Modal de fallback : affiche le lien de signature à copier/partager quand l'email échoue.
+function openSigningLinkModal(signingLink, recipientLabel){
+  const backdrop = document.getElementById('modal-backdrop');
+  const box = document.getElementById('modal-box');
+  box.className = 'modal-box';
+  box.innerHTML = `
+    <h3>🔗 Lien de signature</h3>
+    <p style="font-size:13.5px;color:var(--color-text-muted);margin-bottom:14px;">
+      L'email n'a pas pu être envoyé à <strong>${escapeHTML(recipientLabel)}</strong> (limite du plan Resend gratuit).
+      Copiez ce lien et transmettez-le directement à la personne concernée — il est valable 7 jours et à usage unique.
+    </p>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input type="text" id="signing-link-input" value="${escapeHTML(signingLink)}"
+        readonly style="flex:1;font-size:11px;padding:8px 10px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-surface-alt);color:var(--color-text-muted);cursor:text;">
+      <button class="btn btn-primary" id="copy-signing-link" style="white-space:nowrap;flex-shrink:0;">📋 Copier</button>
+    </div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn" id="modal-cancel">Fermer</button>
+    </div>
+  `;
+  backdrop.classList.add('open');
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#modal-cancel').onclick = close;
+  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+  box.querySelector('#copy-signing-link').onclick = ()=>{
+    navigator.clipboard.writeText(signingLink).then(()=>{
+      box.querySelector('#copy-signing-link').textContent = '✅ Copié !';
+      setTimeout(()=>{ box.querySelector('#copy-signing-link').textContent = '📋 Copier'; }, 2000);
+    });
+  };
+  box.querySelector('#signing-link-input').onclick = (e)=> e.target.select();
 }
 
 // Demande de signature : envoie un email à l'ASV avec le récap du mois + lien unique.
@@ -3265,10 +3303,16 @@ async function requestSignatureEmail(viewKey, personId){
     });
     const data = await res.json();
     if(!data.ok) throw new Error(data.error || 'Erreur inconnue');
-    showToast(`Email de signature envoyé à ${currentUser.email}`, '📧');
-    renderCalendarView(viewKey);
+    if(data.email_sent){
+      showToast(`Email de signature envoyé à ${currentUser.email}`, '📧');
+      renderCalendarView(viewKey);
+    } else {
+      // Resend ne peut pas envoyer à cet email (plan gratuit) — afficher le lien à copier
+      openSigningLinkModal(data.signing_link, currentUser.email);
+      renderCalendarView(viewKey);
+    }
   }catch(e){
-    showToast(`Échec de l'envoi — ${e.message || 'erreur réseau'}`, '❌');
+    showToast(`Échec — ${e.message || 'erreur réseau'}`, '❌');
     if(btn){ btn.disabled = false; btn.textContent = 'Signer ma feuille de présence'; }
   }
 }
