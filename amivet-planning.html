@@ -1874,6 +1874,7 @@ async function syncFromSupabase(){
 // pas besoin de la sophistication du sync push/pull de planning_data, ces écritures sont
 // rares et ponctuelles (quelques-unes par mois, pas par clic).
 const SIGNATURES = new Set();
+let INTERVIEWS = [];
 function signatureKey(personId, year, month){ return `${personId}|${year}|${month}`; }
 function isMonthSigned(personId, year, month){ return SIGNATURES.has(signatureKey(personId, year, month)); }
 const signatureDetails = new Map();
@@ -1909,6 +1910,14 @@ async function revokeSignature(personId, year, month){
   });
   if(!res.ok) throw new Error(`HTTP ${res.status}`);
   await loadSignatures();
+}
+
+async function loadInterviews(){
+  try{
+    const res = await fetch(`${SUPABASE_URL}annual_interviews?select=*`, { headers: supabaseHeaders() });
+    if(!res.ok) return;
+    INTERVIEWS = await res.json();
+  }catch(e){ console.warn('Entretiens inaccessibles.', e); }
 }
 
 // Notifie le nombre de demandes de congé ASV en attente directement sur l'onglet "Tableau
@@ -2836,11 +2845,17 @@ function clearMonth(viewKey, month, personId){
   snapshotBeforeChange();
   const nbDays = daysInMonth(cfg.year, month);
   const targets = personId ? cfg.people.filter(p=>p.id===personId) : cfg.people;
+  const asvTargets = targets.filter(p=>isASVPerson(p.id));
   for(let day=1; day<=nbDays; day++){
     const iso = fmtISO(new Date(cfg.year, month, day));
     targets.forEach(p=>{
       SLOTS.forEach(slot=> setSlotState(iso, p.id, slot, 'empty'));
       setOvertimeHours(iso, p.id, 0);
+    });
+    // ASV : efface aussi les saisies hebdomadaires (heures matin/midi/après-midi) et notes
+    asvTargets.forEach(p=>{
+      ['ms','me','as','ae','ls','le'].forEach(f=>{ delete DATA.slots[teKey(iso,p.id,f)]; });
+      setDayNote(iso, p.id, '');
     });
     if(!personId) setDayComment(iso, '');
   }
@@ -2860,9 +2875,12 @@ function openClearMonthModal(viewKey, month){
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
   const allLabel = cfg.people.map(p=>p.short).join(' + ');
+  const hasASV = cfg.people.some(p=>isASVPerson(p.id));
+  const asvWarning = hasASV ? `<p style="font-size:12px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;padding:8px 10px;color:#92400E;margin:0 0 14px;">⚠️ Les saisies hebdomadaires (heures matin / déjeuner / après-midi) des ASV pour ce mois seront également supprimées.</p>` : '';
   box.innerHTML = `
     <h3>Vider ${label} ?</h3>
     <p>Choisissez ce qui doit être supprimé définitivement pour ${label}. Cette action est irréversible.</p>
+    ${asvWarning}
     <div class="modal-actions" style="flex-direction:column;align-items:stretch;">
       <button class="btn btn-danger" id="clear-all" style="justify-content:center;">🗑️ Tout le mois (${allLabel})</button>
       ${cfg.people.map(p=>`<button class="btn btn-danger" data-clear-person="${p.id}" style="justify-content:center;color:${p.color};border-color:${hexToRgba(p.color,0.4)};">${p.short} uniquement</button>`).join('')}
@@ -4195,12 +4213,14 @@ function renderDashboard(){
         <button class="sub-tab ${dashSubState.tab==='hours'?'active':''}" data-sub="hours">🐾 Suivi ASV</button>
         <button class="sub-tab ${dashSubState.tab==='requests'?'active':''}" data-sub="requests">📋 Demandes de congé${pendingCount>0?` <span class="nav-badge">${pendingCount}</span>`:''}</button>
         <button class="sub-tab ${dashSubState.tab==='signatures'?'active':''}" data-sub="signatures">✍️ Feuilles signées</button>
+        <button class="sub-tab ${dashSubState.tab==='interviews'?'active':''}" data-sub="interviews">📝 Entretiens annuels</button>
       </div>
     </div>
     <div id="dash-sub-stats" class="sub-page ${dashSubState.tab!=='stats'?'hidden':''}"></div>
     <div id="dash-sub-requests" class="sub-page ${dashSubState.tab!=='requests'?'hidden':''}"></div>
     <div id="dash-sub-hours" class="sub-page ${dashSubState.tab!=='hours'?'hidden':''}"></div>
     <div id="dash-sub-signatures" class="sub-page ${dashSubState.tab!=='signatures'?'hidden':''}"></div>
+    <div id="dash-sub-interviews" class="sub-page ${dashSubState.tab!=='interviews'?'hidden':''}"></div>
   `;
   container.querySelector('#dash-sub-nav').addEventListener('click', (e)=>{
     const btn = e.target.closest('.sub-tab');
@@ -4212,6 +4232,7 @@ function renderDashboard(){
   if(dashSubState.tab === 'stats') renderDashboardStats();
   else if(dashSubState.tab === 'hours') renderDashboardHours();
   else if(dashSubState.tab === 'signatures') renderDashboardSignatures();
+  else if(dashSubState.tab === 'interviews') renderDashboardInterviews();
   else renderLeaveRequestsPage();
 }
 VIEW_RENDERERS['dashboard'] = renderDashboard;
@@ -4297,6 +4318,208 @@ function renderDashboardSignatures(){
     dashState.year = parseInt(btn.dataset.year, 10);
     renderDashboardSignatures();
   });
+}
+
+// --- Sous-page "Entretiens annuels" : suivi des entretiens annuels des ASV ---
+function renderDashboardInterviews(){
+  const container = document.getElementById('dash-sub-interviews');
+  const year = dashState.year;
+  const cy = getCurrentYear();
+
+  function getInterview(personId){ return INTERVIEWS.find(i=>i.person_id===personId && i.year===year); }
+  function isoToFR(iso){ if(!iso) return ''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
+  function statusBadge(itv){
+    if(!itv || itv.status==='pending')
+      return `<span style="color:#DC2626;font-weight:700;font-size:12px;">🔴 À planifier</span>`;
+    if(itv.status==='scheduled')
+      return `<span style="color:#D97706;font-weight:700;font-size:12px;">🟡 Planifié${itv.scheduled_date ? ` — ${isoToFR(itv.scheduled_date)}` : ''}</span>`;
+    return `<span style="color:#16A34A;font-weight:700;font-size:12px;">🟢 Réalisé${itv.done_date ? ` — ${isoToFR(itv.done_date)}` : ''}</span>`;
+  }
+  function ratingDisplay(rating){
+    if(!rating) return '';
+    return `<span style="color:#F59E0B;font-size:14px;">${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</span>`;
+  }
+
+  const cards = ASV_PEOPLE.length ? ASV_PEOPLE.map(p=>{
+    const itv = getInterview(p.id);
+    const isPending = !itv || itv.status==='pending';
+    const interviewer = itv?.interviewer_id ? (personOf(itv.interviewer_id)?.short || itv.interviewer_id) : null;
+    return `
+      <div class="card" style="border-top:4px solid ${p.color};padding:18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <span style="width:10px;height:10px;border-radius:50%;background:${p.color};display:inline-block;flex-shrink:0;"></span>
+          <span style="font-weight:700;font-size:15px;">${escapeHTML(p.short)}</span>
+        </div>
+        <div style="margin-bottom:8px;">${statusBadge(itv)}</div>
+        ${interviewer ? `<p class="text-muted" style="font-size:12px;margin-bottom:4px;">Responsable : ${escapeHTML(interviewer)}</p>` : ''}
+        ${itv?.rating ? `<div style="margin-bottom:8px;">${ratingDisplay(itv.rating)}</div>` : ''}
+        <button class="btn btn-sm ${isPending?'btn-primary':''}" data-itv-open="${p.id}"
+          style="${isPending?'':'border:1px solid var(--color-border);'}margin-top:10px;width:100%;justify-content:center;">
+          ${isPending ? '➕ Planifier' : '✏️ Voir / Modifier'}
+        </button>
+      </div>`;
+  }).join('') : `<p class="text-muted">Aucune ASV dans le planning.</p>`;
+
+  container.innerHTML = `
+    <div class="year-toggle" id="dash-itv-year-toggle" style="margin-bottom:20px;">
+      <button data-year="${cy}" class="${year===cy?'active':''}">${cy}</button>
+      <button data-year="${cy+1}" class="${year===cy+1?'active':''}">${cy+1}</button>
+    </div>
+    <div class="dash-grid" style="--dash-cols:${Math.max(ASV_PEOPLE.length,1)};">${cards}</div>
+  `;
+  container.querySelector('#dash-itv-year-toggle').addEventListener('click', (e)=>{
+    const btn=e.target.closest('button'); if(!btn) return;
+    dashState.year=parseInt(btn.dataset.year,10); renderDashboardInterviews();
+  });
+  container.querySelectorAll('[data-itv-open]').forEach(btn=>{
+    btn.onclick=()=> openInterviewModal(btn.dataset.itvOpen, year);
+  });
+}
+
+function openInterviewModal(personId, year){
+  const p = personOf(personId);
+  const existing = INTERVIEWS.find(i=>i.person_id===personId && i.year===year) || {};
+  const itvId = existing.id || null;
+  const backdrop = document.getElementById('modal-backdrop');
+  const box = document.getElementById('modal-box');
+  box.className = 'modal-box modal-box-wide';
+
+  const statuses = [
+    {v:'pending',   l:'🔴 À planifier'},
+    {v:'scheduled', l:'🟡 Planifié'},
+    {v:'done',      l:'🟢 Réalisé'},
+  ];
+  const curStatus = existing.status || 'pending';
+  const curRating = existing.rating || 0;
+
+  function starRow(rating){
+    return [1,2,3,4,5].map(n=>`<span data-star="${n}" style="font-size:26px;cursor:pointer;color:${rating>=n?'#F59E0B':'#CBD5E1'};">★</span>`).join('');
+  }
+
+  box.innerHTML = `
+    <h3 style="margin-bottom:14px;">Entretien annuel ${year} — ${escapeHTML(p?.short||personId)}</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+      <div>
+        <label style="font-size:12px;color:var(--color-text-muted);display:block;margin-bottom:4px;">Statut</label>
+        <select id="itv-status" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-btn);font-size:13px;">
+          ${statuses.map(s=>`<option value="${s.v}" ${curStatus===s.v?'selected':''}>${s.l}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--color-text-muted);display:block;margin-bottom:4px;">Vétérinaire responsable</label>
+        <select id="itv-interviewer" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-btn);font-size:13px;">
+          <option value="">—</option>
+          ${PEOPLE.map(vp=>`<option value="${vp.id}" ${existing.interviewer_id===vp.id?'selected':''}>${escapeHTML(vp.short)}</option>`).join('')}
+        </select>
+      </div>
+      <div id="itv-scheduled-wrap" style="display:${curStatus==='pending'?'none':'block'};">
+        <label style="font-size:12px;color:var(--color-text-muted);display:block;margin-bottom:4px;">Date prévue</label>
+        <input type="date" id="itv-scheduled-date" value="${existing.scheduled_date||''}"
+          style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-btn);font-size:13px;box-sizing:border-box;">
+      </div>
+      <div id="itv-done-wrap" style="display:${curStatus==='done'?'block':'none'};">
+        <label style="font-size:12px;color:var(--color-text-muted);display:block;margin-bottom:4px;">Date de réalisation</label>
+        <input type="date" id="itv-done-date" value="${existing.done_date||''}"
+          style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-btn);font-size:13px;box-sizing:border-box;">
+      </div>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px;color:var(--color-text-muted);display:block;margin-bottom:6px;">Note globale</label>
+      <div id="itv-rating-wrap" style="display:flex;gap:4px;">${starRow(curRating)}</div>
+      <input type="hidden" id="itv-rating-val" value="${curRating}">
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:12px;color:var(--color-text-muted);display:block;margin-bottom:4px;">Bilan objectifs N-1</label>
+      <textarea id="itv-obj-prev" rows="3"
+        style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-btn);font-size:13px;resize:vertical;box-sizing:border-box;">${escapeHTML(existing.objectives_prev||'')}</textarea>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:12px;color:var(--color-text-muted);display:block;margin-bottom:4px;">Objectifs N+1</label>
+      <textarea id="itv-obj-next" rows="3"
+        style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-btn);font-size:13px;resize:vertical;box-sizing:border-box;">${escapeHTML(existing.objectives_next||'')}</textarea>
+    </div>
+    <div style="margin-bottom:18px;">
+      <label style="font-size:12px;color:var(--color-text-muted);display:block;margin-bottom:4px;">Commentaires libres</label>
+      <textarea id="itv-comments" rows="3"
+        style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-btn);font-size:13px;resize:vertical;box-sizing:border-box;">${escapeHTML(existing.comments||'')}</textarea>
+    </div>
+    <p id="itv-error" style="color:#B91C1C;font-size:12px;display:none;margin:0 0 8px;"></p>
+    <div class="modal-actions">
+      <button class="btn" id="modal-cancel">Fermer</button>
+      <button class="btn btn-primary" id="itv-save-btn">Enregistrer</button>
+    </div>
+  `;
+
+  backdrop.classList.add('open');
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#modal-cancel').onclick = close;
+  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+
+  const statusSel = box.querySelector('#itv-status');
+  function updateDateFields(){
+    const s = statusSel.value;
+    box.querySelector('#itv-scheduled-wrap').style.display = s !== 'pending' ? 'block' : 'none';
+    box.querySelector('#itv-done-wrap').style.display = s === 'done' ? 'block' : 'none';
+  }
+  statusSel.addEventListener('change', updateDateFields);
+
+  let currentRating = curRating;
+  box.querySelector('#itv-rating-wrap').addEventListener('click', (e)=>{
+    const star = e.target.closest('[data-star]');
+    if(!star) return;
+    currentRating = parseInt(star.dataset.star);
+    // Toggle off if clicking the same star
+    if(currentRating === parseInt(box.querySelector('#itv-rating-val').value)) currentRating = 0;
+    box.querySelector('#itv-rating-val').value = currentRating;
+    box.querySelectorAll('[data-star]').forEach((s,i)=>{
+      s.style.color = currentRating >= i+1 ? '#F59E0B' : '#CBD5E1';
+    });
+  });
+
+  box.querySelector('#itv-save-btn').onclick = async ()=>{
+    const statusVal = box.querySelector('#itv-status').value;
+    const payload = {
+      person_id: personId,
+      year,
+      status: statusVal,
+      scheduled_date: box.querySelector('#itv-scheduled-date').value || null,
+      done_date: box.querySelector('#itv-done-date').value || null,
+      interviewer_id: box.querySelector('#itv-interviewer').value || null,
+      objectives_prev: box.querySelector('#itv-obj-prev').value.trim() || null,
+      objectives_next: box.querySelector('#itv-obj-next').value.trim() || null,
+      comments: box.querySelector('#itv-comments').value.trim() || null,
+      rating: parseInt(box.querySelector('#itv-rating-val').value) || null,
+      updated_at: new Date().toISOString(),
+    };
+    const errEl = box.querySelector('#itv-error');
+    errEl.style.display = 'none';
+    box.querySelector('#itv-save-btn').disabled = true;
+    try{
+      let res;
+      if(itvId){
+        res = await fetch(`${SUPABASE_URL}annual_interviews?id=eq.${itvId}`, {
+          method:'PATCH',
+          headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=minimal' }),
+          body: JSON.stringify(payload),
+        });
+      } else {
+        res = await fetch(`${SUPABASE_URL}annual_interviews`, {
+          method:'POST',
+          headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=minimal' }),
+          body: JSON.stringify(payload),
+        });
+      }
+      if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.message||`HTTP ${res.status}`); }
+      await loadInterviews();
+      close();
+      renderDashboardInterviews();
+      showToast('Entretien enregistré', '✅');
+    }catch(e){
+      errEl.textContent = 'Erreur : ' + e.message;
+      errEl.style.display = 'block';
+      box.querySelector('#itv-save-btn').disabled = false;
+    }
+  };
 }
 
 // --- Sous-page "Heures ASV" : suivi mensuel/annuel du temps de travail vs quota 1607h ---
@@ -4755,6 +4978,7 @@ function initApp(){
   switchView(VIEW_RENDERERS[startView] ? startView : 'vets');
   syncFromSupabase();
   loadSignatures();
+  loadInterviews();
   document.getElementById('login-overlay').classList.add('hidden');
 }
 
