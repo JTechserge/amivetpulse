@@ -2389,16 +2389,18 @@ function renderWeekViewASV(){
       block=`<div class="week-worked${sess.cls}" style="top:${top.toFixed(0)}px;height:${bH.toFixed(0)}px;">${label}</div>`;
     }
     const da=`data-adj-iso="${iso}" data-adj-pid="${pid}"`;
+    const noData = !sv && !ev;
+    const mutedStyle = noData ? 'color:var(--color-text-muted);' : '';
     const ctrlRow=canEdit?`<div class="week-time-row">
       <span class="week-adj-grp">
         <button class="week-adj" ${da} data-adj-f="${sess.s}" data-adj-d="-15">▾</button>
-        <span class="week-time-disp">${sv||sess.pS}</span>
+        <span class="week-time-disp" style="${mutedStyle}">${sv||'—'}</span>
         <button class="week-adj" ${da} data-adj-f="${sess.s}" data-adj-d="+15">▴</button>
       </span>
-      <span class="week-time-sep">→</span>
+      <span class="week-time-sep" style="${mutedStyle}">→</span>
       <span class="week-adj-grp">
         <button class="week-adj" ${da} data-adj-f="${sess.e}" data-adj-d="-15">▾</button>
-        <span class="week-time-disp">${ev||sess.pE}</span>
+        <span class="week-time-disp" style="${mutedStyle}">${ev||'—'}</span>
         <button class="week-adj" ${da} data-adj-f="${sess.e}" data-adj-d="+15">▴</button>
       </span>
     </div>`:'';
@@ -2861,6 +2863,8 @@ function clearMonth(viewKey, month, personId){
   }
   saveData();
   renderCalendarView(viewKey);
+  // Si la vue hebdomadaire est affichée, la rafraîchir aussi pour refléter la suppression des TE
+  if(subNavState.asv === 'week') renderWeekViewASV();
   const who = personId ? personOf(personId).short : cfg.people.map(p=>p.short).join(' et ');
   showToast(`${MONTH_NAMES[month]} ${cfg.year} vidé (${who})`, '🗑️');
 }
