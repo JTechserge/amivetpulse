@@ -1062,7 +1062,7 @@ function openManageUsersModal(){
     const isAdmin = currentUser?.role === 'admin';
     const linkedPersonIds = new Set(users.map(u=>u.person_id).filter(Boolean));
     const localOnlyASV = ASV_PEOPLE.filter(p=> !p.archived && !linkedPersonIds.has(p.id));
-    const localOnlyVets = PEOPLE.filter(p=> !linkedPersonIds.has(p.id) && !users.some(u=> (u.display_name||'').toLowerCase().includes(p.short.toLowerCase())));
+    const localOnlyVets = PEOPLE.filter(p=> !linkedPersonIds.has(p.id) && !users.some(u=> (u.display_name||'').toLowerCase().includes(p.short.toLowerCase()) || (u.display_name||'').toLowerCase().includes(p.name.toLowerCase())));
     const localOnlyPeople = [
       ...localOnlyVets.map(p=>({ ...p, localRole:'vet', roleLabel:'Vétérinaire' })),
       ...localOnlyASV.map(p=>({ ...p, localRole:'asv', roleLabel:'ASV' })),
@@ -1082,14 +1082,14 @@ function openManageUsersModal(){
       </tr>`).join('');
 
     const localASVRows = localOnlyPeople.map(p=>`<tr>
-        <td style="font-weight:600;color:var(--color-text-muted);">${escapeHTML(p.name)}</td>
+        <td style="font-weight:600;color:var(--color-text-muted);">${escapeHTML(p.short)}</td>
         <td style="font-size:12px;color:var(--color-text-muted);">${p.roleLabel}</td>
         <td style="font-size:12px;color:var(--color-text-muted);font-style:italic;">Sans compte</td>
         <td style="font-size:12px;text-align:center;">—</td>
         <td style="font-size:12px;text-align:center;">—</td>
         <td style="white-space:nowrap;">
-          <button class="btn btn-sm" data-prefill-invite="${escapeHTML(p.name)}" data-prefill-role="${p.localRole}" style="font-size:11.5px;padding:4px 8px;">📧 Inviter</button>
-          ${isAdmin ? `<button class="btn btn-sm" data-purge-local="${p.id}" data-purge-local-name="${escapeHTML(p.name)}" style="font-size:11.5px;padding:4px 8px;margin-left:4px;color:#FFFFFF;background:#B91C1C;border-color:#B91C1C;" title="Retirer du planning">💣</button>` : ''}
+          <button class="btn btn-sm" data-prefill-invite="${escapeHTML(p.short)}" data-prefill-role="${p.localRole}" style="font-size:11.5px;padding:4px 8px;">📧 Inviter</button>
+          ${isAdmin ? `<button class="btn btn-sm" data-purge-local="${p.id}" data-purge-local-name="${escapeHTML(p.short)}" style="font-size:11.5px;padding:4px 8px;margin-left:4px;color:#FFFFFF;background:#B91C1C;border-color:#B91C1C;" title="Retirer du planning">💣</button>` : ''}
         </td>
       </tr>`).join('');
 
