@@ -564,7 +564,7 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .week-th.is-today{background:var(--color-primary);color:#fff;}
 .week-th.is-holiday{background:#FEF3C7;color:#92400E;}
 .week-th.is-sunday{background:#F1F5F9;color:var(--color-text-muted);}
-.week-time-label{width:52px;font-size:10px;color:var(--color-text-muted);text-align:right;padding:4px 5px 0 0;background:var(--color-secondary);font-weight:600;white-space:nowrap;}
+.week-time-label{width:40px;font-size:9px;color:var(--color-text-muted);text-align:right;padding:3px 4px 0 0;background:var(--color-secondary);font-weight:600;white-space:nowrap;}
 .week-vis-cell{padding:0;overflow:hidden;vertical-align:top;}
 .week-vis-cell.is-sunday,.week-vis-cell.is-holiday{background:#f8fafc;cursor:default;}
 .week-cell-inner{display:flex;flex-direction:column;height:100%;}
@@ -583,17 +583,17 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .week-vis-area .week-worked-lunch{background:#F59E0B;}
 .week-time-row{
   display:flex;align-items:center;justify-content:center;gap:2px;
-  padding:2px 3px;background:#f8fafc;border-top:1px solid var(--color-border);
+  padding:1px 2px;background:#f8fafc;border-top:1px solid var(--color-border);
   flex-shrink:0;
 }
 .week-adj-grp{display:flex;flex-direction:column;align-items:center;}
 .week-adj{
   background:none;border:none;cursor:pointer;color:var(--color-text-muted);
-  padding:0 2px;font-size:9px;line-height:1.2;
+  padding:0 2px;font-size:8px;line-height:1.1;
 }
 .week-adj:hover{color:var(--color-primary);}
-.week-time-disp{font-size:9px;font-weight:700;color:var(--color-text);min-width:30px;text-align:center;}
-.week-time-sep{font-size:9px;color:var(--color-text-muted);padding:0 1px;}
+.week-time-disp{font-size:8px;font-weight:700;color:var(--color-text);min-width:28px;text-align:center;}
+.week-time-sep{font-size:8px;color:var(--color-text-muted);padding:0 1px;}
 .week-lunch-label{background:#FEF3C7;font-size:10px;color:#92400E;text-align:center;padding:4px 2px;font-weight:600;white-space:nowrap;}
 .week-lunch-cell{background:#FEF9EC;padding:0;}
 .week-footer-label{background:var(--color-secondary);font-size:11px;font-weight:700;color:var(--color-text-muted);text-align:right;padding:5px 5px 5px 0;white-space:nowrap;}
@@ -2564,7 +2564,7 @@ function renderWeekViewASV(){
     if(isSunday(d)||holidayName(iso)) return `<td class="week-vis-cell" style="height:${height}px;background:#f8fafc;"></td>`;
     const sess=WEEK_SESSIONS[session];
     const sv=getTE(iso,pid,sess.s), ev=getTE(iso,pid,sess.e);
-    const visH=canEdit?height-28:height;
+    const visH=canEdit?height-22:height;
     const pSM=timeToMins(sess.pS), pDur=timeToMins(sess.pE)-pSM;
     let block='';
     if(sv&&ev){
@@ -2604,15 +2604,15 @@ function renderWeekViewASV(){
     return `<td class="week-footer-cell" style="${style}">${renderFn(iso)}</td>`;
   }
 
-  const headerRow=`<tr><th class="week-time-label" style="width:52px;font-size:9px;text-align:center;">Horaires</th>${days.map((d,i)=>{
+  const headerRow=`<tr><th class="week-time-label" style="width:40px;font-size:9px;text-align:center;">Horaires</th>${days.map((d,i)=>{
     const iso=fmtISO(d), hN=holidayName(iso);
     const cls=`week-th${iso===fmtISO(today)?' is-today':hN?' is-holiday':''}`;
     return `<th class="${cls}" data-week-col-iso="${iso}">${DAY_SHORT[i]}<br><strong>${d.getDate()}</strong>${hN?`<br><span style="font-size:9px;">${escapeHTML(hN)}</span>`:''}`;
   }).join('</th>')}</tr>`;
 
-  const mRow  = `<tr><td class="week-time-label">8h30<br>↕<br>13h00</td>${days.map(d=>buildVisCell(d,'morning',180)).join('')}</tr>`;
-  const lRow  = `<tr><td class="week-lunch-label">13h–15h<br>☕</td>${days.map(d=>buildVisCell(d,'lunch',80)).join('')}</tr>`;
-  const amRow = `<tr><td class="week-time-label">15h00<br>↕<br>19h15</td>${days.map(d=>buildVisCell(d,'afternoon',170)).join('')}</tr>`;
+  const mRow  = `<tr><td class="week-time-label">8h30<br>↕<br>13h00</td>${days.map(d=>buildVisCell(d,'morning',210)).join('')}</tr>`;
+  const lRow  = `<tr><td class="week-lunch-label">13h–15h<br>☕</td>${days.map(d=>buildVisCell(d,'lunch',95)).join('')}</tr>`;
+  const amRow = `<tr><td class="week-time-label">15h00<br>↕<br>19h15</td>${days.map(d=>buildVisCell(d,'afternoon',200)).join('')}</tr>`;
 
   const totRow=`<tr><td class="week-footer-label">Heures</td>${days.map(d=>footerCell(d,iso=>{
     const w=calcDayTE(iso,pid)+calcLunchTE(iso,pid); const aOT=calcAutoOT(iso,pid);
