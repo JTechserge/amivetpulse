@@ -2,11 +2,14 @@
 // Lancé chaque samedi à 14h30 UTC (= 16h30 heure de Paris) par GitHub Actions.
 // Le bouton "Envoyer maintenant" du site appelle send-leave-recap (Edge Function).
 // Garder les deux gabarits d'email synchronisés.
-const SUPABASE_URL = 'https://ubowqtowyqmpraoxbaoo.supabase.co/rest/v1/';
+const SUPABASE_BASE = 'https://ubowqtowyqmpraoxbaoo.supabase.co';
+const SUPABASE_URL = `${SUPABASE_BASE}/rest/v1/`;
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVib3dxdG93eXFtcHJhb3hiYW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MzkzNjksImV4cCI6MjA5ODIxNTM2OX0.cC7vTWrK-Ykii5dtlg_6lA5quHe6rv78IRxZT-ArV_8';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const WINDOW_DAYS = 7; // semaine écoulée (lundi → samedi)
 const HEADERS = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` };
+const SVC_HEADERS = { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` };
 
 const LOGO_URL = 'https://jtechserge.github.io/planningamivet/logo.png';
 const APP_URL = 'https://jtechserge.github.io/planningamivet/amivet-planning.html';
@@ -48,19 +51,18 @@ function buttonHtml(href, label){
   </td></tr></table>`;
 }
 
-async function loadEmailSettings(){
-  const res = await fetch(`${SUPABASE_URL}email_settings?select=*&id=eq.singleton`, { headers: HEADERS });
-  if(!res.ok) throw new Error(`Supabase (email_settings) a répondu HTTP ${res.status}`);
-  const rows = await res.json();
-  if(!rows[0]) throw new Error('Table email_settings vide ou inexistante — exécute supabase-schema-2-email-settings.sql.');
-  return rows[0];
-}
-async function markRun(now){
-  await fetch(`${SUPABASE_URL}email_settings?id=eq.singleton`, {
-    method: 'PATCH',
-    headers: { ...HEADERS, 'Content-Type':'application/json', Prefer:'return=minimal' },
-    body: JSON.stringify({ last_run_at: now.toISOString() }),
-  });
+async function getVetAdminEmails(){
+  const profRes = await fetch(`${SUPABASE_URL}user_profiles?role=in.(vet,admin)&select=id`, { headers: SVC_HEADERS });
+  if(!profRes.ok) throw new Error(`user_profiles HTTP ${profRes.status}`);
+  const profiles = await profRes.json();
+  if(!profiles.length) return [];
+
+  const usersRes = await fetch(`${SUPABASE_BASE}/auth/v1/admin/users?per_page=1000`, { headers: SVC_HEADERS });
+  if(!usersRes.ok) throw new Error(`auth/admin/users HTTP ${usersRes.status}`);
+  const { users } = await usersRes.json();
+
+  const ids = new Set(profiles.map(p => p.id));
+  return users.filter(u => ids.has(u.id) && u.email).map(u => u.email);
 }
 
 function isNextSlot(prev, next){
@@ -85,9 +87,11 @@ function toISODate(d){ return d.toISOString().slice(0, 10); }
 
 async function main(){
   if(!RESEND_API_KEY) throw new Error('RESEND_API_KEY manquant (secret GitHub non configuré).');
+  if(!SERVICE_ROLE_KEY) throw new Error('SUPABASE_SERVICE_ROLE_KEY manquant (secret GitHub non configuré).');
 
-  const settings = await loadEmailSettings();
   const now = new Date();
+  const recipients = await getVetAdminEmails();
+  if(!recipients.length) throw new Error('Aucun vétérinaire ou administrateur trouvé en base.');
 
   const res = await fetch(`${SUPABASE_URL}planning_data?select=data&id=eq.singleton`, { headers: HEADERS });
   if(!res.ok) throw new Error(`Supabase a répondu HTTP ${res.status}`);
@@ -106,7 +110,6 @@ async function main(){
 
   if(pending.length === 0){
     console.log('Aucune demande de congé ASV en attente — pas d\'email envoyé.');
-    await markRun(now);
     return;
   }
 
@@ -198,8 +201,8 @@ async function main(){
     method: 'POST',
     headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      from: 'Amivet Planning <onboarding@resend.dev>',
-      to: [settings.recipient_email],
+      from: 'Amivet PULSE <onboarding@resend.dev>',
+      to: recipients,
       subject,
       text,
       html,
@@ -208,8 +211,7 @@ async function main(){
   if(!emailRes.ok){
     throw new Error(`Resend a répondu HTTP ${emailRes.status} — ${await emailRes.text()}`);
   }
-  await markRun(now);
-  console.log(`Email envoyé à ${settings.recipient_email} avec ${groups.length} demande(s) en attente.`);
+  console.log(`Email envoyé à [${recipients.join(', ')}] — ${groups.length} demande(s) de congé en attente.`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
