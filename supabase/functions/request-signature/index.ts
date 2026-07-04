@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Profil introuvable.' }), { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
     }
 
-    const { year, month, person_id: requestedPersonId } = await req.json();
+    const { year, month, person_id: requestedPersonId, time_fraction: timeFraction = 1.0 } = await req.json();
     if(typeof year !== 'number' || typeof month !== 'number'){
       return new Response(JSON.stringify({ error: 'year et month sont requis.' }), { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
     }
@@ -139,6 +139,9 @@ Deno.serve(async (req) => {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const dayRows: string[] = [];
     let hasAnyData = false;
+    let workingDays = 0;
+    let presentHalfDays = 0;
+    const absentByLabel: Record<string, number> = {};
 
     for(let day = 1; day <= daysInMonth; day++){
       const iso = `${year}-${padZ(month + 1)}-${padZ(day)}`;
@@ -150,6 +153,14 @@ Deno.serve(async (req) => {
       const mLabel  = slots[`${iso}_${personId}_M_label`]  || '';
       const amLabel = slots[`${iso}_${personId}_AM_label`] || '';
       if(mState !== 'empty' || amState !== 'empty') hasAnyData = true;
+
+      if(!isWeekend){
+        workingDays++;
+        if(mState === 'present') presentHalfDays++;
+        if(amState === 'present') presentHalfDays++;
+        if(mState === 'absent'){ const k = mLabel || 'Absence non précisée'; absentByLabel[k] = (absentByLabel[k]||0) + 1; }
+        if(amState === 'absent'){ const k = amLabel || 'Absence non précisée'; absentByLabel[k] = (absentByLabel[k]||0) + 1; }
+      }
 
       const bg = isWeekend ? '#F8FAFC' : '#FFFFFF';
       const dayCol = isWeekend ? '#94A3B8' : '#0F172A';
@@ -164,6 +175,49 @@ Deno.serve(async (req) => {
     const monthLabel = `${MONTH_NAMES_FR[month]} ${year}`;
     const signingLink = `${APP_URL}?sign=${encodeURIComponent(tokenId)}`;
     const expiryLabel = `${TOKEN_VALID_DAYS} jours`;
+
+    // Calcul du résumé horaire
+    const expectedHalfDays = Math.round(workingDays * 2 * timeFraction * 2) / 2;
+    const balanceHalfDays  = Math.round((presentHalfDays - expectedHalfDays) * 2) / 2;
+    const balanceHours     = Math.round(balanceHalfDays * 3.5 * 10) / 10;
+    const balanceSign      = balanceHalfDays >= 0 ? '+' : '';
+    const balanceColor     = balanceHalfDays >= 0 ? '#16A34A' : '#DC2626';
+    const absentRows = Object.entries(absentByLabel)
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, count]) => `<tr>
+        <td style="padding:4px 10px;font-size:12px;color:${COLORS.textMuted};">↳ ${label}</td>
+        <td style="padding:4px 10px;font-size:12px;color:${COLORS.textMuted};text-align:right;font-variant-numeric:tabular-nums;">${count} demi-j.</td>
+      </tr>`).join('');
+
+    const summaryHtml = `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+        style="border:1px solid ${COLORS.border};border-radius:10px;overflow:hidden;margin-bottom:20px;">
+        <thead><tr style="background:${COLORS.secondary};">
+          <th colspan="2" style="padding:8px 12px;font-size:12px;color:${COLORS.textMuted};text-align:left;font-weight:600;letter-spacing:.04em;">RÉCAPITULATIF DU MOIS</th>
+        </tr></thead>
+        <tbody>
+          <tr style="background:#FFF;">
+            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Jours ouvrés</td>
+            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;font-variant-numeric:tabular-nums;">${workingDays} j.</td>
+          </tr>
+          <tr style="background:#F8FAFC;">
+            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Demi-journées attendues${timeFraction < 1 ? ` (${Math.round(timeFraction*100)}%)` : ''}</td>
+            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;font-variant-numeric:tabular-nums;">${expectedHalfDays} demi-j.</td>
+          </tr>
+          <tr style="background:#FFF;">
+            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Demi-journées travaillées</td>
+            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;font-variant-numeric:tabular-nums;">${presentHalfDays} demi-j.</td>
+          </tr>
+          ${absentRows ? `<tr style="background:#F8FAFC;">
+            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Absences</td>
+            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;font-variant-numeric:tabular-nums;">${Object.values(absentByLabel).reduce((a,b)=>a+b,0)} demi-j.</td>
+          </tr>${absentRows}` : ''}
+          <tr style="background:#FFF;border-top:1px solid ${COLORS.border};">
+            <td style="padding:7px 10px;font-size:13px;font-weight:700;color:${COLORS.text};">Solde</td>
+            <td style="padding:7px 10px;font-size:13px;font-weight:700;color:${balanceColor};text-align:right;font-variant-numeric:tabular-nums;">${balanceSign}${balanceHalfDays} demi-j. (${balanceSign}${balanceHours}h)</td>
+          </tr>
+        </tbody>
+      </table>`;
 
     const recapTable = hasAnyData
       ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
@@ -188,6 +242,7 @@ Deno.serve(async (req) => {
         Voici votre feuille de présence pour <strong>${monthLabel}</strong>.
         Vérifiez les informations ci-dessous puis signez en cliquant sur le bouton.
       </p>
+      ${summaryHtml}
       ${recapTable}
       <p style="font-size:12.5px;color:${COLORS.textMuted};margin:0 0 16px;">
         En signant, vous certifiez que ces informations sont exactes.
@@ -217,6 +272,7 @@ Deno.serve(async (req) => {
     let emailSent = false;
     let emailError = '';
     try{
+      console.log('[brevo] sending to', targetEmail);
       const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
@@ -228,8 +284,10 @@ Deno.serve(async (req) => {
           htmlContent: html,
         }),
       });
+      const brevoBody = await emailRes.text();
+      console.log('[brevo] status', emailRes.status, brevoBody);
       if(emailRes.ok){ emailSent = true; }
-      else { emailError = `Brevo HTTP ${emailRes.status}: ${await emailRes.text()}`; }
+      else { emailError = `Brevo HTTP ${emailRes.status}: ${brevoBody}`; }
     }catch(err){ emailError = String((err as Error)?.message || err); }
 
     return new Response(JSON.stringify({ ok: true, email_sent: emailSent, email_error: emailError, signing_link: signingLink }), {

@@ -3408,7 +3408,7 @@ async function adminRequestSignature(viewKey, personId){
     const res = await fetch(`${SUPABASE_FUNCTIONS_URL}request-signature`, {
       method: 'POST',
       headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ year: cfg.year, month, person_id: personId }),
+      body: JSON.stringify({ year: cfg.year, month, person_id: personId, time_fraction: ASV_PEOPLE.find(p=>p.id===personId)?.timeFraction ?? 1.0 }),
     });
     const data = await res.json();
     if(!data.ok) throw new Error(data.error || 'Erreur inconnue');
@@ -3471,7 +3471,7 @@ async function requestSignatureEmail(viewKey, personId){
     const res = await fetch(`${SUPABASE_FUNCTIONS_URL}request-signature`, {
       method: 'POST',
       headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ year: cfg.year, month }),
+      body: JSON.stringify({ year: cfg.year, month, time_fraction: ASV_PEOPLE.find(p=>p.id===personId)?.timeFraction ?? 1.0 }),
     });
     const data = await res.json();
     if(!data.ok) throw new Error(data.error || 'Erreur inconnue');
