@@ -34,7 +34,6 @@ export function wrapEmailHtml(bodyHtml: string): string {
           ${bodyHtml}
         </td></tr>
         <tr><td style="padding:16px 28px;border-top:1px solid ${COLORS.border};color:${COLORS.textMuted};font-size:11.5px;">
-          <div style="display:none;font-size:1px;max-height:0;max-width:0;overflow:hidden;mso-hide:all;">&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>
           Clinique Vétérinaire Amivet — Dr. Pelois &amp; Dr. Maquinay
         </td></tr>
       </table>

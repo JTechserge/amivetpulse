@@ -158,6 +158,7 @@ serve(async (req) => {
         <p style="font-size:12px;color:${COLORS.textFaint};margin:0;">
           Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.
         </p>
+        <div style="display:none;font-size:1px;max-height:0;max-width:0;overflow:hidden;mso-hide:all;">&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>
       `);
 
       const textLines = [
