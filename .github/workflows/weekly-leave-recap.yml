@@ -2,10 +2,8 @@ name: Récapitulatif des congés ASV en attente
 
 on:
   schedule:
-    # Tourne tous les jours à 8h00 UTC : la fréquence RÉELLE d'envoi (quotidienne,
-    # hebdomadaire, etc.) est choisie sur le site (⚙️ → Email récapitulatif des congés) et
-    # appliquée par le script lui-même — GitHub Actions ne sait déclencher qu'un cron fixe.
-    - cron: '0 8 * * *'
+    # Tous les samedis à 14h30 UTC = 16h30 heure de Paris (CEST, UTC+2).
+    - cron: '30 14 * * 6'
   workflow_dispatch: {} # bouton "Run workflow" dans l'onglet Actions, pour tester manuellement
 
 jobs:

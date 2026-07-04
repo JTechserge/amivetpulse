@@ -1,16 +1,11 @@
-// Récapitulatif des demandes de congé ASV en attente, envoyé par email à la clinique.
-// Lancé tous les jours par .github/workflows/weekly-leave-recap.yml (GitHub Actions), mais
-// n'envoie réellement qu'au rythme choisi dans les réglages du site (⚙️ → Email
-// récapitulatif des congés) — c'est ce script qui applique le filtre de fréquence, GitHub
-// Actions ne sachant déclencher qu'un cron fixe, pas une fréquence configurable en ligne.
-// Le bouton "Envoyer maintenant" du site appelle un chemin équivalent mais instantané
-// (supabase/functions/send-leave-recap) — garder les deux gabarits d'email synchronisés.
+// Récapitulatif hebdomadaire des demandes de congé ASV en attente + heures supp.
+// Lancé chaque samedi à 14h30 UTC (= 16h30 heure de Paris) par GitHub Actions.
+// Le bouton "Envoyer maintenant" du site appelle send-leave-recap (Edge Function).
+// Garder les deux gabarits d'email synchronisés.
 const SUPABASE_URL = 'https://ubowqtowyqmpraoxbaoo.supabase.co/rest/v1/';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVib3dxdG93eXFtcHJhb3hiYW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MzkzNjksImV4cCI6MjA5ODIxNTM2OX0.cC7vTWrK-Ykii5dtlg_6lA5quHe6rv78IRxZT-ArV_8';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-// Seules ces 2 fréquences restent sélectionnables sur le site ; tout autre/ancien réglage
-// (ex. "daily"/"now" laissés par d'anciens tests) retombe sur la fenêtre hebdomadaire.
-const FREQUENCY_DAYS = { weekly: 7, monthly: 30 };
+const WINDOW_DAYS = 7; // semaine écoulée (lundi → samedi)
 const HEADERS = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` };
 
 const LOGO_URL = 'https://jtechserge.github.io/planningamivet/logo.png';
@@ -93,13 +88,6 @@ async function main(){
 
   const settings = await loadEmailSettings();
   const now = new Date();
-  const frequencyDays = FREQUENCY_DAYS[settings.frequency] ?? 7;
-  const lastRun = settings.last_run_at ? new Date(settings.last_run_at) : null;
-  // Marge d'une heure pour absorber le décalage normal d'exécution d'un cron GitHub Actions.
-  if(lastRun && (now - lastRun) < frequencyDays * 86400000 - 3600000){
-    console.log(`Fréquence "${settings.frequency}" : dernier passage le ${lastRun.toISOString()}, pas encore l'heure.`);
-    return;
-  }
 
   const res = await fetch(`${SUPABASE_URL}planning_data?select=data&id=eq.singleton`, { headers: HEADERS });
   if(!res.ok) throw new Error(`Supabase a répondu HTTP ${res.status}`);
@@ -138,7 +126,7 @@ async function main(){
   }
 
   // Heures supplémentaires ASV sur la période couverte par la fréquence choisie.
-  const windowStartIso = toISODate(new Date(now.getTime() - frequencyDays * 86400000));
+  const windowStartIso = toISODate(new Date(now.getTime() - WINDOW_DAYS * 86400000));
   const overtimeByPerson = {};
   const overtimeRe = /^(\d{4}-\d{2}-\d{2})_([a-z0-9-]+)_overtime$/;
   for(const key of Object.keys(slots)){
@@ -151,7 +139,7 @@ async function main(){
     overtimeByPerson[personId] = (overtimeByPerson[personId] || 0) + hours;
   }
   const overtimeEntries = Object.entries(overtimeByPerson).sort((a, b) => a[0].localeCompare(b[0]));
-  const periodLabel = `${frequencyDays} derniers jours`;
+  const periodLabel = `7 derniers jours`;
 
   const lines = groups.map(g => {
     const first = g.slots[0], last = g.slots[g.slots.length - 1];
@@ -159,7 +147,7 @@ async function main(){
     return `- ${g.personId} — ${range}${g.label ? ' — ' + g.label : ''} (${g.slots.length} demi-journée${g.slots.length > 1 ? 's' : ''})`;
   });
 
-  const subject = `Amivet Planning — ${groups.length} demande(s) de congé ASV en attente`;
+  const subject = `Amivet PULSE — Récapitulatif hebdomadaire : ${groups.length} demande(s) de congé en attente`;
   const text = [
     'Bonjour,',
     '',
