@@ -2,7 +2,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { wrapEmailHtml, buttonHtml, APP_URL, COLORS } from '../_shared/email-template.ts';
 
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!;
+const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY')!;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -171,20 +171,20 @@ serve(async (req) => {
         '— Amivet PULSE',
       ].join('\n');
 
-      const emailRes = await fetch('https://api.resend.com/emails', {
+      const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          from: 'Amivet PULSE <onboarding@resend.dev>',
-          to: [targetEmail],
+          sender: { name: 'Amivet PULSE', email: 'jeremie.pvt@gmail.com' },
+          to: [{ email: targetEmail, name: displayName }],
           subject,
-          text: textLines,
-          html,
+          textContent: textLines,
+          htmlContent: html,
         }),
       });
       if (!emailRes.ok) {
         const errBody = await emailRes.text();
-        throw new Error(`Email non envoyé (Resend HTTP ${emailRes.status}: ${errBody})`);
+        throw new Error(`Email non envoyé (Brevo HTTP ${emailRes.status}: ${errBody})`);
       }
 
       return new Response(JSON.stringify({ ok: true, email: targetEmail }), {

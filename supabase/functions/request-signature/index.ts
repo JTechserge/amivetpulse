@@ -8,7 +8,7 @@ import { wrapEmailHtml, buttonHtml, APP_URL, COLORS } from '../_shared/email-tem
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!;
+const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY')!;
 const TOKEN_VALID_DAYS = 7;
 
 const CORS_HEADERS = {
@@ -217,15 +217,15 @@ Deno.serve(async (req) => {
     let emailSent = false;
     let emailError = '';
     try{
-      const emailRes = await fetch('https://api.resend.com/emails', {
+      const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          from: 'Amivet PULSE <onboarding@resend.dev>',
-          to: [targetEmail],
+          sender: { name: 'Amivet PULSE', email: 'jeremie.pvt@gmail.com' },
+          to: [{ email: targetEmail, name: displayName }],
           subject: `Amivet PULSE — Signature feuille de présence ${monthLabel}`,
-          text,
-          html,
+          textContent: text,
+          htmlContent: html,
         }),
       });
       if(emailRes.ok){ emailSent = true; }
