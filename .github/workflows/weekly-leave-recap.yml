@@ -16,6 +16,6 @@ jobs:
           node-version: 20
       - name: Envoyer le récapitulatif par email
         env:
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node scripts/send-weekly-recap.mjs

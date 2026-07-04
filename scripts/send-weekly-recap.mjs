@@ -5,7 +5,7 @@
 const SUPABASE_BASE = 'https://ubowqtowyqmpraoxbaoo.supabase.co';
 const SUPABASE_URL = `${SUPABASE_BASE}/rest/v1/`;
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVib3dxdG93eXFtcHJhb3hiYW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MzkzNjksImV4cCI6MjA5ODIxNTM2OX0.cC7vTWrK-Ykii5dtlg_6lA5quHe6rv78IRxZT-ArV_8';
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const WINDOW_DAYS = 7; // semaine écoulée (lundi → samedi)
 const HEADERS = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` };
@@ -86,7 +86,7 @@ function formatFR(iso){
 function toISODate(d){ return d.toISOString().slice(0, 10); }
 
 async function main(){
-  if(!RESEND_API_KEY) throw new Error('RESEND_API_KEY manquant (secret GitHub non configuré).');
+  if(!BREVO_API_KEY) throw new Error('BREVO_API_KEY manquant (secret GitHub non configuré).');
   if(!SERVICE_ROLE_KEY) throw new Error('SUPABASE_SERVICE_ROLE_KEY manquant (secret GitHub non configuré).');
 
   const now = new Date();
@@ -195,15 +195,17 @@ async function main(){
     <div style="margin-top:24px;">${buttonHtml(APP_URL, 'Ouvrir Amivet PULSE')}</div>
   `);
 
-  const emailRes = await fetch('https://api.resend.com/emails', {
+  const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      from: 'Amivet PULSE <onboarding@resend.dev>',
-      to: recipients,
+      sender: { name: 'Amivet PULSE', email: 'jeremie.pvt@gmail.com' },
+      to: recipients.map(e => ({ email: e })),
       subject,
-      text,
-      html,
+      textContent: text,
+      htmlContent: html,
+      trackClicks: false,
+      trackOpens: false,
     }),
   });
   if(!emailRes.ok){
