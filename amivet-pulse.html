@@ -560,7 +560,7 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .week-asv-pick{padding:7px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;cursor:pointer;}
 .week-table{width:100%;border-collapse:collapse;min-width:560px;font-size:12px;}
 .week-table th,.week-table td{border:1px solid var(--color-border);vertical-align:top;}
-.week-th{background:var(--color-secondary);font-size:11.5px;font-weight:700;text-align:center;padding:8px 4px;min-width:80px;}
+.week-th{background:var(--color-secondary);font-size:11.5px;font-weight:700;text-align:center;padding:3px 4px;min-width:80px;}
 .week-th.is-today{background:var(--color-primary);color:#fff;}
 .week-th.is-holiday{background:#FEF3C7;color:#92400E;}
 .week-th.is-sunday{background:#F1F5F9;color:var(--color-text-muted);}
@@ -2607,12 +2607,13 @@ function renderWeekViewASV(){
   const headerRow=`<tr><th class="week-time-label" style="width:40px;font-size:9px;text-align:center;">Horaires</th>${days.map((d,i)=>{
     const iso=fmtISO(d), hN=holidayName(iso);
     const cls=`week-th${iso===fmtISO(today)?' is-today':hN?' is-holiday':''}`;
-    return `<th class="${cls}" data-week-col-iso="${iso}">${DAY_SHORT[i]}<br><strong>${d.getDate()}</strong>${hN?`<br><span style="font-size:9px;">${escapeHTML(hN)}</span>`:''}`;
+    const dd=String(d.getDate()).padStart(2,'0'), mm=String(d.getMonth()+1).padStart(2,'0');
+    return `<th class="${cls}" data-week-col-iso="${iso}">${DAY_SHORT[i]}<br><strong>${dd}/${mm}</strong>${hN?`<br><span style="font-size:9px;">${escapeHTML(hN)}</span>`:''}`;
   }).join('</th>')}</tr>`;
 
-  const mRow  = `<tr><td class="week-time-label">8h30<br>↕<br>13h00</td>${days.map(d=>buildVisCell(d,'morning',210)).join('')}</tr>`;
-  const lRow  = `<tr><td class="week-lunch-label">13h–15h<br>☕</td>${days.map(d=>buildVisCell(d,'lunch',95)).join('')}</tr>`;
-  const amRow = `<tr><td class="week-time-label">15h00<br>↕<br>19h15</td>${days.map(d=>buildVisCell(d,'afternoon',200)).join('')}</tr>`;
+  const mRow  = `<tr><td class="week-time-label">8h30<br>↕<br>13h00</td>${days.map(d=>buildVisCell(d,'morning',230)).join('')}</tr>`;
+  const lRow  = `<tr><td class="week-lunch-label">13h–15h<br>☕</td>${days.map(d=>buildVisCell(d,'lunch',100)).join('')}</tr>`;
+  const amRow = `<tr><td class="week-time-label">15h00<br>↕<br>19h15</td>${days.map(d=>buildVisCell(d,'afternoon',220)).join('')}</tr>`;
 
   const totRow=`<tr><td class="week-footer-label">Heures</td>${days.map(d=>footerCell(d,iso=>{
     const w=calcDayTE(iso,pid)+calcLunchTE(iso,pid); const aOT=calcAutoOT(iso,pid);
@@ -2833,7 +2834,17 @@ function openWeekTimePopover(iso, pid){
       ? `Total : ${formatHHMM(h)}${aOT > 0 ? ` (+${formatHHMM(aOT)} supp.)` : aOT < 0 ? ` (-${formatHHMM(Math.abs(aOT))} déficit)` : ''}`
       : '';
   };
-  box.querySelectorAll('input[type=time]').forEach(i=>i.addEventListener('input', updatePreview));
+  function snapTime15(inp){
+    if(!inp.value) return;
+    const [h,m] = inp.value.split(':').map(Number);
+    const snapped = Math.round((h*60+m)/15)*15;
+    const sh = Math.floor(snapped/60) % 24, sm = snapped % 60;
+    inp.value = `${String(sh).padStart(2,'0')}:${String(sm).padStart(2,'0')}`;
+  }
+  box.querySelectorAll('input[type=time]').forEach(i=>{
+    i.addEventListener('change', ()=>{ snapTime15(i); updatePreview(); });
+    i.addEventListener('input', updatePreview);
+  });
   updatePreview();
   box.querySelector('#te-save').onclick = ()=>{
     snapshotBeforeChange();
