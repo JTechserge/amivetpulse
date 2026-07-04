@@ -105,6 +105,9 @@ Deno.serve(async (req) => {
       { headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
     );
     const existing = await existingRes.json();
+    if(!Array.isArray(existing)){
+      throw new Error(`Erreur lecture signature_tokens : ${JSON.stringify(existing)}`);
+    }
     const validExisting = (existing as {id:string;expires_at:string}[]).find(t => new Date(t.expires_at) > now);
 
     let tokenId: string;

@@ -2256,7 +2256,7 @@ function showToast(message, icon='✓'){
   el.className = 'toast';
   el.innerHTML = `<span>${icon}</span><span>${message}</span>`;
   container.appendChild(el);
-  setTimeout(()=> el.remove(), 2000);
+  setTimeout(()=> el.remove(), 15000);
 }
 function showSavedToast(){ showToast('Sauvegardé'); }
 
