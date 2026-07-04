@@ -65,6 +65,9 @@ async function getVetAdminEmails(){
   return users.filter(u => ids.has(u.id) && u.email).map(u => u.email);
 }
 
+function formatHHMM(h){ const abs=Math.abs(h); const hh=Math.floor(abs); const mm=Math.round((abs-hh)*60); return `${hh}h${String(mm).padStart(2,'0')}`; }
+function signedHHMM(h){ if(h===0) return '0h00'; return `${h>0?'+':'-'}${formatHHMM(h)}`; }
+
 function isNextSlot(prev, next){
   if(prev.iso === next.iso) return prev.slot === 'M' && next.slot === 'AM';
   if(!(prev.slot === 'AM' && next.slot === 'M')) return false;
@@ -154,7 +157,7 @@ async function main(){
     '',
     `Heures supplémentaires ASV (${periodLabel}) :`,
     ...(overtimeEntries.length
-      ? overtimeEntries.map(([p, h]) => `- ${p} : ${h > 0 ? '+' : ''}${h}h`)
+      ? overtimeEntries.map(([p, h]) => `- ${p} : ${signedHHMM(h)}`)
       : ['- Aucune heure supplémentaire enregistrée sur cette période.']),
     '',
     'Accédez au Tableau de bord pour traiter les demandes.',
@@ -176,7 +179,7 @@ async function main(){
   const overtimeRowsHtml = overtimeEntries.length
     ? overtimeEntries.map(([p, h]) => `<tr>
         <td style="padding:6px 0;font-size:13px;color:${COLORS.text};border-bottom:1px solid ${COLORS.border};">${p}</td>
-        <td style="padding:6px 0;font-size:13px;color:${COLORS.text};text-align:right;font-weight:700;border-bottom:1px solid ${COLORS.border};">${h}h</td>
+        <td style="padding:6px 0;font-size:13px;color:${h>0?'#16A34A':h<0?'#DC2626':COLORS.text};text-align:right;font-weight:700;border-bottom:1px solid ${COLORS.border};">${signedHHMM(h)}</td>
       </tr>`).join('')
     : `<tr><td style="padding:6px 0;font-size:13px;color:${COLORS.textMuted};">Aucune heure supplémentaire enregistrée sur cette période.</td></tr>`;
 
