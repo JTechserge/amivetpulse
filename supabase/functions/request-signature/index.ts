@@ -136,6 +136,8 @@ Deno.serve(async (req) => {
     let workingDays = 0;
     let presentHalfDays = 0;
     let approvedLeaveHalfDays = 0;
+    let pendingHalfDaysTotal = 0;
+    let totalOvertimeHours = 0;
     const approvedByLabel: Record<string, number> = {};
     const pendingByLabel:  Record<string, number> = {};
 
@@ -143,7 +145,7 @@ Deno.serve(async (req) => {
       if(state === 'present') return `<span style="color:#16A34A;">Présent</span>`;
       if(state === 'absent'){
         const txt = label || 'Absence';
-        if(decision === 'approved') return `<span style="color:#B45309;">✅ ${txt}</span>`;
+        if(decision === 'approved') return `<span style="color:${COLORS.text};">✅ ${txt}</span>`;
         return `<span style="color:#DC2626;">⏳ ${txt}</span>`;
       }
       return `<span style="color:#94A3B8;">—</span>`;
@@ -153,8 +155,7 @@ Deno.serve(async (req) => {
       const iso = `${year}-${padZ(month + 1)}-${padZ(day)}`;
       const date = new Date(year, month, day);
       const wd = date.getDay();
-      const isWeekend = wd === 0 || wd === 6;
-      if(isWeekend) continue; // on n'affiche que les jours ouvrés
+      if(wd === 0 || wd === 6) continue;
 
       const mState    = slots[`${iso}_${personId}_M`]           || 'empty';
       const amState   = slots[`${iso}_${personId}_AM`]          || 'empty';
@@ -166,24 +167,39 @@ Deno.serve(async (req) => {
       if(mState !== 'empty' || amState !== 'empty') hasAnyData = true;
       workingDays++;
 
-      if(mState === 'present') presentHalfDays++;
-      if(amState === 'present') presentHalfDays++;
+      const presentDay   = (mState === 'present' ? 1 : 0) + (amState === 'present' ? 1 : 0);
+      const approvedDay  = (mState === 'absent' && mDecision === 'approved' ? 1 : 0)
+                         + (amState === 'absent' && amDecision === 'approved' ? 1 : 0);
+      const pendingDay   = (mState === 'absent' && mDecision !== 'approved' ? 1 : 0)
+                         + (amState === 'absent' && amDecision !== 'approved' ? 1 : 0);
+      presentHalfDays       += presentDay;
+      approvedLeaveHalfDays += approvedDay;
+      pendingHalfDaysTotal  += pendingDay;
 
-      if(mState === 'absent'){
-        const k = mLabel || 'Absence non précisée';
-        if(mDecision === 'approved'){ approvedLeaveHalfDays++; approvedByLabel[k] = (approvedByLabel[k]||0)+1; }
-        else { pendingByLabel[k] = (pendingByLabel[k]||0)+1; }
+      // Heures sup/déficit : valeur saisie manuellement dans la ligne du calendrier ASV
+      const dayOvertimeH = Math.round((parseFloat(slots[`${iso}_${personId}_overtime`]) || 0) * 10) / 10;
+      totalOvertimeHours += dayOvertimeH;
+
+      if(mState === 'absent' && mLabel && mLabel !== 'Absence non précisée'){
+        if(mDecision === 'approved') approvedByLabel[mLabel] = (approvedByLabel[mLabel]||0)+1;
+        else pendingByLabel[mLabel] = (pendingByLabel[mLabel]||0)+1;
       }
-      if(amState === 'absent'){
-        const k = amLabel || 'Absence non précisée';
-        if(amDecision === 'approved'){ approvedLeaveHalfDays++; approvedByLabel[k] = (approvedByLabel[k]||0)+1; }
-        else { pendingByLabel[k] = (pendingByLabel[k]||0)+1; }
+      if(amState === 'absent' && amLabel && amLabel !== 'Absence non précisée'){
+        if(amDecision === 'approved') approvedByLabel[amLabel] = (approvedByLabel[amLabel]||0)+1;
+        else pendingByLabel[amLabel] = (pendingByLabel[amLabel]||0)+1;
       }
+
+      const otSign  = dayOvertimeH > 0 ? '+' : '';
+      const otColor = dayOvertimeH > 0 ? '#16A34A' : dayOvertimeH < 0 ? '#DC2626' : '#94A3B8';
+      const otCell  = dayOvertimeH === 0
+        ? `<span style="color:#94A3B8;">—</span>`
+        : `<span style="color:${otColor};font-weight:600;">${otSign}${dayOvertimeH}h</span>`;
 
       dayRows.push(`<tr style="background:${day%2===0?'#F8FAFC':'#FFFFFF'};">
         <td style="padding:5px 10px;font-size:12px;color:#0F172A;white-space:nowrap;">${WEEKDAYS_FR[wd]} ${day}</td>
         <td style="padding:5px 10px;font-size:12px;">${cellHtml(mState, mLabel, mDecision)}</td>
         <td style="padding:5px 10px;font-size:12px;">${cellHtml(amState, amLabel, amDecision)}</td>
+        <td style="padding:5px 10px;font-size:12px;text-align:right;">${otCell}</td>
       </tr>`);
     }
 
@@ -191,29 +207,23 @@ Deno.serve(async (req) => {
     const signingLink = `${APP_URL}?sign=${encodeURIComponent(tokenId)}`;
     const expiryLabel = `${TOKEN_VALID_DAYS} jours`;
 
-    // Solde = (travaillé + congés approuvés) vs attendus
-    const expectedHalfDays   = Math.round(workingDays * 2 * timeFraction * 2) / 2;
-    const validatedHalfDays  = presentHalfDays + approvedLeaveHalfDays;
-    const pendingHalfDays    = Object.values(pendingByLabel).reduce((a,b)=>a+b, 0);
-    const balanceHalfDays    = Math.round((validatedHalfDays - expectedHalfDays) * 2) / 2;
-    const balanceHours       = Math.round(balanceHalfDays * 3.5 * 10) / 10;
-    const balanceSign  = balanceHalfDays >= 0 ? '+' : '';
-    const balanceColor = balanceHalfDays >= 0 ? '#16A34A' : '#DC2626';
+    totalOvertimeHours = Math.round(totalOvertimeHours * 10) / 10;
+    const otSign  = totalOvertimeHours >= 0 ? '+' : '';
+    const otColor = totalOvertimeHours > 0 ? '#16A34A' : totalOvertimeHours < 0 ? '#DC2626' : '#94A3B8';
 
     function labelRows(map: Record<string, number>, icon: string, color: string): string {
       return Object.entries(map).sort((a,b)=>b[1]-a[1])
         .map(([lbl, cnt]) => `<tr><td style="padding:3px 10px 3px 22px;font-size:11.5px;color:${color};">${icon} ${lbl}</td><td style="padding:3px 10px;font-size:11.5px;color:${color};text-align:right;">${cnt} demi-j.</td></tr>`).join('');
     }
-    const approvedRows = labelRows(approvedByLabel, '✅', '#B45309');
+    const approvedRows = labelRows(approvedByLabel, '✅', COLORS.text);
     const pendingRows  = labelRows(pendingByLabel,  '⏳', '#DC2626');
 
     const summaryHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${COLORS.border};border-radius:10px;overflow:hidden;margin-bottom:20px;"><thead><tr style="background:${COLORS.secondary};"><th colspan="2" style="padding:8px 12px;font-size:12px;color:${COLORS.textMuted};text-align:left;font-weight:600;letter-spacing:.04em;">RÉCAPITULATIF DU MOIS</th></tr></thead><tbody>
 <tr style="background:#FFF;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Jours ouvrés</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${workingDays} j.</td></tr>
-<tr style="background:#F8FAFC;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Demi-journées attendues${timeFraction < 1 ? ` (${Math.round(timeFraction*100)}%)` : ''}</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${expectedHalfDays} demi-j.</td></tr>
-<tr style="background:#FFF;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Demi-journées travaillées</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${presentHalfDays} demi-j.</td></tr>
-${approvedLeaveHalfDays > 0 ? `<tr style="background:#F8FAFC;"><td style="padding:5px 10px;font-size:12px;color:#B45309;">Congés approuvés ✅</td><td style="padding:5px 10px;font-size:12px;color:#B45309;text-align:right;">${approvedLeaveHalfDays} demi-j.</td></tr>${approvedRows}` : ''}
-${pendingHalfDays > 0 ? `<tr style="background:#FFF;"><td style="padding:5px 10px;font-size:12px;color:#DC2626;">Absences en attente ⏳</td><td style="padding:5px 10px;font-size:12px;color:#DC2626;text-align:right;">${pendingHalfDays} demi-j.</td></tr>${pendingRows}` : ''}
-<tr style="background:#F8FAFC;border-top:2px solid ${COLORS.border};"><td style="padding:7px 10px;font-size:13px;font-weight:700;color:${COLORS.text};">Solde (travaillé + congés approuvés)</td><td style="padding:7px 10px;font-size:13px;font-weight:700;color:${balanceColor};text-align:right;">${balanceSign}${balanceHalfDays} demi-j. (${balanceSign}${balanceHours}h)</td></tr>
+<tr style="background:#F8FAFC;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Demi-journées travaillées</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${presentHalfDays} demi-j.</td></tr>
+${approvedLeaveHalfDays > 0 ? `<tr style="background:#FFF;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Congés approuvés ✅</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${approvedLeaveHalfDays} demi-j.</td></tr>${approvedRows}` : ''}
+<tr style="background:#F8FAFC;"><td style="padding:5px 10px;font-size:12px;color:#DC2626;">Congés en attente ⏳</td><td style="padding:5px 10px;font-size:12px;color:#DC2626;text-align:right;">${pendingHalfDaysTotal} demi-j.</td></tr>${pendingRows}
+<tr style="background:#FFF;border-top:2px solid ${COLORS.border};"><td style="padding:7px 10px;font-size:13px;font-weight:700;color:${COLORS.text};">Total heures supplémentaires / en moins</td><td style="padding:7px 10px;font-size:13px;font-weight:700;color:${otColor};text-align:right;">${otSign}${totalOvertimeHours}h</td></tr>
 </tbody></table>`;
 
     const recapTable = hasAnyData
@@ -224,6 +234,7 @@ ${pendingHalfDays > 0 ? `<tr style="background:#FFF;"><td style="padding:5px 10p
                <th style="padding:8px 10px;font-size:12px;color:#FFF;text-align:left;font-weight:600;">Jour</th>
                <th style="padding:8px 10px;font-size:12px;color:#FFF;text-align:left;font-weight:600;">Matin</th>
                <th style="padding:8px 10px;font-size:12px;color:#FFF;text-align:left;font-weight:600;">Après-midi</th>
+               <th style="padding:8px 10px;font-size:12px;color:#FFF;text-align:right;font-weight:600;">+/− h</th>
              </tr>
            </thead>
            <tbody>${dayRows.join('')}</tbody>
