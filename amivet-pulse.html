@@ -1059,6 +1059,10 @@ function openManageUsersModal(){
     const users = data.users;
     const roleLabels = { admin:'Admin', vet:'Vétérinaire', asv:'ASV' };
 
+    const isAdmin = currentUser?.role === 'admin';
+    const linkedPersonIds = new Set(users.map(u=>u.person_id).filter(Boolean));
+    const localOnlyASV = ASV_PEOPLE.filter(p=> !p.archived && !linkedPersonIds.has(p.id));
+
     const rows = users.map(u=>`<tr>
         <td style="font-weight:600;">${escapeHTML(u.display_name||'—')}</td>
         <td style="font-size:12px;color:var(--color-text-muted);">${roleLabels[u.role]||u.role||'—'}</td>
@@ -1067,7 +1071,20 @@ function openManageUsersModal(){
         <td style="font-size:12px;text-align:center;">${u.can_edit_all_asv ? '✅' : '—'}</td>
         <td style="white-space:nowrap;">
           <button class="btn btn-sm" data-edit-user="${u.id}" style="font-size:11.5px;padding:4px 8px;margin-right:4px;">Modifier</button>
-          <button class="btn btn-sm" data-delete-user="${u.id}" data-delete-name="${escapeHTML(u.display_name||u.email||u.id)}" style="font-size:11.5px;padding:4px 8px;color:#B91C1C;border-color:#FCA5A5;" title="Supprimer ce compte">🗑️</button>
+          <button class="btn btn-sm" data-delete-user="${u.id}" data-delete-name="${escapeHTML(u.display_name||u.email||u.id)}" style="font-size:11.5px;padding:4px 8px;color:#B91C1C;border-color:#FCA5A5;" title="Supprimer le compte uniquement">🗑️</button>
+          ${isAdmin ? `<button class="btn btn-sm" data-purge-user="${u.id}" data-purge-person="${u.person_id||''}" data-purge-name="${escapeHTML(u.display_name||u.email||u.id)}" style="font-size:11.5px;padding:4px 8px;margin-left:4px;color:#FFFFFF;background:#B91C1C;border-color:#B91C1C;" title="Suppression définitive — efface toutes les données">💣</button>` : ''}
+        </td>
+      </tr>`).join('');
+
+    const localASVRows = localOnlyASV.map(p=>`<tr>
+        <td style="font-weight:600;color:var(--color-text-muted);">${escapeHTML(p.name)}</td>
+        <td style="font-size:12px;color:var(--color-text-muted);">ASV</td>
+        <td style="font-size:12px;color:var(--color-text-muted);font-style:italic;">Sans compte</td>
+        <td style="font-size:12px;text-align:center;">—</td>
+        <td style="font-size:12px;text-align:center;">—</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-sm" data-prefill-invite="${escapeHTML(p.name)}" style="font-size:11.5px;padding:4px 8px;">📧 Inviter</button>
+          ${isAdmin ? `<button class="btn btn-sm" data-purge-local="${p.id}" data-purge-local-name="${escapeHTML(p.name)}" style="font-size:11.5px;padding:4px 8px;margin-left:4px;color:#FFFFFF;background:#B91C1C;border-color:#B91C1C;" title="Retirer du planning">💣</button>` : ''}
         </td>
       </tr>`).join('');
 
@@ -1083,7 +1100,7 @@ function openManageUsersModal(){
             <th title="Peut modifier toutes les lignes ASV">Modif. ASV</th>
             <th></th>
           </tr></thead>
-          <tbody>${rows||'<tr><td colspan="6" class="text-muted" style="text-align:center;padding:16px;">Aucun collaborateur.</td></tr>'}</tbody>
+          <tbody>${rows+localASVRows||'<tr><td colspan="6" class="text-muted" style="text-align:center;padding:16px;">Aucun collaborateur.</td></tr>'}</tbody>
         </table>
       </div>
       <div style="border-top:1px solid var(--color-border);padding-top:14px;">
@@ -1131,6 +1148,81 @@ function openManageUsersModal(){
       });
     });
 
+    // Suppression définitive (purge complète — admin uniquement)
+    box.querySelectorAll('[data-purge-user]').forEach(btn=>{
+      btn.onclick = ()=>{
+        const name = btn.dataset.purgeName;
+        const userId = btn.dataset.purgeUser;
+        const personId = btn.dataset.purgePerson || null;
+        openConfirmModal({
+          title:`⚠️ Suppression définitive de ${name} ?`,
+          message:`Cette action est IRRÉVERSIBLE et supprime :\n\n• Toutes les présences et absences saisies\n• Toutes les signatures et demandes de congé\n• Les entretiens annuels\n• Le compte de connexion\n\nLes données ne pourront pas être récupérées.`,
+          confirmLabel:`Supprimer définitivement`,
+          danger:true,
+          onConfirm: async ()=>{
+            try{
+              // 1. Nettoyer les données de planning en local
+              if(personId){
+                Object.keys(DATA.slots).filter(k=> k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
+                  .forEach(k=> delete DATA.slots[k]);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+                pushDataToSupabase();
+              }
+              // 2. Retirer de l'effectif ASV si présent
+              const asvIdx = ASV_PEOPLE.findIndex(p=> p.id === personId);
+              if(asvIdx !== -1){ ASV_PEOPLE.splice(asvIdx,1); reindexPresentShades(); saveASVRoster(); }
+              // 3. Purge distante (tables Supabase + compte auth)
+              const res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
+                method:'POST', headers:supabaseHeaders({'Content-Type':'application/json'}),
+                body:JSON.stringify({ action:'purge', user_id:userId, person_id:personId }),
+              });
+              if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
+              showToast(`${name} supprimé(e) définitivement`, '🗑️');
+              CAL_VIEWS = buildCalViews();
+              renderCalendarView(currentCalViewKey||'asv-current');
+              openManageUsersModal();
+            }catch(e){ showToast('Erreur purge : '+e.message, '⚠️'); }
+          },
+        });
+      };
+    });
+
+    // Pré-remplir le formulaire d'invitation depuis une ligne ASV locale
+    box.querySelectorAll('[data-prefill-invite]').forEach(btn=>{
+      btn.onclick = ()=>{
+        box.querySelector('#invite-name').value = btn.dataset.prefillInvite;
+        box.querySelector('#invite-role').value = 'asv';
+        box.querySelector('#invite-email').focus();
+        box.querySelector('#invite-email').scrollIntoView({ behavior:'smooth', block:'center' });
+      };
+    });
+
+    // Purge d'un ASV local uniquement (sans compte Supabase)
+    box.querySelectorAll('[data-purge-local]').forEach(btn=>{
+      btn.onclick = ()=>{
+        const name = btn.dataset.purgeLocalName;
+        const personId = btn.dataset.purgeLocal;
+        openConfirmModal({
+          title:`⚠️ Retirer ${name} du planning ?`,
+          message:`Cette action efface toutes les données de planning de ${name} et retire sa ligne du calendrier.\n\nElle est IRRÉVERSIBLE.`,
+          confirmLabel:`Retirer définitivement`,
+          danger:true,
+          onConfirm: ()=>{
+            Object.keys(DATA.slots).filter(k=> k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
+              .forEach(k=> delete DATA.slots[k]);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+            pushDataToSupabase();
+            const asvIdx = ASV_PEOPLE.findIndex(p=> p.id === personId);
+            if(asvIdx !== -1){ ASV_PEOPLE.splice(asvIdx,1); reindexPresentShades(); saveASVRoster(); }
+            showToast(`${name} retiré(e) du planning`, '🗑️');
+            CAL_VIEWS = buildCalViews();
+            renderCalendarView(currentCalViewKey||'asv-current');
+            openManageUsersModal();
+          },
+        });
+      };
+    });
+
     // Invitation
     box.querySelector('#invite-btn').onclick = async ()=>{
       const name = box.querySelector('#invite-name').value.trim();
@@ -1146,13 +1238,14 @@ function openManageUsersModal(){
         });
         if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
         const inviteData = await res.json();
-        // Si rôle ASV, ajouter automatiquement au planning calendrier et lier le person_id
-        if(role === 'asv'){
-          const newPerson = addASVPerson(name);
-          if(newPerson && inviteData.user_id){
+        // Si rôle ASV, lier au person_id existant (si déjà dans le planning) ou en créer un nouveau
+        if(role === 'asv' && inviteData.user_id){
+          const existing = ASV_PEOPLE.find(p=> p.name.trim().toLowerCase() === name.trim().toLowerCase() && !linkedPersonIds.has(p.id));
+          const asvPerson = existing || addASVPerson(name);
+          if(asvPerson){
             await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
               method:'POST', headers:supabaseHeaders({'Content-Type':'application/json'}),
-              body:JSON.stringify({ action:'update', user_id:inviteData.user_id, person_id:newPerson.id }),
+              body:JSON.stringify({ action:'update', user_id:inviteData.user_id, person_id:asvPerson.id }),
             }).catch(()=>{});
           }
         }

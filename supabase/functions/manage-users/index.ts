@@ -9,12 +9,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const ROLE_LABELS: Record<string, string> = {
-  admin: 'Administrateur',
-  vet: 'Vétérinaire',
-  asv: 'ASV',
-};
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -204,6 +198,33 @@ serve(async (req) => {
       if (!user_id) return new Response(JSON.stringify({ error: 'user_id requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       const { error: delError } = await adminClient.auth.admin.deleteUser(user_id);
       if (delError) throw new Error(delError.message);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // --- PURGE (suppression définitive : toutes les tables + compte auth) ---
+    if (action === 'purge') {
+      const { user_id, person_id } = body;
+      if (!user_id && !person_id) {
+        return new Response(JSON.stringify({ error: 'user_id ou person_id requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Supprimer toutes les données liées au person_id dans chaque table concernée
+      if (person_id) {
+        await Promise.all([
+          adminClient.from('monthly_signatures').delete().eq('person_id', person_id),
+          adminClient.from('signature_tokens').delete().eq('person_id', person_id),
+          adminClient.from('annual_interviews').delete().eq('person_id', person_id),
+          adminClient.from('calendar_sync_tokens').delete().eq('person_id', person_id),
+        ]);
+      }
+
+      // Supprimer le profil et le compte auth
+      if (user_id) {
+        await adminClient.from('user_profiles').delete().eq('id', user_id);
+        const { error: delError } = await adminClient.auth.admin.deleteUser(user_id);
+        if (delError) throw new Error(delError.message);
+      }
+
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
