@@ -22,12 +22,6 @@ const WEEKDAYS_FR = ['dim.','lun.','mar.','mer.','jeu.','ven.','sam.'];
 
 function padZ(n: number){ return String(n).padStart(2, '0'); }
 
-function stateColor(s: string){ return s === 'present' ? '#16A34A' : s === 'absent' ? '#DC2626' : '#94A3B8'; }
-function stateText(s: string, label: string){
-  if(s === 'present') return 'Présent';
-  if(s === 'absent') return label ? `Absent — ${label}` : 'Absent';
-  return '—';
-}
 
 Deno.serve(async (req) => {
   if(req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
@@ -141,83 +135,86 @@ Deno.serve(async (req) => {
     let hasAnyData = false;
     let workingDays = 0;
     let presentHalfDays = 0;
-    const absentByLabel: Record<string, number> = {};
+    let approvedLeaveHalfDays = 0;
+    const approvedByLabel: Record<string, number> = {};
+    const pendingByLabel:  Record<string, number> = {};
+
+    function cellHtml(state: string, label: string, decision: string | null): string {
+      if(state === 'present') return `<span style="color:#16A34A;">Présent</span>`;
+      if(state === 'absent'){
+        const txt = label || 'Absence';
+        if(decision === 'approved') return `<span style="color:#B45309;">✅ ${txt}</span>`;
+        return `<span style="color:#DC2626;">⏳ ${txt}</span>`;
+      }
+      return `<span style="color:#94A3B8;">—</span>`;
+    }
 
     for(let day = 1; day <= daysInMonth; day++){
       const iso = `${year}-${padZ(month + 1)}-${padZ(day)}`;
       const date = new Date(year, month, day);
       const wd = date.getDay();
       const isWeekend = wd === 0 || wd === 6;
-      const mState  = slots[`${iso}_${personId}_M`]  || 'empty';
-      const amState = slots[`${iso}_${personId}_AM`] || 'empty';
-      const mLabel  = slots[`${iso}_${personId}_M_label`]  || '';
-      const amLabel = slots[`${iso}_${personId}_AM_label`] || '';
-      if(mState !== 'empty' || amState !== 'empty') hasAnyData = true;
+      if(isWeekend) continue; // on n'affiche que les jours ouvrés
 
-      if(!isWeekend){
-        workingDays++;
-        if(mState === 'present') presentHalfDays++;
-        if(amState === 'present') presentHalfDays++;
-        if(mState === 'absent'){ const k = mLabel || 'Absence non précisée'; absentByLabel[k] = (absentByLabel[k]||0) + 1; }
-        if(amState === 'absent'){ const k = amLabel || 'Absence non précisée'; absentByLabel[k] = (absentByLabel[k]||0) + 1; }
+      const mState    = slots[`${iso}_${personId}_M`]           || 'empty';
+      const amState   = slots[`${iso}_${personId}_AM`]          || 'empty';
+      const mLabel    = slots[`${iso}_${personId}_M_label`]     || '';
+      const amLabel   = slots[`${iso}_${personId}_AM_label`]    || '';
+      const mDecision = slots[`${iso}_${personId}_M_decision`]  || null;
+      const amDecision= slots[`${iso}_${personId}_AM_decision`] || null;
+
+      if(mState !== 'empty' || amState !== 'empty') hasAnyData = true;
+      workingDays++;
+
+      if(mState === 'present') presentHalfDays++;
+      if(amState === 'present') presentHalfDays++;
+
+      if(mState === 'absent'){
+        const k = mLabel || 'Absence non précisée';
+        if(mDecision === 'approved'){ approvedLeaveHalfDays++; approvedByLabel[k] = (approvedByLabel[k]||0)+1; }
+        else { pendingByLabel[k] = (pendingByLabel[k]||0)+1; }
+      }
+      if(amState === 'absent'){
+        const k = amLabel || 'Absence non précisée';
+        if(amDecision === 'approved'){ approvedLeaveHalfDays++; approvedByLabel[k] = (approvedByLabel[k]||0)+1; }
+        else { pendingByLabel[k] = (pendingByLabel[k]||0)+1; }
       }
 
-      const bg = isWeekend ? '#F8FAFC' : '#FFFFFF';
-      const dayCol = isWeekend ? '#94A3B8' : '#0F172A';
-      dayRows.push(`
-        <tr style="background:${bg};">
-          <td style="padding:5px 10px;font-size:12px;color:${dayCol};white-space:nowrap;">${WEEKDAYS_FR[wd]} ${day}</td>
-          <td style="padding:5px 10px;font-size:12px;color:${stateColor(mState)};">${stateText(mState, mLabel)}</td>
-          <td style="padding:5px 10px;font-size:12px;color:${stateColor(amState)};">${stateText(amState, amLabel)}</td>
-        </tr>`);
+      dayRows.push(`<tr style="background:${day%2===0?'#F8FAFC':'#FFFFFF'};">
+        <td style="padding:5px 10px;font-size:12px;color:#0F172A;white-space:nowrap;">${WEEKDAYS_FR[wd]} ${day}</td>
+        <td style="padding:5px 10px;font-size:12px;">${cellHtml(mState, mLabel, mDecision)}</td>
+        <td style="padding:5px 10px;font-size:12px;">${cellHtml(amState, amLabel, amDecision)}</td>
+      </tr>`);
     }
 
     const monthLabel = `${MONTH_NAMES_FR[month]} ${year}`;
     const signingLink = `${APP_URL}?sign=${encodeURIComponent(tokenId)}`;
     const expiryLabel = `${TOKEN_VALID_DAYS} jours`;
 
-    // Calcul du résumé horaire
-    const expectedHalfDays = Math.round(workingDays * 2 * timeFraction * 2) / 2;
-    const balanceHalfDays  = Math.round((presentHalfDays - expectedHalfDays) * 2) / 2;
-    const balanceHours     = Math.round(balanceHalfDays * 3.5 * 10) / 10;
-    const balanceSign      = balanceHalfDays >= 0 ? '+' : '';
-    const balanceColor     = balanceHalfDays >= 0 ? '#16A34A' : '#DC2626';
-    const absentRows = Object.entries(absentByLabel)
-      .sort((a, b) => b[1] - a[1])
-      .map(([label, count]) => `<tr>
-        <td style="padding:4px 10px;font-size:12px;color:${COLORS.textMuted};">↳ ${label}</td>
-        <td style="padding:4px 10px;font-size:12px;color:${COLORS.textMuted};text-align:right;font-variant-numeric:tabular-nums;">${count} demi-j.</td>
-      </tr>`).join('');
+    // Solde = (travaillé + congés approuvés) vs attendus
+    const expectedHalfDays   = Math.round(workingDays * 2 * timeFraction * 2) / 2;
+    const validatedHalfDays  = presentHalfDays + approvedLeaveHalfDays;
+    const pendingHalfDays    = Object.values(pendingByLabel).reduce((a,b)=>a+b, 0);
+    const balanceHalfDays    = Math.round((validatedHalfDays - expectedHalfDays) * 2) / 2;
+    const balanceHours       = Math.round(balanceHalfDays * 3.5 * 10) / 10;
+    const balanceSign  = balanceHalfDays >= 0 ? '+' : '';
+    const balanceColor = balanceHalfDays >= 0 ? '#16A34A' : '#DC2626';
 
-    const summaryHtml = `
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-        style="border:1px solid ${COLORS.border};border-radius:10px;overflow:hidden;margin-bottom:20px;">
-        <thead><tr style="background:${COLORS.secondary};">
-          <th colspan="2" style="padding:8px 12px;font-size:12px;color:${COLORS.textMuted};text-align:left;font-weight:600;letter-spacing:.04em;">RÉCAPITULATIF DU MOIS</th>
-        </tr></thead>
-        <tbody>
-          <tr style="background:#FFF;">
-            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Jours ouvrés</td>
-            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;font-variant-numeric:tabular-nums;">${workingDays} j.</td>
-          </tr>
-          <tr style="background:#F8FAFC;">
-            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Demi-journées attendues${timeFraction < 1 ? ` (${Math.round(timeFraction*100)}%)` : ''}</td>
-            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;font-variant-numeric:tabular-nums;">${expectedHalfDays} demi-j.</td>
-          </tr>
-          <tr style="background:#FFF;">
-            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Demi-journées travaillées</td>
-            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;font-variant-numeric:tabular-nums;">${presentHalfDays} demi-j.</td>
-          </tr>
-          ${absentRows ? `<tr style="background:#F8FAFC;">
-            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Absences</td>
-            <td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;font-variant-numeric:tabular-nums;">${Object.values(absentByLabel).reduce((a,b)=>a+b,0)} demi-j.</td>
-          </tr>${absentRows}` : ''}
-          <tr style="background:#FFF;border-top:1px solid ${COLORS.border};">
-            <td style="padding:7px 10px;font-size:13px;font-weight:700;color:${COLORS.text};">Solde</td>
-            <td style="padding:7px 10px;font-size:13px;font-weight:700;color:${balanceColor};text-align:right;font-variant-numeric:tabular-nums;">${balanceSign}${balanceHalfDays} demi-j. (${balanceSign}${balanceHours}h)</td>
-          </tr>
-        </tbody>
-      </table>`;
+    function labelRows(map: Record<string, number>, icon: string, color: string): string {
+      return Object.entries(map).sort((a,b)=>b[1]-a[1])
+        .map(([lbl, cnt]) => `<tr><td style="padding:3px 10px 3px 22px;font-size:11.5px;color:${color};">${icon} ${lbl}</td><td style="padding:3px 10px;font-size:11.5px;color:${color};text-align:right;">${cnt} demi-j.</td></tr>`).join('');
+    }
+    const approvedRows = labelRows(approvedByLabel, '✅', '#B45309');
+    const pendingRows  = labelRows(pendingByLabel,  '⏳', '#DC2626');
+
+    const summaryHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${COLORS.border};border-radius:10px;overflow:hidden;margin-bottom:20px;"><thead><tr style="background:${COLORS.secondary};"><th colspan="2" style="padding:8px 12px;font-size:12px;color:${COLORS.textMuted};text-align:left;font-weight:600;letter-spacing:.04em;">RÉCAPITULATIF DU MOIS</th></tr></thead><tbody>
+<tr style="background:#FFF;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Jours ouvrés</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${workingDays} j.</td></tr>
+<tr style="background:#F8FAFC;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Demi-journées attendues${timeFraction < 1 ? ` (${Math.round(timeFraction*100)}%)` : ''}</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${expectedHalfDays} demi-j.</td></tr>
+<tr style="background:#FFF;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Demi-journées travaillées</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${presentHalfDays} demi-j.</td></tr>
+${approvedLeaveHalfDays > 0 ? `<tr style="background:#F8FAFC;"><td style="padding:5px 10px;font-size:12px;color:#B45309;">Congés approuvés ✅</td><td style="padding:5px 10px;font-size:12px;color:#B45309;text-align:right;">${approvedLeaveHalfDays} demi-j.</td></tr>${approvedRows}` : ''}
+${pendingHalfDays > 0 ? `<tr style="background:#FFF;"><td style="padding:5px 10px;font-size:12px;color:#DC2626;">Absences en attente ⏳</td><td style="padding:5px 10px;font-size:12px;color:#DC2626;text-align:right;">${pendingHalfDays} demi-j.</td></tr>${pendingRows}` : ''}
+<tr style="background:#F8FAFC;border-top:2px solid ${COLORS.border};"><td style="padding:7px 10px;font-size:13px;font-weight:700;color:${COLORS.text};">Solde (travaillé + congés approuvés)</td><td style="padding:7px 10px;font-size:13px;font-weight:700;color:${balanceColor};text-align:right;">${balanceSign}${balanceHalfDays} demi-j. (${balanceSign}${balanceHours}h)</td></tr>
+</tbody></table>`;
 
     const recapTable = hasAnyData
       ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
@@ -282,6 +279,8 @@ Deno.serve(async (req) => {
           subject: `Amivet PULSE — Signature feuille de présence ${monthLabel}`,
           textContent: text,
           htmlContent: html,
+          trackClicks: false,
+          trackOpens: false,
         }),
       });
       const brevoBody = await emailRes.text();
