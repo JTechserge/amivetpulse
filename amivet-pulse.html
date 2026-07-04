@@ -1103,15 +1103,6 @@ function openManageUsersModal(){
           <button class="btn btn-primary" id="invite-btn">📧 Envoyer l'invitation</button>
         </div>
       </div>
-      <div style="border-top:1px solid var(--color-border);padding-top:14px;">
-        <h4 style="font-size:14px;margin-bottom:6px;">Ajouter au planning (sans compte)</h4>
-        <p class="text-muted" style="font-size:12px;margin-bottom:10px;">Crée une ligne dans le calendrier ASV sans nécessiter d'adresse email. Utile pour une personne sans compte numérique.</p>
-        <div style="display:flex;gap:8px;">
-          <input type="text" id="planning-name" placeholder="Nom de la personne" maxlength="30" style="flex:1;padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
-          <button class="btn btn-primary" id="planning-add-btn">+ Ajouter</button>
-        </div>
-        <p id="planning-add-error" style="color:#B91C1C;font-size:12px;display:none;margin:4px 0 0;"></p>
-      </div>
     `;
 
     box.querySelector('#modal-cancel').onclick = close;
@@ -1155,7 +1146,7 @@ function openManageUsersModal(){
         });
         if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
         const inviteData = await res.json();
-        // Si l'invitation est pour une ASV, l'ajouter automatiquement au planning
+        // Si rôle ASV, ajouter automatiquement au planning calendrier et lier le person_id
         if(role === 'asv'){
           const newPerson = addASVPerson(name);
           if(newPerson && inviteData.user_id){
@@ -1169,33 +1160,13 @@ function openManageUsersModal(){
         box.querySelector('#invite-email').value='';
         errEl.style.display='none';
         box.querySelector('#invite-btn').disabled = false;
-        if(inviteData.email_sent){
-          showToast(`Invitation envoyée à ${email}`, '📧');
-          openManageUsersModal();
-        } else {
-          // Email non envoyé (plan Resend gratuit) → afficher le lien à copier
-          openSigningLinkModal(inviteData.invite_link, email);
-          renderCalendarView && renderCalendarView(Object.keys(CAL_VIEWS)[0]);
-          openManageUsersModal();
-        }
+        showToast(`Invitation envoyée à ${email}`, '📧');
+        openManageUsersModal();
       }catch(e){
         errEl.textContent = e.message; errEl.style.display='block';
         box.querySelector('#invite-btn').disabled = false;
       }
     };
-
-    // Ajouter au planning sans compte
-    const planningNameInput = box.querySelector('#planning-name');
-    box.querySelector('#planning-add-btn').onclick = ()=>{
-      const name = planningNameInput.value.trim();
-      const planErrEl = box.querySelector('#planning-add-error');
-      if(!name){ planErrEl.textContent='Le nom est requis.'; planErrEl.style.display='block'; return; }
-      const p = addASVPerson(name);
-      if(!p){ planErrEl.textContent='Nom invalide.'; planErrEl.style.display='block'; return; }
-      showToast(`${p.short} ajouté(e) au planning`, '✅');
-      openManageUsersModal();
-    };
-    planningNameInput.addEventListener('keydown', e=>{ if(e.key==='Enter') box.querySelector('#planning-add-btn').click(); });
   }).catch(err=>{
     box.innerHTML = `<h3>👥 Collaborateurs</h3><p class="text-muted">Impossible de charger la liste : ${escapeHTML(err.message)}.</p><div class="modal-actions"><button class="btn" id="modal-cancel">Fermer</button></div>`;
     box.querySelector('#modal-cancel').onclick = close;

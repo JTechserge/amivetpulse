@@ -70,15 +70,14 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: 'email, display_name et role sont requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-        type: 'invite',
-        email,
-        options: { redirectTo: APP_URL },
+      // inviteUserByEmail utilise l'infrastructure email de Supabase — aucune restriction
+      // de domaine, fonctionne pour n'importe quelle adresse email.
+      const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+        redirectTo: APP_URL,
       });
-      if (linkError) throw new Error(linkError.message);
+      if (inviteError) throw new Error(inviteError.message);
 
-      const inviteLink = linkData.properties.action_link;
-      const userId = linkData.user.id;
+      const userId = inviteData.user.id;
 
       const { error: profileError } = await adminClient.from('user_profiles').upsert({
         id: userId,
@@ -90,54 +89,7 @@ serve(async (req) => {
       });
       if (profileError) throw new Error(profileError.message);
 
-      const roleLabel = ROLE_LABELS[role] || role;
-      const html = wrapEmailHtml(`
-        <h1 style="font-size:18px;color:${COLORS.text};margin:0 0 4px;">👋 Bienvenue sur Amivet PULSE</h1>
-        <p style="font-size:14px;color:${COLORS.textMuted};line-height:1.6;margin:0 0 20px;">
-          Bonjour <strong>${display_name}</strong>,<br>
-          Vous avez été invité(e) à rejoindre <strong>Amivet PULSE</strong> en tant que <strong>${roleLabel}</strong>.
-          Cliquez sur le bouton ci-dessous pour créer votre espace et choisir votre mot de passe.
-        </p>
-        ${buttonHtml(inviteLink, 'Créer mon espace')}
-        <p style="font-size:12.5px;color:${COLORS.textMuted};margin:0 0 8px;">
-          Ce lien est valable 24 heures. Si le bouton ne fonctionne pas, copiez ce lien :
-        </p>
-        <p style="font-size:12px;color:${COLORS.primary};word-break:break-all;margin:0 0 20px;">${inviteLink}</p>
-        <p style="font-size:12px;color:${COLORS.textFaint};margin:0;">
-          Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.
-        </p>
-      `);
-
-      const text = [
-        `Bonjour ${display_name},`,
-        '',
-        `Vous avez été invité(e) à rejoindre Amivet PULSE en tant que ${roleLabel}.`,
-        '',
-        'Cliquez sur ce lien pour créer votre espace (valable 24 heures) :',
-        inviteLink,
-        '',
-        '— Amivet PULSE',
-      ].join('\n');
-
-      let emailSent = false;
-      let emailError = '';
-      try {
-        const emailRes = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from: 'Amivet PULSE <onboarding@resend.dev>',
-            to: [email],
-            subject: 'Amivet PULSE — Votre invitation',
-            text,
-            html,
-          }),
-        });
-        if (emailRes.ok) { emailSent = true; }
-        else { emailError = `Resend HTTP ${emailRes.status}`; }
-      } catch (err) { emailError = String((err as Error)?.message || err); }
-
-      return new Response(JSON.stringify({ ok: true, user_id: userId, email_sent: emailSent, email_error: emailError, invite_link: inviteLink }), {
+      return new Response(JSON.stringify({ ok: true, user_id: userId }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
