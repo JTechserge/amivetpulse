@@ -229,7 +229,7 @@ Deno.serve(async (req) => {
         }),
       });
       if(emailRes.ok){ emailSent = true; }
-      else { emailError = `Resend HTTP ${emailRes.status}`; }
+      else { emailError = `Brevo HTTP ${emailRes.status}: ${await emailRes.text()}`; }
     }catch(err){ emailError = String((err as Error)?.message || err); }
 
     return new Response(JSON.stringify({ ok: true, email_sent: emailSent, email_error: emailError, signing_link: signingLink }), {

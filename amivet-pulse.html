@@ -3417,7 +3417,7 @@ async function adminRequestSignature(viewKey, personId){
       showToast(`Email de signature envoyé à ${person.short}`, '📧');
       renderCalendarView(viewKey);
     } else {
-      openSigningLinkModal(data.signing_link, person.short);
+      openSigningLinkModal(data.signing_link, person.short, data.email_error);
       renderCalendarView(viewKey);
     }
   }catch(e){
@@ -3427,14 +3427,15 @@ async function adminRequestSignature(viewKey, personId){
 }
 
 // Modal de fallback : affiche le lien de signature à copier/partager quand l'email échoue.
-function openSigningLinkModal(signingLink, recipientLabel){
+function openSigningLinkModal(signingLink, recipientLabel, emailError){
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
   box.innerHTML = `
     <h3>🔗 Lien de signature</h3>
     <p style="font-size:13.5px;color:var(--color-text-muted);margin-bottom:14px;">
-      L'email n'a pas pu être envoyé à <strong>${escapeHTML(recipientLabel)}</strong> (limite du plan Resend gratuit).
+      L'email n'a pas pu être envoyé à <strong>${escapeHTML(recipientLabel)}</strong>.
+      ${emailError ? `<br><small style="color:var(--color-text-muted);word-break:break-all;">${escapeHTML(emailError)}</small><br>` : ''}
       Copiez ce lien et transmettez-le directement à la personne concernée — il est valable 7 jours et à usage unique.
     </p>
     <div style="display:flex;gap:8px;align-items:center;">
