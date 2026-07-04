@@ -119,20 +119,25 @@ serve(async (req) => {
         '— Amivet PULSE',
       ].join('\n');
 
-      const emailRes = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: 'Amivet PULSE <onboarding@resend.dev>',
-          to: [email],
-          subject: 'Amivet PULSE — Votre invitation',
-          text,
-          html,
-        }),
-      });
-      if (!emailRes.ok) throw new Error(`Email non envoyé (Resend HTTP ${emailRes.status})`);
+      let emailSent = false;
+      let emailError = '';
+      try {
+        const emailRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: 'Amivet PULSE <onboarding@resend.dev>',
+            to: [email],
+            subject: 'Amivet PULSE — Votre invitation',
+            text,
+            html,
+          }),
+        });
+        if (emailRes.ok) { emailSent = true; }
+        else { emailError = `Resend HTTP ${emailRes.status}`; }
+      } catch (err) { emailError = String((err as Error)?.message || err); }
 
-      return new Response(JSON.stringify({ ok: true, user_id: userId }), {
+      return new Response(JSON.stringify({ ok: true, user_id: userId, email_sent: emailSent, email_error: emailError, invite_link: inviteLink }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
