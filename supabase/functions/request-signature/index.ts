@@ -203,11 +203,10 @@ Deno.serve(async (req) => {
         else pendingByLabel[amLabel] = (pendingByLabel[amLabel]||0)+1;
       }
 
-      const otSign  = dayOvertimeH > 0 ? '+' : '';
-      const otColor = dayOvertimeH > 0 ? '#16A34A' : dayOvertimeH < 0 ? '#DC2626' : '#94A3B8';
-      const otCell  = dayOvertimeH === 0
+      const otCellColor = dayOvertimeH > 0 ? '#16A34A' : '#DC2626';
+      const otCell = dayOvertimeH === 0
         ? `<span style="color:#94A3B8;">—</span>`
-        : `<span style="color:${otColor};font-weight:600;">${otSign}${dayOvertimeH}h</span>`;
+        : `<span style="color:${otCellColor};">${signedHHMM(dayOvertimeH)}</span>`;
 
       dayRows.push(`<tr style="background:${day%2===0?'#F8FAFC':'#FFFFFF'};">
         <td style="padding:5px 10px;font-size:12px;color:#0F172A;white-space:nowrap;">${WEEKDAYS_FR[wd]} ${day}</td>
@@ -222,7 +221,6 @@ Deno.serve(async (req) => {
     const expiryLabel = `${TOKEN_VALID_DAYS} jours`;
 
     totalOvertimeHours = Math.round(totalOvertimeHours * 10) / 10;
-    const otSign  = totalOvertimeHours >= 0 ? '+' : '';
     const otColor = totalOvertimeHours > 0 ? '#16A34A' : totalOvertimeHours < 0 ? '#DC2626' : '#94A3B8';
 
     function labelRows(map: Record<string, number>, icon: string, color: string): string {
@@ -264,8 +262,7 @@ ${approvedLeaveHalfDays > 0 ? `<tr style="background:#FFF;"><td style="padding:5
         Voici votre feuille de présence pour <strong>${monthLabel}</strong>.
         Vérifiez les informations ci-dessous puis signez en cliquant sur le bouton.
       </p>
-      ${summaryHtml}
-      ${recapTable}
+      ${summaryHtml}<p style="margin:0;font-size:1px;line-height:1px;">&zwnj;</p>${recapTable}
       <p style="font-size:12.5px;color:${COLORS.textMuted};margin:0 0 16px;">
         En signant, vous certifiez que ces informations sont exactes.
         Ce lien est à usage unique et valable ${expiryLabel}.
