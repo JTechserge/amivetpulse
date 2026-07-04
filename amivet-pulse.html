@@ -2557,14 +2557,17 @@ function renderWeekViewASV(){
   const pid = weekPersonId();
   const p = personOf(pid);
   const isVetUser = effectiveRole() !== 'asv';
-  const canEdit = isVetUser || canEditSlot(pid);
+  const baseCanEdit = isVetUser || canEditSlot(pid);
+  function canEditDay(d){ return baseCanEdit && !isMonthSigned(pid, d.getFullYear(), d.getMonth()); }
+  const canEditWeek = days.some(d => canEditDay(d));
   const DAY_SHORT = ['Lu','Ma','Me','Je','Ve','Sa'];
   function buildVisCell(d, session, height){
     const iso=fmtISO(d);
     if(isSunday(d)||holidayName(iso)) return `<td class="week-vis-cell" style="height:${height}px;background:#f8fafc;"></td>`;
     const sess=WEEK_SESSIONS[session];
     const sv=getTE(iso,pid,sess.s), ev=getTE(iso,pid,sess.e);
-    const visH=canEdit?height-22:height;
+    const ce=canEditDay(d);
+    const visH=ce?height-22:height;
     const pSM=timeToMins(sess.pS), pDur=timeToMins(sess.pE)-pSM;
     let block='';
     if(sv&&ev){
@@ -2576,7 +2579,7 @@ function renderWeekViewASV(){
     const da=`data-adj-iso="${iso}" data-adj-pid="${pid}"`;
     const noData = !sv && !ev;
     const mutedStyle = noData ? 'color:var(--color-text-muted);' : '';
-    const ctrlRow=canEdit?`<div class="week-time-row">
+    const ctrlRow=ce?`<div class="week-time-row">
       <span class="week-adj-grp">
         <button class="week-adj" ${da} data-adj-f="${sess.s}" data-adj-d="-15">▾</button>
         <span class="week-time-disp" style="${mutedStyle}">${sv||'—'}</span>
@@ -2589,10 +2592,10 @@ function renderWeekViewASV(){
         <button class="week-adj" ${da} data-adj-f="${sess.e}" data-adj-d="+15">▴</button>
       </span>
     </div>`:'';
-    const visAttrs=canEdit?`data-open-popup="${iso}" data-open-pid="${pid}" data-week-sess="${session}"`:'';
+    const visAttrs=ce?`data-open-popup="${iso}" data-open-pid="${pid}" data-week-sess="${session}"`:'';
     return `<td class="week-vis-cell${session==='lunch'?' week-lunch-cell':''}" style="height:${height}px;">
       <div class="week-cell-inner">
-        <div class="week-vis-area${canEdit?'':' no-edit'}" style="height:${visH}px;" ${visAttrs}>${buildTimeGrid(session,visH)}${block}</div>
+        <div class="week-vis-area${ce?'':' no-edit'}" style="height:${visH}px;" ${visAttrs}>${buildTimeGrid(session,visH)}${block}</div>
         ${ctrlRow}
       </div>
     </td>`;
@@ -2623,17 +2626,17 @@ function renderWeekViewASV(){
 
   const absRow=`<tr><td class="week-footer-label">Absent</td>${days.map(d=>footerCell(d,iso=>{
     const ab=getSlotState(iso,pid,'M')==='absent'&&getSlotState(iso,pid,'AM')==='absent';
-    return `<input type="checkbox" class="week-abs-chk" data-week-abs="${iso}" data-week-pid="${pid}" ${ab?'checked':''} ${canEdit?'':'disabled'}>`;
+    return `<input type="checkbox" class="week-abs-chk" data-week-abs="${iso}" data-week-pid="${pid}" ${ab?'checked':''} ${canEditDay(d)?'':'disabled'}>`;
   })).join('')}</tr>`;
 
   const otRow=`<tr><td class="week-footer-label">H. +/−</td>${days.map(d=>footerCell(d,iso=>{
     const ot=getOvertimeHours(iso,pid);
-    return `<input type="number" step="0.5" class="week-ot-input" data-week-ot="${iso}" data-week-pid="${pid}" value="${ot||''}" placeholder="0" style="width:48px;padding:2px 4px;border:1px solid var(--color-border);border-radius:4px;font-size:11px;font-family:inherit;text-align:center;" ${canEdit?'':'disabled'}>`;
+    return `<input type="number" step="0.5" class="week-ot-input" data-week-ot="${iso}" data-week-pid="${pid}" value="${ot||''}" placeholder="0" style="width:48px;padding:2px 4px;border:1px solid var(--color-border);border-radius:4px;font-size:11px;font-family:inherit;text-align:center;" ${canEditDay(d)?'':'disabled'}>`;
   })).join('')}</tr>`;
 
   const noteRow=`<tr><td class="week-footer-label">Note</td>${days.map(d=>footerCell(d,iso=>{
     const note=getDayNote(iso,pid);
-    return `<input type="text" class="week-note-input" data-week-note="${iso}" data-week-pid="${pid}" value="${escapeHTML(note)}" placeholder="…" style="width:100%;box-sizing:border-box;padding:2px 4px;border:1px solid var(--color-border);border-radius:4px;font-size:11px;font-family:inherit;" ${canEdit?'':'disabled'}>`;
+    return `<input type="text" class="week-note-input" data-week-note="${iso}" data-week-pid="${pid}" value="${escapeHTML(note)}" placeholder="…" style="width:100%;box-sizing:border-box;padding:2px 4px;border:1px solid var(--color-border);border-radius:4px;font-size:11px;font-family:inherit;" ${canEditDay(d)?'':'disabled'}>`;
   },'padding:3px;')).join('')}</tr>`;
 
   const asvPicker=isVetUser?`<select class="week-asv-pick" id="week-asv-pick">${ASV_PEOPLE.map(a=>`<option value="${a.id}" ${a.id===pid?'selected':''}>${escapeHTML(a.short)}</option>`).join('')}</select>`:
@@ -2649,7 +2652,7 @@ function renderWeekViewASV(){
       <span class="week-nav-label">${wLabel}</span>
       <button class="btn-icon" id="week-next">→</button>
       <button class="btn btn-sm" id="week-today-btn">Aujourd'hui</button>
-      ${canEdit ? `<button class="btn btn-sm btn-danger" id="week-clear-btn" title="Effacer toutes les heures de la semaine">🗑️ Vider la semaine</button>` : ''}
+      ${canEditWeek ? `<button class="btn btn-sm btn-danger" id="week-clear-btn" title="Effacer toutes les heures de la semaine">🗑️ Vider la semaine</button>` : ''}
       ${asvPicker}
     </div>
     <div class="week-view-wrap card" style="padding:0;">
@@ -2665,7 +2668,7 @@ function renderWeekViewASV(){
     weekNavState.mondayISO=fmtISO(d); renderWeekViewASV();
   };
   container.querySelector('#week-today-btn').onclick=()=>{ weekNavState.mondayISO=fmtISO(getWeekMondayDate(today)); renderWeekViewASV(); };
-  if(canEdit){
+  if(canEditWeek){
     container.querySelector('#week-clear-btn').onclick=()=>{
       const label=`${monday.getDate()} ${MONTH_NAMES[monday.getMonth()].toLowerCase()} – ${days[5].getDate()} ${MONTH_NAMES[days[5].getMonth()].toLowerCase()}`;
       openConfirmModal({
@@ -2676,7 +2679,7 @@ function renderWeekViewASV(){
           snapshotBeforeChange();
           days.forEach(d=>{
             const iso=fmtISO(d);
-            if(isSunday(d)) return;
+            if(isSunday(d)||!canEditDay(d)) return;
             ['ms','me','as','ae','ls','le'].forEach(f=>{ delete DATA.slots[teKey(iso,pid,f)]; });
             setOvertimeHours(iso,pid,0);
             setDayNote(iso,pid,'');
