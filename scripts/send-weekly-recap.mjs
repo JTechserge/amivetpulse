@@ -108,11 +108,6 @@ async function main(){
     }
   }
 
-  if(pending.length === 0){
-    console.log('Aucune demande de congé ASV en attente — pas d\'email envoyé.');
-    return;
-  }
-
   // "AM" < "M" en tri alphabétique, ce qui inverserait l'ordre chronologique des
   // demi-journées d'une même date — on trie donc M avant AM explicitement.
   const SLOT_ORDER = { M: 0, AM: 1 };
@@ -150,22 +145,21 @@ async function main(){
     return `- ${g.personId} — ${range}${g.label ? ' — ' + g.label : ''} (${g.slots.length} demi-journée${g.slots.length > 1 ? 's' : ''})`;
   });
 
-  const subject = `Amivet PULSE — Récapitulatif hebdomadaire : ${groups.length} demande(s) de congé en attente`;
+  const subject = `Amivet PULSE — Récapitulatif hebdo : ${groups.length} demande(s) de congé · heures supp.`;
   const text = [
     'Bonjour,',
     '',
-    `Voici le récapitulatif (fréquence : ${settings.frequency}) des demandes de congé ASV en attente de traitement (${groups.length}) :`,
-    '',
-    ...lines,
+    `Demandes de congé ASV en attente (${groups.length}) :`,
+    ...(lines.length ? lines : ['- Aucune demande en attente.']),
     '',
     `Heures supplémentaires ASV (${periodLabel}) :`,
     ...(overtimeEntries.length
-      ? overtimeEntries.map(([p, h]) => `- ${p} : ${h}h`)
+      ? overtimeEntries.map(([p, h]) => `- ${p} : ${h > 0 ? '+' : ''}${h}h`)
       : ['- Aucune heure supplémentaire enregistrée sur cette période.']),
     '',
-    'Merci de les traiter depuis le Tableau de bord de l\'application (onglet "Demandes de congé").',
+    'Accédez au Tableau de bord pour traiter les demandes.',
     '',
-    '— Amivet Planning (envoi automatique)',
+    '— Amivet PULSE (envoi automatique chaque samedi)',
   ].join('\n');
 
   const groupsHtml = groups.map(g => {
@@ -186,15 +180,19 @@ async function main(){
       </tr>`).join('')
     : `<tr><td style="padding:6px 0;font-size:13px;color:${COLORS.textMuted};">Aucune heure supplémentaire enregistrée sur cette période.</td></tr>`;
 
+  const noPendingHtml = groups.length === 0
+    ? `<p style="font-size:13px;color:${COLORS.textMuted};font-style:italic;">Aucune demande en attente.</p>`
+    : '';
   const html = wrapEmailHtml(`
-    <h1 style="font-size:18px;color:${COLORS.text};margin:0 0 4px;">📋 Récapitulatif des congés ASV</h1>
-    <p style="font-size:14px;color:${COLORS.textMuted};margin:0 0 20px;">${groups.length} demande${groups.length > 1 ? 's' : ''} en attente de traitement</p>
-    ${groupsHtml}
-    <div style="margin-top:24px;padding-top:20px;border-top:1px solid ${COLORS.border};">
-      <h2 style="font-size:14px;color:${COLORS.text};margin:0 0 12px;">⏱️ Heures supplémentaires ASV — ${periodLabel}</h2>
+    <h1 style="font-size:18px;color:${COLORS.text};margin:0 0 4px;">📋 Récapitulatif hebdomadaire ASV</h1>
+    <p style="font-size:14px;color:${COLORS.textMuted};margin:0 0 16px;">Semaine du ${periodLabel}</p>
+    <h2 style="font-size:14px;color:${COLORS.text};margin:0 0 10px;">📅 Demandes de congé en attente${groups.length ? ` (${groups.length})` : ''}</h2>
+    ${noPendingHtml}${groupsHtml}
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid ${COLORS.border};">
+      <h2 style="font-size:14px;color:${COLORS.text};margin:0 0 10px;">⏱️ Heures supplémentaires — ${periodLabel}</h2>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${overtimeRowsHtml}</table>
     </div>
-    <div style="margin-top:24px;">${buttonHtml(APP_URL, 'Ouvrir Amivet Planning')}</div>
+    <div style="margin-top:24px;">${buttonHtml(APP_URL, 'Ouvrir Amivet PULSE')}</div>
   `);
 
   const emailRes = await fetch('https://api.resend.com/emails', {
