@@ -93,13 +93,13 @@ async function main(){
   const recipients = await getVetAdminEmails();
   if(!recipients.length) throw new Error('Aucun vétérinaire ou administrateur trouvé en base.');
 
-  const res = await fetch(`${SUPABASE_URL}planning_data?select=data&id=eq.singleton`, { headers: HEADERS });
+  const res = await fetch(`${SUPABASE_URL}planning_data?select=data&id=eq.singleton`, { headers: SVC_HEADERS });
   if(!res.ok) throw new Error(`Supabase a répondu HTTP ${res.status}`);
   const rows = await res.json();
   const slots = (rows[0] && rows[0].data) || {};
 
   const pending = [];
-  const decisionRe = /^(\d{4}-\d{2}-\d{2})_([a-z0-9-]+)_(M|AM)_decision$/;
+  const decisionRe = /^(\d{4}-\d{2}-\d{2})_(.+)_(M|AM)_decision$/;
   for(const key of Object.keys(slots)){
     const m = key.match(decisionRe);
     if(m && slots[key] === 'pending'){
@@ -126,7 +126,7 @@ async function main(){
   // Heures supplémentaires ASV sur la période couverte par la fréquence choisie.
   const windowStartIso = toISODate(new Date(now.getTime() - WINDOW_DAYS * 86400000));
   const overtimeByPerson = {};
-  const overtimeRe = /^(\d{4}-\d{2}-\d{2})_([a-z0-9-]+)_overtime$/;
+  const overtimeRe = /^(\d{4}-\d{2}-\d{2})_(.+)_overtime$/;
   for(const key of Object.keys(slots)){
     const m = key.match(overtimeRe);
     if(!m) continue;
