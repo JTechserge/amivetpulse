@@ -2792,23 +2792,31 @@ function openWeekTimePopover(iso, pid){
   const p = personOf(pid);
   const hasEntries = hasTE(iso,pid)||hasLunchTE(iso,pid);
   const note = getDayNote(iso,pid);
-  const iStyle = 'padding:5px 7px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:13px;';
+  const iStyle = 'padding:5px 7px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:13px;width:100%;box-sizing:border-box;background:var(--color-surface);color:var(--color-text);';
   function tval(f, def){ return getTE(iso,pid,f)||def; }
+  function makeTimeSelect(id, curVal, minT, maxT, optional){
+    const minM=timeToMins(minT), maxM=timeToMins(maxT);
+    let snapped=curVal;
+    if(curVal){ const [h,m]=curVal.split(':').map(Number); const sm=Math.round((h*60+m)/15)*15; snapped=`${String(Math.floor(sm/60)%24).padStart(2,'0')}:${String(sm%60).padStart(2,'0')}`; }
+    let opts=optional?`<option value="">—</option>`:'';
+    for(let m=minM;m<=maxM;m+=15){ const hh=Math.floor(m/60),mm=m%60; const v=`${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; opts+=`<option value="${v}"${v===snapped?' selected':''}>${v}</option>`; }
+    return `<select id="${id}" style="${iStyle}">${opts}</select>`;
+  }
   box.innerHTML = `
     <h4 style="margin-bottom:10px;">⏱️ ${escapeHTML(p?.short||pid)} — ${formatFR(iso)}</h4>
     <div style="display:grid;grid-template-columns:80px 1fr 16px 1fr;gap:6px 8px;align-items:center;margin-bottom:10px;font-size:13px;">
       <label style="font-weight:600;color:var(--color-text-muted);">Matin :</label>
-      <input type="time" step="900" id="te-ms" value="${tval('ms',CLINIC_HOURS.mStart)}" style="${iStyle}">
+      ${makeTimeSelect('te-ms',tval('ms',CLINIC_HOURS.mStart),'06:00','13:00',false)}
       <span style="text-align:center;">→</span>
-      <input type="time" step="900" id="te-me" value="${tval('me',CLINIC_HOURS.mEnd)}" style="${iStyle}">
+      ${makeTimeSelect('te-me',tval('me',CLINIC_HOURS.mEnd),'06:00','13:00',false)}
       <label style="font-weight:600;color:#F59E0B;">13h–15h :</label>
-      <input type="time" step="900" id="te-ls" value="${tval('ls','')}" placeholder="—" style="${iStyle}">
+      ${makeTimeSelect('te-ls',tval('ls',''),'12:00','15:30',true)}
       <span style="text-align:center;">→</span>
-      <input type="time" step="900" id="te-le" value="${tval('le','')}" placeholder="—" style="${iStyle}">
+      ${makeTimeSelect('te-le',tval('le',''),'12:00','15:30',true)}
       <label style="font-weight:600;color:var(--color-text-muted);">A-midi :</label>
-      <input type="time" step="900" id="te-as" value="${tval('as',CLINIC_HOURS.amStart)}" style="${iStyle}">
+      ${makeTimeSelect('te-as',tval('as',CLINIC_HOURS.amStart),'13:00','20:00',false)}
       <span style="text-align:center;">→</span>
-      <input type="time" step="900" id="te-ae" value="${tval('ae',CLINIC_HOURS.amEnd)}" style="${iStyle}">
+      ${makeTimeSelect('te-ae',tval('ae',CLINIC_HOURS.amEnd),'13:00','20:00',false)}
     </div>
     <p style="font-size:11px;color:var(--color-text-muted);margin:0 0 10px;">La plage 13h–15h est comptabilisée comme heures supplémentaires.</p>
     <div id="te-preview" style="font-size:12.5px;margin-bottom:10px;font-weight:600;color:var(--color-primary);"></div>
@@ -2837,17 +2845,7 @@ function openWeekTimePopover(iso, pid){
       ? `Total : ${formatHHMM(h)}${aOT > 0 ? ` (+${formatHHMM(aOT)} supp.)` : aOT < 0 ? ` (-${formatHHMM(Math.abs(aOT))} déficit)` : ''}`
       : '';
   };
-  function snapTime15(inp){
-    if(!inp.value) return;
-    const [h,m] = inp.value.split(':').map(Number);
-    const snapped = Math.round((h*60+m)/15)*15;
-    const sh = Math.floor(snapped/60) % 24, sm = snapped % 60;
-    inp.value = `${String(sh).padStart(2,'0')}:${String(sm).padStart(2,'0')}`;
-  }
-  box.querySelectorAll('input[type=time]').forEach(i=>{
-    i.addEventListener('change', ()=>{ snapTime15(i); updatePreview(); });
-    i.addEventListener('input', updatePreview);
-  });
+  box.querySelectorAll('select[id^="te-"]').forEach(s=>s.addEventListener('change', updatePreview));
   updatePreview();
   box.querySelector('#te-save').onclick = ()=>{
     snapshotBeforeChange();

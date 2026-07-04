@@ -262,7 +262,7 @@ ${approvedLeaveHalfDays > 0 ? `<tr style="background:#FFF;"><td style="padding:5
         Voici votre feuille de présence pour <strong>${monthLabel}</strong>.
         Vérifiez les informations ci-dessous puis signez en cliquant sur le bouton.
       </p>
-      ${summaryHtml}<p style="margin:0;font-size:1px;line-height:1px;">&zwnj;</p>${recapTable}
+      ${summaryHtml}${recapTable}
       <p style="font-size:12.5px;color:${COLORS.textMuted};margin:0 0 16px;">
         En signant, vous certifiez que ces informations sont exactes.
         Ce lien est à usage unique et valable ${expiryLabel}.
