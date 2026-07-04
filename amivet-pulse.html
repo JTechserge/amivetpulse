@@ -2531,6 +2531,23 @@ function buildWeekDayVisual(iso, personId, isEditable){
     afternoon:block(aStart, aEnd,  CLINIC_HOURS.amStart, 255, AMH),
   };
 }
+// Génère la grille de fond (lignes toutes les 15 min, labels sur les heures pleines)
+// pour une session de la vue semaine. Renvoie du HTML à insérer dans .week-vis-area.
+function buildTimeGrid(sessKey, visH){
+  const sess = WEEK_SESSIONS[sessKey];
+  const pSM = timeToMins(sess.pS), pEM = timeToMins(sess.pE);
+  const totalMins = pEM - pSM;
+  let html = '';
+  for(let offset = 15; offset < totalMins; offset += 15){
+    const curMin = pSM + offset;
+    const y = Math.round(offset / totalMins * visH);
+    const isHour = curMin % 60 === 0;
+    const lbl = isHour ? `${Math.floor(curMin/60)}h` : '';
+    html += `<div style="position:absolute;left:0;right:0;top:${y}px;border-top:${isHour?'1px solid rgba(100,116,139,0.2)':'1px solid rgba(100,116,139,0.07)'};pointer-events:none;">${lbl?`<span style="position:absolute;left:2px;top:-8px;font-size:7.5px;line-height:1;color:rgba(100,116,139,0.5);pointer-events:none;">${lbl}</span>`:''}</div>`;
+  }
+  return html;
+}
+
 function renderWeekViewASV(){
   const container = document.getElementById('asv-sub-week');
   if(!container) return;
@@ -2575,7 +2592,7 @@ function renderWeekViewASV(){
     const visAttrs=canEdit?`data-open-popup="${iso}" data-open-pid="${pid}" data-week-sess="${session}"`:'';
     return `<td class="week-vis-cell${session==='lunch'?' week-lunch-cell':''}" style="height:${height}px;">
       <div class="week-cell-inner">
-        <div class="week-vis-area${canEdit?'':' no-edit'}" style="height:${visH}px;" ${visAttrs}>${block}</div>
+        <div class="week-vis-area${canEdit?'':' no-edit'}" style="height:${visH}px;" ${visAttrs}>${buildTimeGrid(session,visH)}${block}</div>
         ${ctrlRow}
       </div>
     </td>`;
@@ -2600,7 +2617,7 @@ function renderWeekViewASV(){
   const totRow=`<tr><td class="week-footer-label">Heures</td>${days.map(d=>footerCell(d,iso=>{
     const w=calcDayTE(iso,pid)+calcLunchTE(iso,pid); const aOT=calcAutoOT(iso,pid);
     if(!w) return '-';
-    return `<span class="week-total-h">${formatNum(w)}h</span>${aOT!==0?` <span style="font-size:10px;font-weight:700;color:${aOT>0?'#16a34a':'#ea580c'}">${aOT>0?'+':''}${formatNum(aOT)}h</span>`:''}`;
+    return `<span class="week-total-h">${formatHHMM(w)}</span>${aOT!==0?` <span style="font-size:10px;font-weight:700;color:${aOT>0?'#16a34a':'#ea580c'}">${signedHHMM(aOT)}</span>`:''}`;
   })).join('')}</tr>`;
 
   const absRow=`<tr><td class="week-footer-label">Absent</td>${days.map(d=>footerCell(d,iso=>{
@@ -2813,7 +2830,7 @@ function openWeekTimePopover(iso, pid){
             + calcSessionH(box.querySelector('#te-as').value, box.querySelector('#te-ae').value);
     const aOT = h > 0 ? Math.round((h - 7 * getASVTimeFraction(pid)) * 10) / 10 : 0;
     box.querySelector('#te-preview').textContent = h > 0
-      ? `Total : ${formatNum(h)}h${aOT > 0 ? ` (+${formatNum(aOT)}h supp.)` : aOT < 0 ? ` (${formatNum(aOT)}h déficit)` : ''}`
+      ? `Total : ${formatHHMM(h)}${aOT > 0 ? ` (+${formatHHMM(aOT)} supp.)` : aOT < 0 ? ` (-${formatHHMM(Math.abs(aOT))} déficit)` : ''}`
       : '';
   };
   box.querySelectorAll('input[type=time]').forEach(i=>i.addEventListener('input', updatePreview));
@@ -3200,7 +3217,7 @@ function buildPersonRowCells(year, month, days, personId){
         // sur la case de l'après-midi, seulement quand elle n'est pas absorbée dans une
         // case d'absence fusionnée (où il n'y aurait pas de jour précis à désigner).
         const overtime = slot === 'AM' ? getOvertimeHours(iso, personId) : 0;
-        const otBadge = overtime !== 0 ? `<span class="ot-badge${overtime < 0 ? ' ot-badge-neg' : ''}" title="${overtime < 0 ? 'Départ anticipé' : 'Heures supplémentaires'} : ${formatNum(Math.abs(overtime))}h">${overtime > 0 ? '+' : ''}${formatNum(overtime)}h</span>` : '';
+        const otBadge = overtime !== 0 ? `<span class="ot-badge${overtime < 0 ? ' ot-badge-neg' : ''}" title="${overtime < 0 ? 'Départ anticipé' : 'Heures supplémentaires'} : ${formatHHMM(Math.abs(overtime))}">${signedHHMM(overtime)}</span>` : '';
         html += `<td class="cal-cell state-${info.stateClass}${blockCls}" style="${info.style}"
           data-date="${iso}" data-person="${personId}" data-slot="${slot}" data-slot-short="${slot==='M'?'M':'A'}" ${blocked?'data-action="locked"':''}
           tabindex="0" role="button" title="${escapeHTML(blocked ? blockTitle : (info.title||''))}"
@@ -3227,11 +3244,11 @@ function buildOvertimeRowCells(year, month, days, people){
     const entries = people.map(p=>({ person:p, hours:getOvertimeHours(iso, p.id) })).filter(e=> e.hours !== 0);
     const total = entries.reduce((sum,e)=> sum + e.hours, 0);
     const title = entries.length
-      ? entries.map(e=> `${e.person.short} : ${e.hours > 0 ? '+' : ''}${formatNum(e.hours)}h`).join(' · ')
+      ? entries.map(e=> `${e.person.short} : ${signedHHMM(e.hours)}`).join(' · ')
       : 'Cliquer pour saisir des ajustements d\'heures';
     html += `<td class="cal-cell overtime-row-cell" colspan="2" data-action="overtime-day" data-date="${iso}"
       tabindex="0" role="button" title="${escapeHTML(title)}"
-      aria-label="Ajustement d'heures du ${formatFR(iso)}. ${escapeHTML(title)}">${total !== 0 ? `<span class="ot-row-total${total < 0 ? ' ot-row-total-neg' : ''}">${total > 0 ? '+' : ''}${formatNum(total)}h</span>` : ''}</td>`;
+      aria-label="Ajustement d'heures du ${formatFR(iso)}. ${escapeHTML(title)}">${total !== 0 ? `<span class="ot-row-total${total < 0 ? ' ot-row-total-neg' : ''}">${signedHHMM(total)}</span>` : ''}</td>`;
   });
   return html;
 }
@@ -3841,7 +3858,7 @@ function sidebarPersonBlock(iso, person){
           const label = getSlotLabel(iso, person.id, slot);
           return `<p style="font-size:12.5px;margin:4px 0;"><strong>${SLOT_LABELS[slot]} :</strong> ${stateLabel(state)}${label ? ` — ${escapeHTML(label)}` : ''}</p>`;
         }).join('')}
-        ${(()=>{ const h = getOvertimeHours(iso, person.id); return h !== 0 ? `<p class="text-muted" style="font-size:12px;margin:6px 0 0;">Ajustement : ${h>0?'+':''}${formatNum(h)}h</p>` : ''; })()}
+        ${(()=>{ const h = getOvertimeHours(iso, person.id); return h !== 0 ? `<p class="text-muted" style="font-size:12px;margin:6px 0 0;">Ajustement : ${signedHHMM(h)}</p>` : ''; })()}
       </div>
     `;
   }
@@ -3882,7 +3899,7 @@ function sidebarPersonBlock(iso, person){
         <input type="number" step="0.5" data-overtime-input data-person="${person.id}"
           value="${getOvertimeHours(iso, person.id) || ''}" placeholder="Ex. 1.5 ou -1">
       ` : isASV ? `
-        ${(()=>{ const h = getOvertimeHours(iso, person.id); return h !== 0 ? `<p class="text-muted" style="font-size:12px;margin:10px 0 0;">Ajustement : <strong>${h > 0 ? '+' : ''}${formatNum(h)}h</strong> (lecture seule)</p>` : ''; })()}
+        ${(()=>{ const h = getOvertimeHours(iso, person.id); return h !== 0 ? `<p class="text-muted" style="font-size:12px;margin:10px 0 0;">Ajustement : ${signedHHMM(h)} (lecture seule)</p>` : ''; })()}
       ` : ''}
     </div>
   `;
@@ -4058,6 +4075,18 @@ function initCalendarInteractions(){
        demandes de congé ASV)
    ================================================================ */
 function formatNum(n){ return Number.isInteger(n) ? String(n) : n.toFixed(1); }
+// Formate des heures décimales en "Xh MM" (ex: 1.25 → "1h15", 0.5 → "0h30")
+function formatHHMM(h){
+  const abs = Math.abs(h);
+  const hh = Math.floor(abs);
+  const mm = Math.round((abs - hh) * 60);
+  return `${hh}h${String(mm).padStart(2,'0')}`;
+}
+// Comme formatHHMM mais préfixé du signe (+/-)
+function signedHHMM(h){
+  if(h === 0) return '0h00';
+  return `${h > 0 ? '+' : '-'}${formatHHMM(h)}`;
+}
 
 // Regroupe les demi-journées d'absence ASV contiguës (même personne, même motif, même
 // statut de décision, même commentaire) en "demandes" pour l'affichage côté tableau de
@@ -4173,7 +4202,7 @@ function buildPersonCard(year, personId){
       <div class="stat-row"><span class="stat-label">Jours travaillés (ajusté)</span><span class="stat-value">${formatNum(adjustedDays)} / ${formatNum(targetDays)}</span></div>
       <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${person.color}"></div></div>
       <div class="stat-row"><span class="stat-label">Demi-journées de présence</span><span class="stat-value">${stats.totalHalfDays}</span></div>
-      ${stats.totalOvertimeHours !== 0 ? `<div class="stat-row"><span class="stat-label">Heures supp. / en déficit</span><span class="stat-value" style="color:${otColor}">${otSign}${formatNum(stats.totalOvertimeHours)}h</span></div>` : ''}
+      ${stats.totalOvertimeHours !== 0 ? `<div class="stat-row"><span class="stat-label">Heures supp. / en déficit</span><span class="stat-value" style="color:${otColor}">${signedHHMM(stats.totalOvertimeHours)}</span></div>` : ''}
       <div class="stat-row"><span class="stat-label">Samedis travaillés</span><span class="stat-value big" style="color:${person.color}">${stats.totalSaturdays}</span></div>
       <div class="stat-row"><span class="stat-label">Jours de congés</span><span class="stat-value">${formatNum(vacationDays)}</span></div>
       <div class="stat-row"><span class="stat-label">Mois le plus chargé</span><span class="stat-value">${MONTH_NAMES[stats.busiestMonth]}</span></div>

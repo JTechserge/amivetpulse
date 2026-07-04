@@ -21,6 +21,20 @@ const MONTH_NAMES_FR = ['janvier','février','mars','avril','mai','juin','juille
 const WEEKDAYS_FR = ['dim.','lun.','mar.','mer.','jeu.','ven.','sam.'];
 
 function padZ(n: number){ return String(n).padStart(2, '0'); }
+function formatHHMM(h: number): string {
+  const abs = Math.abs(h);
+  const hh = Math.floor(abs);
+  const mm = Math.round((abs - hh) * 60);
+  return `${hh}h${String(mm).padStart(2,'0')}`;
+}
+function signedHHMM(h: number): string {
+  if(h === 0) return '0h00';
+  return `${h > 0 ? '+' : '-'}${formatHHMM(h)}`;
+}
+function halfDaysToJ(hd: number): string {
+  const j = hd / 2;
+  return Number.isInteger(j) ? `${j} j.` : `${j.toFixed(1)} j.`;
+}
 
 
 Deno.serve(async (req) => {
@@ -213,17 +227,17 @@ Deno.serve(async (req) => {
 
     function labelRows(map: Record<string, number>, icon: string, color: string): string {
       return Object.entries(map).sort((a,b)=>b[1]-a[1])
-        .map(([lbl, cnt]) => `<tr><td style="padding:3px 10px 3px 22px;font-size:11.5px;color:${color};">${icon} ${lbl}</td><td style="padding:3px 10px;font-size:11.5px;color:${color};text-align:right;">${cnt} demi-j.</td></tr>`).join('');
+        .map(([lbl, cnt]) => `<tr><td style="padding:3px 10px 3px 22px;font-size:11.5px;color:${color};">${icon} ${lbl}</td><td style="padding:3px 10px;font-size:11.5px;color:${color};text-align:right;">${halfDaysToJ(cnt)}</td></tr>`).join('');
     }
     const approvedRows = labelRows(approvedByLabel, '✅', COLORS.text);
     const pendingRows  = labelRows(pendingByLabel,  '⏳', '#DC2626');
 
     const summaryHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${COLORS.border};border-radius:10px;overflow:hidden;margin-bottom:20px;"><thead><tr style="background:${COLORS.secondary};"><th colspan="2" style="padding:8px 12px;font-size:12px;color:${COLORS.textMuted};text-align:left;font-weight:600;letter-spacing:.04em;">RÉCAPITULATIF DU MOIS</th></tr></thead><tbody>
 <tr style="background:#FFF;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Jours ouvrés</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${workingDays} j.</td></tr>
-<tr style="background:#F8FAFC;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Demi-journées travaillées</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${presentHalfDays} demi-j.</td></tr>
-${approvedLeaveHalfDays > 0 ? `<tr style="background:#FFF;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Congés approuvés ✅</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${approvedLeaveHalfDays} demi-j.</td></tr>${approvedRows}` : ''}
-<tr style="background:#F8FAFC;"><td style="padding:5px 10px;font-size:12px;color:#DC2626;">Congés en attente ⏳</td><td style="padding:5px 10px;font-size:12px;color:#DC2626;text-align:right;">${pendingHalfDaysTotal} demi-j.</td></tr>${pendingRows}
-<tr style="background:#FFF;border-top:2px solid ${COLORS.border};"><td style="padding:7px 10px;font-size:13px;font-weight:700;color:${COLORS.text};">Total heures supplémentaires / en moins</td><td style="padding:7px 10px;font-size:13px;font-weight:700;color:${otColor};text-align:right;">${otSign}${totalOvertimeHours}h</td></tr>
+<tr style="background:#F8FAFC;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Jours travaillés</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${halfDaysToJ(presentHalfDays)}</td></tr>
+${approvedLeaveHalfDays > 0 ? `<tr style="background:#FFF;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Congés approuvés ✅</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${halfDaysToJ(approvedLeaveHalfDays)}</td></tr>${approvedRows}` : ''}
+<tr style="background:#F8FAFC;"><td style="padding:5px 10px;font-size:12px;color:#DC2626;">Congés en attente ⏳</td><td style="padding:5px 10px;font-size:12px;color:#DC2626;text-align:right;">${halfDaysToJ(pendingHalfDaysTotal)}</td></tr>${pendingRows}
+<tr style="background:#FFF;border-top:2px solid ${COLORS.border};"><td style="padding:7px 10px;font-size:12px;color:${COLORS.text};">Heures supp. / déficit</td><td style="padding:7px 10px;font-size:12px;color:${otColor};text-align:right;">${signedHHMM(totalOvertimeHours)}</td></tr>
 </tbody></table>`;
 
     const recapTable = hasAnyData
