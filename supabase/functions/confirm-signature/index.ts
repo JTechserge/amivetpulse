@@ -58,9 +58,7 @@ Deno.serve(async (req) => {
     if(!tokenRow){
       return new Response(JSON.stringify({ error: 'Lien invalide ou introuvable.' }), { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
     }
-    if(tokenRow.used_at){
-      return new Response(JSON.stringify({ error: 'Ce lien a déjà été utilisé.' }), { status: 409, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
-    }
+    // Le token est supprimé après usage — s'il existe encore ici, il n'a pas encore été utilisé.
     if(new Date(tokenRow.expires_at) < new Date()){
       return new Response(JSON.stringify({ error: 'Ce lien a expiré — demandez un nouvel email depuis l\'app.' }), { status: 410, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
     }
@@ -99,14 +97,10 @@ Deno.serve(async (req) => {
     });
     if(!sigRes.ok) throw new Error(`Erreur insertion signature HTTP ${sigRes.status} — ${await sigRes.text()}`);
 
-    // Invalider le token (usage unique)
+    // Supprimer le token après usage — son absence en base sert de preuve qu'il a été utilisé
     await fetch(`${SUPABASE_URL}/rest/v1/signature_tokens?id=eq.${encodeURIComponent(token_id)}`, {
-      method: 'PATCH',
-      headers: {
-        apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-        'Content-Type': 'application/json', Prefer: 'return=minimal',
-      },
-      body: JSON.stringify({ used_at: signedAt }),
+      method: 'DELETE',
+      headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
     });
 
     // Email de confirmation — vaut reçu de signature électronique

@@ -101,13 +101,14 @@ Deno.serve(async (req) => {
     // Réutiliser un token valide existant pour ce mois (évite les doublons si l'ASV clique
     // plusieurs fois sur "Signer" avant d'avoir ouvert l'email)
     const existingRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/signature_tokens?person_id=eq.${encodeURIComponent(personId)}&year=eq.${year}&month=eq.${month}&used_at=is.null&select=id,expires_at`,
+      `${SUPABASE_URL}/rest/v1/signature_tokens?person_id=eq.${encodeURIComponent(personId)}&year=eq.${year}&month=eq.${month}&select=id,expires_at`,
       { headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
     );
     const existing = await existingRes.json();
     if(!Array.isArray(existing)){
       throw new Error(`Erreur lecture signature_tokens : ${JSON.stringify(existing)}`);
     }
+    // Un token encore présent en base = non utilisé (les tokens sont supprimés après usage)
     const validExisting = (existing as {id:string;expires_at:string}[]).find(t => new Date(t.expires_at) > now);
 
     let tokenId: string;
