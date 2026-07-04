@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Profil introuvable.' }), { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
     }
 
-    const { year, month, person_id: requestedPersonId, time_fraction: timeFraction = 1.0 } = await req.json();
+    const { year, month, person_id: requestedPersonId } = await req.json();
     if(typeof year !== 'number' || typeof month !== 'number'){
       return new Response(JSON.stringify({ error: 'year et month sont requis.' }), { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
     }
@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
       const iso = `${year}-${padZ(month + 1)}-${padZ(day)}`;
       const date = new Date(year, month, day);
       const wd = date.getDay();
-      if(wd === 0 || wd === 6) continue;
+      if(wd === 0) continue; // dimanche uniquement — clinique ouverte le samedi
 
       const mState    = slots[`${iso}_${personId}_M`]           || 'empty';
       const amState   = slots[`${iso}_${personId}_AM`]          || 'empty';
