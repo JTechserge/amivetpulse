@@ -1062,6 +1062,11 @@ function openManageUsersModal(){
     const isAdmin = currentUser?.role === 'admin';
     const linkedPersonIds = new Set(users.map(u=>u.person_id).filter(Boolean));
     const localOnlyASV = ASV_PEOPLE.filter(p=> !p.archived && !linkedPersonIds.has(p.id));
+    const localOnlyVets = PEOPLE.filter(p=> !linkedPersonIds.has(p.id) && !users.some(u=> (u.display_name||'').toLowerCase().includes(p.short.toLowerCase())));
+    const localOnlyPeople = [
+      ...localOnlyVets.map(p=>({ ...p, localRole:'vet', roleLabel:'Vétérinaire' })),
+      ...localOnlyASV.map(p=>({ ...p, localRole:'asv', roleLabel:'ASV' })),
+    ];
 
     const rows = users.map(u=>`<tr>
         <td style="font-weight:600;">${escapeHTML(u.display_name||'—')}</td>
@@ -1076,14 +1081,14 @@ function openManageUsersModal(){
         </td>
       </tr>`).join('');
 
-    const localASVRows = localOnlyASV.map(p=>`<tr>
+    const localASVRows = localOnlyPeople.map(p=>`<tr>
         <td style="font-weight:600;color:var(--color-text-muted);">${escapeHTML(p.name)}</td>
-        <td style="font-size:12px;color:var(--color-text-muted);">ASV</td>
+        <td style="font-size:12px;color:var(--color-text-muted);">${p.roleLabel}</td>
         <td style="font-size:12px;color:var(--color-text-muted);font-style:italic;">Sans compte</td>
         <td style="font-size:12px;text-align:center;">—</td>
         <td style="font-size:12px;text-align:center;">—</td>
         <td style="white-space:nowrap;">
-          <button class="btn btn-sm" data-prefill-invite="${escapeHTML(p.name)}" style="font-size:11.5px;padding:4px 8px;">📧 Inviter</button>
+          <button class="btn btn-sm" data-prefill-invite="${escapeHTML(p.name)}" data-prefill-role="${p.localRole}" style="font-size:11.5px;padding:4px 8px;">📧 Inviter</button>
           ${isAdmin ? `<button class="btn btn-sm" data-purge-local="${p.id}" data-purge-local-name="${escapeHTML(p.name)}" style="font-size:11.5px;padding:4px 8px;margin-left:4px;color:#FFFFFF;background:#B91C1C;border-color:#B91C1C;" title="Retirer du planning">💣</button>` : ''}
         </td>
       </tr>`).join('');
@@ -1187,11 +1192,11 @@ function openManageUsersModal(){
       };
     });
 
-    // Pré-remplir le formulaire d'invitation depuis une ligne ASV locale
+    // Pré-remplir le formulaire d'invitation depuis une ligne locale (ASV ou vét)
     box.querySelectorAll('[data-prefill-invite]').forEach(btn=>{
       btn.onclick = ()=>{
         box.querySelector('#invite-name').value = btn.dataset.prefillInvite;
-        box.querySelector('#invite-role').value = 'asv';
+        box.querySelector('#invite-role').value = btn.dataset.prefillRole || 'asv';
         box.querySelector('#invite-email').focus();
         box.querySelector('#invite-email').scrollIntoView({ behavior:'smooth', block:'center' });
       };
@@ -1238,14 +1243,22 @@ function openManageUsersModal(){
         });
         if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
         const inviteData = await res.json();
-        // Si rôle ASV, lier au person_id existant (si déjà dans le planning) ou en créer un nouveau
-        if(role === 'asv' && inviteData.user_id){
-          const existing = ASV_PEOPLE.find(p=> p.name.trim().toLowerCase() === name.trim().toLowerCase() && !linkedPersonIds.has(p.id));
-          const asvPerson = existing || addASVPerson(name);
-          if(asvPerson){
+        // Lier le person_id au compte invité
+        if(inviteData.user_id){
+          let personId = null;
+          if(role === 'vet'){
+            // Vétérinaire : chercher dans PEOPLE par nom
+            const vetLocal = PEOPLE.find(p=> name.trim().toLowerCase().includes(p.short.toLowerCase()));
+            personId = vetLocal?.id || null;
+          } else if(role === 'asv'){
+            const existing = ASV_PEOPLE.find(p=> p.name.trim().toLowerCase() === name.trim().toLowerCase() && !linkedPersonIds.has(p.id));
+            const asvPerson = existing || addASVPerson(name);
+            personId = asvPerson?.id || null;
+          }
+          if(personId){
             await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
               method:'POST', headers:supabaseHeaders({'Content-Type':'application/json'}),
-              body:JSON.stringify({ action:'update', user_id:inviteData.user_id, person_id:asvPerson.id }),
+              body:JSON.stringify({ action:'update', user_id:inviteData.user_id, person_id:personId }),
             }).catch(()=>{});
           }
         }
