@@ -2,8 +2,21 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Amivet PULSE — Clinique Vétérinaire</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0F766E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Amivet RH">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<!-- Splash screens iOS — affichées par Safari au lancement en mode standalone -->
+<link rel="apple-touch-startup-image" href="./icons/splash/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="./icons/splash/splash-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="./icons/splash/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="./icons/splash/splash-1242x2688.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="./icons/splash/splash-828x1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)">
+<link rel="apple-touch-startup-image" href="./icons/splash/splash-2048x2732.png" media="(min-device-width: 1024px) and (min-device-height: 1366px)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Police chargée en non-bloquant : si le réseau de la clinique est lent ou coupé,
@@ -58,6 +71,39 @@ body{
   color:var(--color-text);
   line-height:1.6;
   -webkit-font-smoothing:antialiased;
+  /* Safe areas PWA iOS : notch, Dynamic Island, barre de gestes */
+  padding-top:env(safe-area-inset-top);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+/* Utilitaire pour une éventuelle barre de navigation fixe en bas d'écran */
+.nav-bar-bottom{
+  padding-bottom:max(12px, env(safe-area-inset-bottom));
+}
+#pwa-update-banner,#pwa-offline-banner{
+  display:none;position:fixed;top:0;left:0;right:0;z-index:300;
+  padding:calc(10px + env(safe-area-inset-top)) 16px 10px;
+  font-size:13px;font-weight:600;text-align:center;
+}
+#pwa-update-banner{background:var(--color-primary);color:#fff;}
+#pwa-update-banner button{
+  margin-left:10px;background:#fff;color:var(--color-primary);border:none;
+  border-radius:6px;padding:4px 10px;font-weight:700;font-size:12.5px;cursor:pointer;
+}
+#pwa-offline-banner{background:#F59E0B;color:#78350F;}
+#pwa-ios-install-tip,#pwa-android-install-banner{
+  display:none;position:fixed;left:12px;right:12px;
+  bottom:calc(14px + env(safe-area-inset-bottom));
+  z-index:250;background:#fff;color:var(--color-text);
+  border:1px solid var(--color-border,#E2E8F0);border-radius:12px;
+  box-shadow:0 8px 28px rgba(15,23,42,0.18);padding:14px 16px;font-size:13px;line-height:1.5;
+}
+#pwa-ios-install-tip button,#pwa-android-install-banner button{
+  margin-top:8px;background:var(--color-primary);color:#fff;border:none;
+  border-radius:8px;padding:7px 12px;font-weight:700;font-size:12.5px;cursor:pointer;
+}
+#pwa-ios-install-tip .pwa-tip-close,#pwa-android-install-banner .pwa-tip-close{
+  position:absolute;top:8px;right:10px;background:none;border:none;font-size:15px;
+  color:var(--color-text-muted,#64748B);padding:2px;margin:0;
 }
 h1,h2,h3,h4{font-weight:700;letter-spacing:-0.02em;margin:0;}
 p{margin:0;}
@@ -667,6 +713,10 @@ body.role-asv [data-view="dashboard"]{display:none;}
 </style>
 </head>
 <body>
+<div id="pwa-update-banner"></div>
+<div id="pwa-offline-banner"></div>
+<div id="pwa-ios-install-tip"></div>
+<div id="pwa-android-install-banner"></div>
 <div id="login-overlay">
   <div class="login-card">
     <img src="logo.png" class="login-logo" alt="Amivet">
@@ -2028,10 +2078,15 @@ async function loadInterviews(){
 // de bord", visible depuis n'importe quelle page de l'app (pas seulement quand on y est).
 function updateDashboardNavBadge(){
   const el = document.getElementById('dash-nav-badge');
-  if(!el) return;
   const n = countPendingLeaveRequests();
-  el.textContent = n > 0 ? String(n) : '';
-  el.className = n > 0 ? 'nav-badge' : '';
+  if(el){
+    el.textContent = n > 0 ? String(n) : '';
+    el.className = n > 0 ? 'nav-badge' : '';
+  }
+  if('setAppBadge' in navigator){
+    if(n > 0) navigator.setAppBadge(n).catch(()=>{});
+    else navigator.clearAppBadge().catch(()=>{});
+  }
 }
 
 // ----------------------------------------------------------------
@@ -2309,6 +2364,9 @@ function buildSettingsMenuHtml(){
       <button id="action-toggle-view" role="menuitem">👁 ${adminViewMode === 'asv' ? 'Passer en vue Vétérinaires' : 'Passer en vue ASV'}</button>
       <hr>
     ` : ''}
+    <div class="settings-section-label">Notifications</div>
+    <button id="action-notifications" role="menuitem">🔔 Notifications</button>
+    <hr>
     <div class="settings-section-label">Mon compte${userName ? ` — ${escapeHTML(userName)}` : ''}</div>
     <button id="action-change-password" role="menuitem">🔑 Changer mon mot de passe</button>
     <button id="action-logout" class="danger" role="menuitem">🚪 Se déconnecter</button>
@@ -2387,6 +2445,9 @@ function initSettingsMenu(){
     });
   }
 
+  document.getElementById('action-notifications').addEventListener('click', ()=>{
+    menu.classList.remove('open'); openNotificationSettingsModal();
+  });
   document.getElementById('action-change-password').addEventListener('click', ()=>{
     menu.classList.remove('open'); openChangeMyPasswordModal();
   });
@@ -3865,6 +3926,18 @@ function openAnnouncementModal(annId){
       }
       close(); updateAnnouncementBadge(); renderAnnounces();
       showToast(existing?'Annonce mise à jour':'Annonce publiée', '📣');
+      if(!existing && typeof triggerPushNotification === 'function'){
+        const targetUsers = target_roles === 'vet' ? ['david','stephane']
+          : target_roles === 'asv' ? ['marie','johanna','julie']
+          : [];
+        triggerPushNotification({
+          type: 'announcement',
+          title: `📣 ${title}`,
+          body: content.length > 120 ? content.slice(0,117)+'…' : content,
+          targetUsers,
+          data: { type:'announcement' },
+        });
+      }
     }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
   };
 }
@@ -3980,6 +4053,15 @@ function openAbsenceLabelPopover(cell, forceAbsent){
     setSlotLabel(iso, personId, slot, label);
     propagateLabelAcrossSunday(personId, [{iso, slot}], label);
     saveData();
+    if(isASV && typeof triggerPushNotification === 'function'){
+      triggerPushNotification({
+        type: 'leave_request',
+        title: 'Nouvelle demande de congé',
+        body: `${person.short} — ${formatFR(iso)} (${SLOT_LABELS[slot]})${label ? ' · '+label : ''}`,
+        targetUsers: ['david','stephane'],
+        data: { type:'leave_request' },
+      });
+    }
     if(viewKey) renderCalendarView(viewKey);
     close();
   };
@@ -4031,6 +4113,15 @@ function openAbsenceRangePopover(slots, personId, viewKey){
     slots.forEach(({iso,slot})=> setSlotLabel(iso, personId, slot, label));
     propagateLabelAcrossSunday(personId, slots, label);
     saveData();
+    if(isASV && typeof triggerPushNotification === 'function'){
+      triggerPushNotification({
+        type: 'leave_request',
+        title: 'Nouvelle demande de congé',
+        body: `${person.short} — ${fromTxt}${slots.length>1?' → '+toTxt:''}${label ? ' · '+label : ''}`,
+        targetUsers: ['david','stephane'],
+        data: { type:'leave_request' },
+      });
+    }
     if(viewKey) renderCalendarView(viewKey);
     close();
   };
@@ -5129,6 +5220,15 @@ function openInterviewModal(personId, year){
       close();
       renderDashboardInterviews();
       showToast('Entretien enregistré', '✅');
+      if(payload.scheduled_date && typeof triggerPushNotification === 'function'){
+        triggerPushNotification({
+          type: 'interview',
+          title: 'Entretien annuel planifié',
+          body: `Votre entretien annuel ${year} est prévu le ${formatFR(payload.scheduled_date)}.`,
+          targetUsers: [personId],
+          data: { type:'interview' },
+        });
+      }
     }catch(e){
       errEl.textContent = 'Erreur : ' + e.message;
       errEl.style.display = 'block';
@@ -5323,6 +5423,15 @@ function renderLeaveRequestsPage(){
     btn.addEventListener('click', ()=>{
       const g = groups[parseInt(btn.dataset.approve,10)];
       decideLeaveGroup(g, 'approved', '');
+      if(typeof triggerPushNotification === 'function'){
+        triggerPushNotification({
+          type: 'leave_approved',
+          title: 'Demande de congé approuvée',
+          body: `Votre demande du ${formatFR(g.slots[0].iso)} a été approuvée.`,
+          targetUsers: [g.personId],
+          data: { type:'leave_approved' },
+        });
+      }
       renderDashboard();
       showToast('Demande approuvée', '✓');
     });
@@ -5342,7 +5451,17 @@ function renderLeaveRequestsPage(){
       const idx = btn.dataset.rejectConfirm;
       const comment = container.querySelector(`[data-reject-comment="${idx}"]`).value.trim();
       if(!comment){ showToast('Un commentaire est nécessaire pour refuser', '⚠️'); return; }
-      decideLeaveGroup(groups[parseInt(idx,10)], 'rejected', comment);
+      const g = groups[parseInt(idx,10)];
+      decideLeaveGroup(g, 'rejected', comment);
+      if(typeof triggerPushNotification === 'function'){
+        triggerPushNotification({
+          type: 'leave_rejected',
+          title: 'Demande de congé refusée',
+          body: `Votre demande du ${formatFR(g.slots[0].iso)} a été refusée — ${comment}`,
+          targetUsers: [g.personId],
+          data: { type:'leave_rejected' },
+        });
+      }
       renderDashboard();
       showToast('Demande refusée', '✕');
     });
@@ -5845,6 +5964,19 @@ function openMedicalModal(existingVisit, allVisits, preselectedPid, onSaved){
         });
       }
       close(); renderDashboardMedical(); showToast(existingVisit?'Visite mise à jour':'Visite enregistrée', '✅');
+      if(typeof triggerPushNotification === 'function'){
+        const alert = getMedicalAlert(payload);
+        if(alert.level === 'red' || alert.level === 'amber'){
+          const p = personOf(person_id);
+          triggerPushNotification({
+            type: 'medical_visit',
+            title: 'Visite médicale à renouveler',
+            body: `${p ? p.short : person_id} — prochaine visite : ${alert.label}`,
+            targetUsers: [person_id, 'david', 'stephane'],
+            data: { type:'medical_visit' },
+          });
+        }
+      }
     }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
   };
 }
@@ -6107,6 +6239,7 @@ function initApp(){
     pendingSignToken = null;
     openSignConfirmModal(token);
   }
+  if(typeof handlePwaShortcutAction === 'function') handlePwaShortcutAction();
 }
 
 async function init(){
@@ -6240,6 +6373,302 @@ function renderSetPasswordScreen(accessToken, isFirstLogin=false){
     }
   };
 }
+</script>
+<script>
+/* ================================================================
+   PWA — Service Worker, installation, hors-ligne, notifications push
+   ================================================================ */
+
+// Clé PUBLIQUE VAPID uniquement — la clé privée ne vit que dans les secrets Supabase
+// (VAPID_PRIVATE_KEY), jamais ici.
+const VAPID_PUBLIC_KEY = 'BD8PsjUf5CnogfRdI81PvKKHT9C7OGV7tqPQ29Ic8kkcarkqyFRa-YbUQam_OHI8xZWnz1rzkFhicB_UMb5CMHI';
+const PWA_PROMPT_INTERVAL_DAYS = 14;
+const PWA_IOS_PROMPT_KEY = 'pwa_ios_prompt_ts';
+const PWA_ANDROID_PROMPT_KEY = 'pwa_android_prompt_ts';
+
+window.PWA = {
+  isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent); },
+  isInstalled(){ return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches; },
+  supportsPush(){ return 'PushManager' in window && 'serviceWorker' in navigator; },
+};
+
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for(let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+/* ---------------- Service Worker : enregistrement + bandeau de mise à jour ---------------- */
+let swRegistration = null;
+function showPwaUpdateBanner(){
+  const banner = document.getElementById('pwa-update-banner');
+  if(!banner) return;
+  banner.innerHTML = `Mise à jour disponible <button id="pwa-reload-btn">Recharger</button>`;
+  banner.style.display = 'block';
+  banner.querySelector('#pwa-reload-btn').onclick = ()=> window.location.reload();
+}
+function initServiceWorker(){
+  if(!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('./sw.js', { scope: './' }).then((reg)=>{
+    swRegistration = reg;
+    reg.addEventListener('updatefound', ()=>{
+      const newWorker = reg.installing;
+      if(!newWorker) return;
+      newWorker.addEventListener('statechange', ()=>{
+        if(newWorker.state === 'installed' && navigator.serviceWorker.controller){
+          showPwaUpdateBanner();
+        }
+      });
+    });
+  }).catch((err)=> console.warn('Échec enregistrement Service Worker', err));
+
+  navigator.serviceWorker.addEventListener('message', (event)=>{
+    if(event.data && event.data.type === 'pwa-notification-click'){
+      navigateForNotificationType(event.data.notificationType);
+    }
+  });
+}
+
+/* ---------------- Bandeau d'installation iOS (pas de beforeinstallprompt sur iOS) ---------------- */
+function shouldShowInstallPrompt(key){
+  const last = parseInt(localStorage.getItem(key), 10);
+  if(!Number.isFinite(last)) return true;
+  return (Date.now() - last) / 86400000 >= PWA_PROMPT_INTERVAL_DAYS;
+}
+function markInstallPromptShown(key){ localStorage.setItem(key, String(Date.now())); }
+
+function showIOSInstallTip(){
+  if(!PWA.isIOS() || PWA.isInstalled()) return;
+  if(!shouldShowInstallPrompt(PWA_IOS_PROMPT_KEY)) return;
+  const tip = document.getElementById('pwa-ios-install-tip');
+  if(!tip) return;
+  tip.innerHTML = `
+    <button class="pwa-tip-close" aria-label="Fermer">✕</button>
+    <strong>Installez Amivet RH</strong><br>
+    Appuyez sur <strong>Partager</strong> puis <strong>Sur l'écran d'accueil</strong> pour installer l'app et activer les notifications.
+  `;
+  tip.style.display = 'block';
+  tip.querySelector('.pwa-tip-close').onclick = ()=>{
+    tip.style.display = 'none';
+    markInstallPromptShown(PWA_IOS_PROMPT_KEY);
+  };
+}
+
+/* ---------------- Bandeau d'installation Android ---------------- */
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  if(!shouldShowInstallPrompt(PWA_ANDROID_PROMPT_KEY)) return;
+  const banner = document.getElementById('pwa-android-install-banner');
+  if(!banner) return;
+  banner.innerHTML = `
+    <button class="pwa-tip-close" aria-label="Fermer">✕</button>
+    <strong>Installez Amivet RH</strong><br>
+    Ajoutez l'app à votre écran d'accueil pour un accès rapide et les notifications.
+    <div><button id="pwa-android-install-btn">Installer l'app</button></div>
+  `;
+  banner.style.display = 'block';
+  banner.querySelector('.pwa-tip-close').onclick = ()=>{
+    banner.style.display = 'none';
+    markInstallPromptShown(PWA_ANDROID_PROMPT_KEY);
+  };
+  banner.querySelector('#pwa-android-install-btn').onclick = async ()=>{
+    banner.style.display = 'none';
+    markInstallPromptShown(PWA_ANDROID_PROMPT_KEY);
+    if(deferredInstallPrompt){
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+    }
+  };
+});
+
+/* ---------------- Indicateur hors-ligne + resynchronisation ---------------- */
+function updatePwaOfflineBanner(){
+  const banner = document.getElementById('pwa-offline-banner');
+  if(!banner) return;
+  banner.textContent = 'Mode hors-ligne — données du dernier chargement';
+  banner.style.display = navigator.onLine ? 'none' : 'block';
+}
+function refreshAllPwaData(){
+  if(typeof syncFromSupabase === 'function') syncFromSupabase();
+  if(typeof loadSignatures === 'function') loadSignatures();
+  if(typeof loadInterviews === 'function') loadInterviews();
+  if(typeof loadAnnouncements === 'function') loadAnnouncements();
+}
+window.addEventListener('online', ()=>{ updatePwaOfflineBanner(); refreshAllPwaData(); });
+window.addEventListener('offline', updatePwaOfflineBanner);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refreshAllPwaData(); });
+
+/* ---------------- Raccourcis manifest + navigation au clic sur une notification ---------------- */
+function navigateForNotificationType(type){
+  if(typeof currentUser === 'undefined' || !currentUser) return;
+  switch(type){
+    case 'leave_request': case 'leave_approved': case 'leave_rejected':
+      if(canAccessDashboard()){ switchView('dashboard'); dashSubState.tab = 'requests'; renderDashboard(); }
+      break;
+    case 'medical_visit':
+      if(canAccessDashboard()){ switchView('dashboard'); dashSubState.tab = 'medical'; renderDashboard(); }
+      break;
+    case 'interview':
+      if(canAccessDashboard()){ switchView('dashboard'); dashSubState.tab = 'interviews'; renderDashboard(); }
+      break;
+    case 'announcement':
+      switchView('annonces');
+      break;
+  }
+}
+function handlePwaShortcutAction(){
+  const params = new URLSearchParams(window.location.search);
+  const action = params.get('action');
+  if(!action) return;
+  const cleanUrl = new URL(window.location.href);
+  cleanUrl.searchParams.delete('action');
+  cleanUrl.searchParams.delete('source');
+  history.replaceState({}, '', cleanUrl.toString());
+
+  if(action === 'new-leave'){
+    // Pas de formulaire dédié pour une nouvelle demande : on amène l'ASV sur son
+    // calendrier, où peindre une absence crée automatiquement la demande en attente.
+    switchView('asv');
+    switchSubPage('asv', 'calendar');
+  } else if(action === 'week-view'){
+    switchView('asv');
+    switchSubPage('asv', 'week');
+  } else {
+    navigateForNotificationType({
+      'dashboard-requests':'leave_request', 'dashboard-medical':'medical_visit',
+      'dashboard-interviews':'interview', 'announcements':'announcement',
+    }[action]);
+  }
+}
+
+/* ---------------- Abonnement push ---------------- */
+function currentPushPersonId(){ return currentUser?.person_id || null; }
+
+async function savePushSubscription(sub){
+  const user_name = currentPushPersonId();
+  if(!user_name) return;
+  await fetch(`${SUPABASE_URL}push_subscriptions`, {
+    method: 'POST',
+    headers: supabaseHeaders({
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates,return=minimal',
+    }),
+    body: JSON.stringify({
+      user_name,
+      subscription_json: sub.toJSON(),
+      user_agent: navigator.userAgent,
+      updated_at: new Date().toISOString(),
+    }),
+  });
+}
+async function deletePushSubscription(){
+  const user_name = currentPushPersonId();
+  if(!user_name) return;
+  await fetch(`${SUPABASE_URL}push_subscriptions?user_name=eq.${encodeURIComponent(user_name)}`, {
+    method: 'DELETE',
+    headers: supabaseHeaders(),
+  });
+}
+
+async function subscribeToPush(){
+  if(!PWA.supportsPush()) throw new Error('Notifications non supportées sur cet appareil.');
+  const permission = await Notification.requestPermission();
+  if(permission !== 'granted') throw new Error('Permission refusée.');
+  const reg = swRegistration || await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if(!sub){
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+  }
+  await savePushSubscription(sub);
+  return sub;
+}
+async function unsubscribeFromPush(){
+  if(!('serviceWorker' in navigator)) return;
+  const reg = swRegistration || await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  if(sub) await sub.unsubscribe();
+  await deletePushSubscription();
+}
+
+// Envoi fire-and-forget vers l'Edge Function : ne bloque jamais l'UI sur le résultat.
+function triggerPushNotification({ type, title, body, targetUsers = [], data = {}, requireInteraction = false }){
+  fetch(`${SUPABASE_FUNCTIONS_URL}push-server`, {
+    method: 'POST',
+    headers: supabaseHeaders({ 'Content-Type':'application/json' }),
+    body: JSON.stringify({ type, title, body, targetUsers, data, requireInteraction }),
+  }).catch((e)=> console.warn('Envoi notification push impossible (ignoré)', e));
+}
+
+/* ---------------- Section "Notifications" du menu réglages ---------------- */
+function notificationStatusLabel(){
+  if(!PWA.supportsPush()) return { text:'Non disponible sur cet appareil', tone:'muted' };
+  if(PWA.isIOS() && !PWA.isInstalled()) return { text:'Installez l\'app pour activer les notifications', tone:'muted' };
+  if(Notification.permission === 'granted') return { text:'Activées', tone:'ok' };
+  if(Notification.permission === 'denied') return { text:'Bloquées', tone:'danger' };
+  return { text:'Non configurées', tone:'muted' };
+}
+async function openNotificationSettingsModal(){
+  const backdrop = document.getElementById('modal-backdrop');
+  const box = document.getElementById('modal-box');
+  box.className = 'modal-box';
+
+  const renderBody = ()=>{
+    const status = notificationStatusLabel();
+    const isIOSNotInstalled = PWA.isIOS() && !PWA.isInstalled();
+    const isBlocked = Notification.permission === 'denied';
+    const canOffer = PWA.supportsPush() && !isIOSNotInstalled && Notification.permission !== 'granted';
+    box.innerHTML = `
+      <h3>🔔 Notifications</h3>
+      <p>Statut actuel : <strong>${status.text}</strong></p>
+      ${isIOSNotInstalled ? `<p class="text-muted" style="font-size:12.5px;">Sur iPhone/iPad, les notifications ne fonctionnent que si l'app est installée : Partager → Sur l'écran d'accueil.</p>` : ''}
+      ${isBlocked ? `<p class="text-muted" style="font-size:12.5px;">Les notifications sont bloquées par le navigateur. Autorisez-les dans Réglages &gt; Safari &gt; Amivet RH (ou l'équivalent sur votre navigateur), puis revenez ici.</p>` : ''}
+      ${canOffer ? `<button class="btn btn-primary" id="notif-enable-btn" style="width:100%;justify-content:center;margin-top:10px;">Activer les notifications</button>` : ''}
+      ${status.tone === 'ok' ? `<button class="btn" id="notif-disable-btn" style="width:100%;justify-content:center;margin-top:10px;">Désactiver les notifications</button>` : ''}
+      <div class="modal-actions" style="margin-top:16px;">
+        <button class="btn" id="modal-cancel">Fermer</button>
+      </div>
+    `;
+    const enableBtn = box.querySelector('#notif-enable-btn');
+    if(enableBtn) enableBtn.onclick = async ()=>{
+      enableBtn.disabled = true; enableBtn.textContent = 'Activation…';
+      try{
+        await subscribeToPush();
+        showToast('Notifications activées', '🔔');
+        renderBody();
+      }catch(e){
+        // iOS 17.4+ (UE, DMA) supprime le mode standalone : la souscription échoue
+        // silencieusement côté OS — on l'explique plutôt que de laisser une erreur brute.
+        showToast(e.message || 'Impossible d\'activer les notifications sur cet appareil', '⚠️');
+        renderBody();
+      }
+    };
+    const disableBtn = box.querySelector('#notif-disable-btn');
+    if(disableBtn) disableBtn.onclick = async ()=>{
+      disableBtn.disabled = true;
+      await unsubscribeFromPush();
+      showToast('Notifications désactivées', '🔕');
+      renderBody();
+    };
+    box.querySelector('#modal-cancel').onclick = ()=> backdrop.classList.remove('open');
+  };
+  renderBody();
+  backdrop.classList.add('open');
+  backdrop.onclick = (e)=>{ if(e.target === backdrop) backdrop.classList.remove('open'); };
+}
+
+/* ---------------- Amorçage ---------------- */
+initServiceWorker();
+setTimeout(showIOSInstallTip, 4000);
+updatePwaOfflineBanner();
 </script>
 </body>
 </html>
