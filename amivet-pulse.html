@@ -684,6 +684,7 @@ body.role-asv [data-view="dashboard"]{display:none;}
         <button class="nav-tab" data-view="dashboard">📊 Tableau de bord<span id="dash-nav-badge"></span></button>
         <button class="nav-tab active" data-view="vets" aria-current="page">🩺 Vétérinaires</button>
         <button class="nav-tab" data-view="asv">🐾 ASV</button>
+        <button class="nav-tab" data-view="annonces">📣 Annonces<span id="annonces-nav-badge"></span></button>
       </nav>
 
       <div class="header-actions">
@@ -729,6 +730,9 @@ body.role-asv [data-view="dashboard"]{display:none;}
 
     <!-- Vue Tableau de bord -->
     <section id="view-dashboard" class="view-section hidden"></section>
+
+    <!-- Vue Annonces -->
+    <section id="view-annonces" class="view-section hidden"></section>
 
   </main>
 </div>
@@ -780,6 +784,22 @@ const ASV_PEOPLE = [
 // d'une ASV depuis le tableau de bord), donc on recalcule à chaque appel pour ne jamais
 // servir une liste périmée.
 function allPeople(){ return [...PEOPLE, ...ASV_PEOPLE]; }
+
+// ----------------------------------------------------------------
+// Constantes Module CP (Congés Payés)
+// ----------------------------------------------------------------
+const CP_DAYS_PER_MONTH = 2.5;      // jours ouvrables acquis par mois travaillé
+const CP_REFERENCE_START_MONTH = 5; // juin = index 5 (période 1 juin N-1 → 31 mai N)
+
+// ----------------------------------------------------------------
+// Constantes Module Annonces
+// ----------------------------------------------------------------
+const ANNONCE_CATEGORIES = {
+  urgent:  { label:'Urgent',  color:'#DC2626', bg:'#FEF2F2', border:'#FECACA', icon:'🚨' },
+  meeting: { label:'Réunion', color:'#7C3AED', bg:'#EDE9FE', border:'#DDD6FE', icon:'🗓️' },
+  task:    { label:'Tâche',   color:'#D97706', bg:'#FEF3C7', border:'#FDE68A', icon:'✅' },
+  info:    { label:'Info',    color:'#0369A1', bg:'#EFF6FF', border:'#BFDBFE', icon:'ℹ️' },
+};
 
 // ----------------------------------------------------------------
 // Effectif ASV dynamique — ajout/retrait depuis le tableau de bord. ASV_PEOPLE est mutée
@@ -1846,6 +1866,16 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 let currentUser = null;
 // { id, email, role, person_id, display_name, can_edit_vet_calendar, can_edit_all_asv }
 let adminViewMode = 'vet'; // 'vet' | 'asv' — seulement pertinent pour le rôle admin
+
+// ----------------------------------------------------------------
+// État global — Annonces
+// ----------------------------------------------------------------
+let announcementsCache = {
+  list: [],
+  reads: new Set(),
+  loaded: false,
+  filter: 'all', // catégorie filtrée
+};
 let adminImpersonatedPersonId = null; // quelle ASV l'admin imite en mode ASV
 const AUTH_SESSION_KEY = 'amivet_auth_session';
 
@@ -2096,6 +2126,68 @@ function updateDashboardNavBadge(){
   const n = countPendingLeaveRequests();
   el.textContent = n > 0 ? String(n) : '';
   el.className = n > 0 ? 'nav-badge' : '';
+}
+
+// ----------------------------------------------------------------
+// Module Annonces — chargement + badge
+// ----------------------------------------------------------------
+function annonceViewerId(){ return currentUser?.person_id || currentUser?.id || ''; }
+
+async function loadAnnouncements(){
+  if(!currentUser) return;
+  try{
+    const today = new Date().toISOString();
+    const [annRes, readRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}announcements?select=*&or=(expires_at.is.null,expires_at.gt.${encodeURIComponent(today)})&order=pinned.desc,created_at.desc`, { headers: supabaseHeaders() }),
+      fetch(`${SUPABASE_URL}announcement_reads?person_id=eq.${encodeURIComponent(annonceViewerId())}&select=announcement_id`, { headers: supabaseHeaders() }),
+    ]);
+    const anns = annRes.ok ? await annRes.json() : [];
+    const reads = readRes.ok ? await readRes.json() : [];
+    announcementsCache.list = Array.isArray(anns) ? anns : [];
+    announcementsCache.reads = new Set((Array.isArray(reads) ? reads : []).map(r => r.announcement_id));
+    announcementsCache.loaded = true;
+    updateAnnouncementBadge();
+  }catch(e){ console.warn('Annonces inaccessibles.', e); }
+}
+
+function getUnreadCount(){
+  const role = currentUser?.role;
+  const visible = announcementsCache.list.filter(a => {
+    if(a.target_roles === 'all') return true;
+    if(a.target_roles === 'vet' && role === 'vet') return true;
+    if(a.target_roles === 'asv' && role === 'asv') return true;
+    return role === 'admin';
+  });
+  return visible.filter(a => !announcementsCache.reads.has(a.id)).length;
+}
+
+function updateAnnouncementBadge(){
+  const el = document.getElementById('annonces-nav-badge');
+  if(!el) return;
+  const n = getUnreadCount();
+  el.textContent = n > 0 ? String(n) : '';
+  el.className = n > 0 ? 'nav-badge' : '';
+}
+
+async function markAnnouncementRead(annId){
+  if(announcementsCache.reads.has(annId)) return;
+  announcementsCache.reads.add(annId);
+  updateAnnouncementBadge();
+  try{
+    await fetch(`${SUPABASE_URL}announcement_reads`, {
+      method: 'POST',
+      headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=minimal,resolution=ignore-duplicates' }),
+      body: JSON.stringify({ announcement_id: annId, person_id: annonceViewerId() }),
+    });
+  }catch(e){ console.warn('markAnnouncementRead error', e); }
+}
+
+async function loadArchivedAnnouncements(){
+  try{
+    const today = new Date().toISOString();
+    const res = await fetch(`${SUPABASE_URL}announcements?select=*&expires_at=lte.${encodeURIComponent(today)}&order=created_at.desc`, { headers: supabaseHeaders() });
+    return res.ok ? (await res.json()) : [];
+  }catch(e){ return []; }
 }
 
 function slotKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}`; }
@@ -3595,6 +3687,245 @@ function renderCalendarView(viewKey){
 }
 VIEW_RENDERERS['vets'] = ()=> renderGroupSubPage('vets');
 VIEW_RENDERERS['asv'] = ()=> renderGroupSubPage('asv');
+VIEW_RENDERERS['annonces'] = renderAnnounces;
+
+/* ----------------------------------------------------------------
+   MODULE ANNONCES — renderAnnounces()
+   ---------------------------------------------------------------- */
+function renderAnnounces(){
+  const container = document.getElementById('view-annonces');
+  const isAdmin = currentUser?.role === 'admin';
+  const role = currentUser?.role;
+  const viewerId = annonceViewerId();
+
+  const now = new Date();
+  const allList = announcementsCache.list;
+  const active = allList.filter(a => {
+    if(a.target_roles === 'vet' && role === 'asv') return false;
+    if(a.target_roles === 'asv' && (role === 'vet' || role === 'admin')) return false;
+    return true;
+  });
+  const filterCat = announcementsCache.filter;
+
+  const filtered = filterCat === 'all' ? active : active.filter(a => a.category === filterCat);
+
+  function fmtDate(iso){
+    const d = new Date(iso);
+    return d.toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' });
+  }
+  function authorName(id){
+    const p = allPeople().find(p => p.id === id);
+    return p ? (p.short || p.name) : id;
+  }
+
+  const cats = [
+    { id:'all', label:'Tout', icon:'📋' },
+    ...Object.entries(ANNONCE_CATEGORIES).map(([id, c]) => ({ id, label:c.label, icon:c.icon })),
+  ];
+  const filterBar = `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+    ${cats.map(c => `<button class="ann-filter-pill${filterCat===c.id?' active':''}" data-cat="${c.id}" style="border:1.5px solid ${filterCat===c.id?'var(--color-primary)':'var(--color-border)'};background:${filterCat===c.id?'var(--color-secondary)':'var(--color-card)'};color:${filterCat===c.id?'var(--color-primary)':'var(--color-text)'};padding:5px 12px;border-radius:20px;font-size:13px;cursor:pointer;">${c.icon} ${c.label}</button>`).join('')}
+    ${isAdmin ? `<button id="ann-new-btn" class="btn btn-sm" style="margin-left:auto;">+ Nouvelle annonce</button>` : ''}
+  </div>`;
+
+  function cardHtml(a){
+    const cat = ANNONCE_CATEGORIES[a.category] || ANNONCE_CATEGORIES.info;
+    const unread = !announcementsCache.reads.has(a.id);
+    const bg = unread ? cat.bg : 'var(--color-card)';
+    return `<div class="ann-card" data-ann-id="${a.id}" style="position:relative;border:1.5px solid ${a.pinned?cat.color:unread?cat.border:'var(--color-border)'};border-left:${a.pinned?`4px solid ${cat.color}`:''};border-radius:10px;padding:14px 16px;margin-bottom:10px;background:${bg};cursor:pointer;">
+      ${unread ? `<span style="position:absolute;top:10px;left:10px;width:8px;height:8px;border-radius:50%;background:#3B82F6;"></span>` : ''}
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+        ${a.pinned?`<span style="font-size:13px;">📌</span>`:''}
+        <span style="background:${cat.bg};color:${cat.color};border:1px solid ${cat.border};border-radius:12px;padding:2px 8px;font-size:11.5px;font-weight:700;">${cat.icon} ${cat.label}</span>
+        <span style="font-size:12px;color:var(--color-muted);margin-left:auto;">${authorName(a.author_id)} · ${fmtDate(a.created_at)}</span>
+        ${isAdmin ? `<button class="ann-edit-btn btn btn-sm" data-ann-id="${a.id}" style="font-size:11.5px;padding:3px 8px;">✎</button>` : ''}
+      </div>
+      <div style="font-size:14.5px;font-weight:700;color:var(--color-text);margin-bottom:4px;">${escapeHTML(a.title)}</div>
+      <div style="font-size:13px;color:var(--color-text);line-height:1.55;white-space:pre-wrap;">${escapeHTML(a.content)}</div>
+    </div>`;
+  }
+
+  const listHtml = filtered.length
+    ? filtered.map(cardHtml).join('')
+    : `<p class="text-muted" style="margin-top:16px;">Aucune annonce pour le moment.</p>`;
+
+  container.innerHTML = `
+    <h2 class="section-title">📣 Tableau d'annonces</h2>
+    <div style="margin-bottom:14px;">${filterBar}</div>
+    <div id="ann-list">${listHtml}</div>
+    <details id="ann-archives" style="margin-top:24px;">
+      <summary style="cursor:pointer;font-size:13.5px;color:var(--color-muted);font-weight:600;user-select:none;">📁 Archives (annonces expirées)</summary>
+      <div id="ann-archives-list" style="margin-top:10px;opacity:0.6;"></div>
+    </details>
+  `;
+
+  container.querySelectorAll('.ann-filter-pill').forEach(btn => {
+    btn.onclick = ()=>{ announcementsCache.filter = btn.dataset.cat; renderAnnounces(); };
+  });
+
+  container.querySelectorAll('.ann-card').forEach(card => {
+    card.onclick = async (e) => {
+      if(e.target.closest('.ann-edit-btn')) return;
+      const annId = card.dataset.annId;
+      await markAnnouncementRead(annId);
+      card.style.background = 'var(--color-card)';
+      const dot = card.querySelector('span[style*="#3B82F6"]');
+      if(dot) dot.remove();
+    };
+  });
+
+  container.querySelectorAll('.ann-edit-btn').forEach(btn => {
+    btn.onclick = (e) => { e.stopPropagation(); openAnnouncementModal(btn.dataset.annId); };
+  });
+
+  if(isAdmin){
+    container.querySelector('#ann-new-btn').onclick = ()=> openAnnouncementModal(null);
+  }
+
+  // Archives (lazy load)
+  container.querySelector('#ann-archives').addEventListener('toggle', async function(){
+    if(!this.open) return;
+    const archList = document.getElementById('ann-archives-list');
+    archList.textContent = 'Chargement…';
+    const archived = await loadArchivedAnnouncements();
+    if(!archived.length){ archList.innerHTML = '<p style="font-size:13px;color:var(--color-muted);">Aucune archive.</p>'; return; }
+    archList.innerHTML = archived.map(a => {
+      const cat = ANNONCE_CATEGORIES[a.category] || ANNONCE_CATEGORIES.info;
+      return `<div style="border:1px solid var(--color-border);border-radius:8px;padding:10px 14px;margin-bottom:8px;background:var(--color-card);">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;">
+          <span style="background:${cat.bg};color:${cat.color};border:1px solid ${cat.border};border-radius:12px;padding:2px 8px;font-size:11.5px;">${cat.icon} ${cat.label}</span>
+          <span style="font-size:12px;color:var(--color-muted);margin-left:auto;">${authorName(a.author_id)} · ${fmtDate(a.created_at)}</span>
+        </div>
+        <div style="font-size:13.5px;font-weight:600;">${escapeHTML(a.title)}</div>
+        <div style="font-size:12.5px;color:var(--color-muted);white-space:pre-wrap;">${escapeHTML(a.content)}</div>
+      </div>`;
+    }).join('');
+  });
+}
+
+function openAnnouncementModal(annId){
+  const isAdmin = currentUser?.role === 'admin';
+  if(!isAdmin) return;
+  const existing = annId ? announcementsCache.list.find(a => a.id === annId) : null;
+  const backdrop = document.getElementById('modal-backdrop');
+  const box = document.getElementById('modal-box');
+  box.className = 'modal-box';
+
+  const initCat = existing?.category || 'info';
+  const catOptions = Object.entries(ANNONCE_CATEGORIES).map(([k, c]) => {
+    const sel = k === initCat;
+    return `<button type="button" class="ann-cat-btn" data-cat="${k}" style="border:1.5px solid ${c.border};background:${sel?c.bg:'var(--color-card)'};color:${c.color};padding:5px 12px;border-radius:20px;font-size:13px;cursor:pointer;font-weight:${sel?'700':'400'};">${c.icon} ${c.label}</button>`;
+  }).join('');
+
+  box.innerHTML = `
+    <h3>${existing ? '✏️ Modifier l\'annonce' : '📣 Nouvelle annonce'}</h3>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div>
+        <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Titre <span id="ann-title-count" style="font-weight:400;color:var(--color-muted);">(${existing?.title?.length||0}/80)</span></label>
+        <input id="ann-title" type="text" maxlength="80" value="${escapeHTML(existing?.title||'')}" placeholder="Titre de l'annonce" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:6px;font-size:13.5px;background:var(--color-card);color:var(--color-text);">
+      </div>
+      <div>
+        <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Contenu</label>
+        <textarea id="ann-content" rows="4" placeholder="Contenu de l'annonce…" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;resize:vertical;background:var(--color-card);color:var(--color-text);">${escapeHTML(existing?.content||'')}</textarea>
+      </div>
+      <div>
+        <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:6px;">Catégorie</label>
+        <div id="ann-cat-btns" style="display:flex;flex-wrap:wrap;gap:6px;">${catOptions}</div>
+        <input type="hidden" id="ann-cat-val" value="${existing?.category||'info'}">
+      </div>
+      <div>
+        <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:6px;">Destinataires</label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          ${[['all','Tout le monde'],['vet','Vétérinaires uniquement'],['asv','ASV uniquement']].map(([v,l])=>
+            `<label style="font-size:13px;display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="ann-roles" value="${v}" ${(existing?.target_roles||'all')===v?'checked':''}> ${l}</label>`
+          ).join('')}
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="font-size:12.5px;font-weight:600;">📌 Épingler en haut</label>
+        <input type="checkbox" id="ann-pinned" ${existing?.pinned?'checked':''}>
+      </div>
+      <div>
+        <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Date d'expiration (optionnel)</label>
+        <input id="ann-expires" type="date" value="${existing?.expires_at?existing.expires_at.slice(0,10):''}" style="padding:6px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;background:var(--color-card);color:var(--color-text);">
+      </div>
+    </div>
+    <div class="modal-actions" style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap;">
+      ${existing?`<button class="btn btn-danger" id="ann-delete-btn" style="margin-right:auto;">🗑️ Supprimer</button>`:''}
+      <button class="btn" id="ann-cancel-btn">Annuler</button>
+      <button class="btn btn-primary" id="ann-save-btn">${existing?'Mettre à jour':'Publier'}</button>
+    </div>
+  `;
+  backdrop.classList.add('open');
+  const close = ()=> backdrop.classList.remove('open');
+
+  box.querySelector('#ann-cancel-btn').onclick = close;
+  backdrop.onclick = e => { if(e.target===backdrop) close(); };
+
+  const titleInput = box.querySelector('#ann-title');
+  const countEl = box.querySelector('#ann-title-count');
+  titleInput.oninput = ()=> { countEl.textContent = `(${titleInput.value.length}/80)`; };
+
+  box.querySelectorAll('.ann-cat-btn').forEach(btn => {
+    btn.onclick = ()=>{
+      box.querySelector('#ann-cat-val').value = btn.dataset.cat;
+      box.querySelectorAll('.ann-cat-btn').forEach(b => {
+        const c = ANNONCE_CATEGORIES[b.dataset.cat];
+        b.style.background = 'var(--color-card)'; b.style.fontWeight = '400';
+      });
+      const selC = ANNONCE_CATEGORIES[btn.dataset.cat];
+      btn.style.background = selC.bg; btn.style.fontWeight = '700';
+    };
+  });
+
+  if(existing){
+    box.querySelector('#ann-delete-btn').onclick = async ()=>{
+      if(!confirm(`Supprimer l'annonce "${existing.title}" ?`)) return;
+      try{
+        await fetch(`${SUPABASE_URL}announcements?id=eq.${existing.id}`, {
+          method: 'DELETE', headers: supabaseHeaders({ Prefer:'return=minimal' }),
+        });
+        announcementsCache.list = announcementsCache.list.filter(a => a.id !== existing.id);
+        close(); updateAnnouncementBadge(); renderAnnounces();
+        showToast('Annonce supprimée', '🗑️');
+      }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
+    };
+  }
+
+  box.querySelector('#ann-save-btn').onclick = async ()=>{
+    const title = box.querySelector('#ann-title').value.trim();
+    const content = box.querySelector('#ann-content').value.trim();
+    const category = box.querySelector('#ann-cat-val').value;
+    const target_roles = box.querySelector('input[name="ann-roles"]:checked')?.value || 'all';
+    const pinned = box.querySelector('#ann-pinned').checked;
+    const expiresVal = box.querySelector('#ann-expires').value;
+    const expires_at = expiresVal ? new Date(expiresVal + 'T23:59:59').toISOString() : null;
+    if(!title || !content){ showToast('Titre et contenu requis', '⚠️'); return; }
+    const author_id = annonceViewerId();
+    try{
+      let ann;
+      if(existing){
+        const res = await fetch(`${SUPABASE_URL}announcements?id=eq.${existing.id}`, {
+          method: 'PATCH',
+          headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=representation' }),
+          body: JSON.stringify({ title, content, category, target_roles, pinned, expires_at }),
+        });
+        [ann] = await res.json();
+        announcementsCache.list = announcementsCache.list.map(a => a.id===ann.id?ann:a);
+      } else {
+        const res = await fetch(`${SUPABASE_URL}announcements`, {
+          method: 'POST',
+          headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=representation' }),
+          body: JSON.stringify({ title, content, category, target_roles, pinned, expires_at, author_id }),
+        });
+        [ann] = await res.json();
+        if(pinned) announcementsCache.list = [ann, ...announcementsCache.list];
+        else announcementsCache.list = [ann, ...announcementsCache.list].sort((a,b) => (b.pinned?1:0)-(a.pinned?1:0));
+      }
+      close(); updateAnnouncementBadge(); renderAnnounces();
+      showToast(existing?'Annonce mise à jour':'Annonce publiée', '📣');
+    }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
+  };
+}
 
 /* ----------------------------------------------------------------
    13. INTERACTIONS CALENDRIER (clic, glisser-peindre, popovers, sidebar)
@@ -4548,14 +4879,20 @@ function renderDashboard(){
       <div class="sub-nav" id="dash-sub-nav">
         <button class="sub-tab ${dashSubState.tab==='stats'?'active':''}" data-sub="stats">🩺 Suivi vétérinaires</button>
         <button class="sub-tab ${dashSubState.tab==='hours'?'active':''}" data-sub="hours">🐾 Suivi ASV</button>
+        <button class="sub-tab ${dashSubState.tab==='conges'?'active':''}" data-sub="conges">📆 Compteur CP</button>
+        <button class="sub-tab ${dashSubState.tab==='absences'?'active':''}" data-sub="absences">📊 Absentéisme</button>
+        <button class="sub-tab ${dashSubState.tab==='medical'?'active':''}" data-sub="medical">🏥 Visites médicales</button>
         <button class="sub-tab ${dashSubState.tab==='requests'?'active':''}" data-sub="requests">📋 Demandes de congé${pendingCount>0?` <span class="nav-badge">${pendingCount}</span>`:''}</button>
         <button class="sub-tab ${dashSubState.tab==='signatures'?'active':''}" data-sub="signatures">✍️ Feuilles signées</button>
         <button class="sub-tab ${dashSubState.tab==='interviews'?'active':''}" data-sub="interviews">📝 Entretiens annuels</button>
       </div>
     </div>
     <div id="dash-sub-stats" class="sub-page ${dashSubState.tab!=='stats'?'hidden':''}"></div>
-    <div id="dash-sub-requests" class="sub-page ${dashSubState.tab!=='requests'?'hidden':''}"></div>
     <div id="dash-sub-hours" class="sub-page ${dashSubState.tab!=='hours'?'hidden':''}"></div>
+    <div id="dash-sub-conges" class="sub-page ${dashSubState.tab!=='conges'?'hidden':''}"></div>
+    <div id="dash-sub-absences" class="sub-page ${dashSubState.tab!=='absences'?'hidden':''}"></div>
+    <div id="dash-sub-medical" class="sub-page ${dashSubState.tab!=='medical'?'hidden':''}"></div>
+    <div id="dash-sub-requests" class="sub-page ${dashSubState.tab!=='requests'?'hidden':''}"></div>
     <div id="dash-sub-signatures" class="sub-page ${dashSubState.tab!=='signatures'?'hidden':''}"></div>
     <div id="dash-sub-interviews" class="sub-page ${dashSubState.tab!=='interviews'?'hidden':''}"></div>
   `;
@@ -4568,6 +4905,9 @@ function renderDashboard(){
   });
   if(dashSubState.tab === 'stats') renderDashboardStats();
   else if(dashSubState.tab === 'hours') renderDashboardHours();
+  else if(dashSubState.tab === 'conges') renderDashboardConges();
+  else if(dashSubState.tab === 'absences') renderDashboardAbsences();
+  else if(dashSubState.tab === 'medical') renderDashboardMedical();
   else if(dashSubState.tab === 'signatures') renderDashboardSignatures();
   else if(dashSubState.tab === 'interviews') renderDashboardInterviews();
   else renderLeaveRequestsPage();
@@ -5067,6 +5407,690 @@ function renderLeaveRequestsPage(){
 }
 
 /* ================================================================
+   MODULE CP — Compteur Congés Payés
+   ================================================================ */
+function easterDate(year){
+  const a=year%19,b=Math.floor(year/100),c=year%100,d=Math.floor(b/4),e=b%4;
+  const f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30;
+  const i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451);
+  const month=Math.floor((h+l-7*m+114)/31),day=((h+l-7*m+114)%31)+1;
+  return new Date(year,month-1,day);
+}
+function getJoursFeries(year){
+  const easter=easterDate(year);
+  function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+  function isoOf(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+  const feries = new Set([
+    `${year}-01-01`, `${year}-05-01`, `${year}-05-08`,
+    `${year}-07-14`, `${year}-08-15`, `${year}-11-01`, `${year}-11-11`, `${year}-12-25`,
+    isoOf(addDays(easter,1)),   // Lundi de Pâques
+    isoOf(addDays(easter,39)),  // Ascension
+    isoOf(addDays(easter,50)),  // Lundi de Pentecôte
+  ]);
+  return feries;
+}
+
+function getCPTakenDays(personId, startISO, endISO){
+  // Count half-days absent with label containing 'CP' or 'Congé' (case-insensitive)
+  let halfDays = 0;
+  const labelRe = /cp|cong[eé]/i;
+  for(const key of Object.keys(DATA.slots)){
+    const m = key.match(/^(\d{4}-\d{2}-\d{2})_(.+)_(M|AM)$/);
+    if(!m) continue;
+    const [,iso,pid] = m;
+    if(pid !== personId) continue;
+    if(iso < startISO || iso > endISO) continue;
+    if(DATA.slots[key] !== 'absent') continue;
+    const label = DATA.slots[key.replace(/_(M|AM)$/, '_$1_label')] || '';
+    if(labelRe.test(label)) halfDays++;
+  }
+  return Math.round(halfDays / 2 * 100) / 100;
+}
+
+function cpPeriodISO(referenceYear){
+  const y = referenceYear;
+  const start = `${y-1}-06-01`;
+  const end   = `${y}-05-31`;
+  return { start, end, label:`1 juin ${y-1} → 31 mai ${y}` };
+}
+
+function getCPAcquired(person, referenceYear){
+  const { start, end } = cpPeriodISO(referenceYear);
+  const todayISO = fmtISO(today);
+  const effectiveEnd = todayISO < end ? todayISO : end;
+  const startDate = new Date(start + 'T00:00:00');
+  const endDate   = new Date(effectiveEnd + 'T00:00:00');
+  if(endDate < startDate) return 0;
+  // Count full months elapsed (partial month = 0, full month = 1 credit)
+  let months = (endDate.getFullYear() - startDate.getFullYear()) * 12 + (endDate.getMonth() - startDate.getMonth());
+  // Include the start month itself if today has passed day 1 of that month
+  if(endDate.getDate() >= 1) months++;
+  months = Math.max(0, Math.min(months, 12));
+  return Math.round(months * CP_DAYS_PER_MONTH * (person.timeFraction ?? 1.0) * 100) / 100;
+}
+
+function renderDashboardConges(){
+  const container = document.getElementById('dash-sub-conges');
+  const isAdmin = currentUser?.role === 'admin';
+  const cy = getCurrentYear();
+  let cpYear = (typeof renderDashboardConges._year === 'number') ? renderDashboardConges._year : cy;
+
+  container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--color-muted);">Chargement…</div>';
+
+  (async ()=>{
+    // Load cp_adjustments for this referenceYear
+    let adjustments = [];
+    try{
+      const res = await fetch(`${SUPABASE_URL}cp_adjustments?year=eq.${cpYear}&select=*`, { headers: supabaseHeaders() });
+      if(res.ok) adjustments = await res.json();
+    }catch(e){ console.warn('cp_adjustments inaccessibles', e); }
+
+    const adjByPerson = {};
+    adjustments.forEach(a => { adjByPerson[a.person_id] = a; });
+
+    const people = allPeople().filter(p => !p.archived);
+    const { label: periodLabel, start: startISO, end: endISO } = cpPeriodISO(cpYear);
+
+    function soldeColor(b){ return b >= 10 ? '#16A34A' : b >= 5 ? '#CA8A04' : '#DC2626'; }
+    function swatch(c){ return `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:4px;vertical-align:middle;"></span>`; }
+
+    const rows = people.map(p=>{
+      const adj = adjByPerson[p.id] || { carried_over:0, extra_days:0, extra_note:'' };
+      const acquired  = getCPAcquired(p, cpYear);
+      const taken     = getCPTakenDays(p.id, startISO, endISO);
+      const carriedOver = parseFloat(adj.carried_over) || 0;
+      const extra     = parseFloat(adj.extra_days) || 0;
+      const balance   = Math.round((acquired + carriedOver + extra - taken) * 100) / 100;
+      const total     = acquired + carriedOver + extra;
+      const pct       = total > 0 ? Math.min(100, Math.round(taken/total*100)) : 0;
+      const balC      = soldeColor(balance);
+      return `<tr data-person-id="${p.id}">
+        <td style="padding:10px 12px;font-weight:600;">${swatch(p.color)}${escapeHTML(p.short||p.name)}</td>
+        <td style="padding:10px 12px;text-align:center;">${acquired}j</td>
+        <td style="padding:10px 12px;text-align:center;">${taken}j</td>
+        <td style="padding:10px 12px;text-align:center;">${carriedOver > 0 ? carriedOver+'j' : '—'}</td>
+        <td style="padding:10px 12px;text-align:center;">${extra !== 0 ? (extra>0?'+':'')+extra+'j' : '—'}</td>
+        <td style="padding:10px 12px;text-align:center;font-weight:700;color:${balC};">${balance}j</td>
+        <td style="padding:10px 12px;min-width:120px;">
+          <div style="background:var(--color-border);border-radius:99px;height:6px;overflow:hidden;">
+            <div style="width:${pct}%;background:${pct>100?'#DC2626':'var(--color-primary)'};height:100%;border-radius:99px;"></div>
+          </div>
+          <div style="font-size:11px;color:var(--color-muted);margin-top:2px;">${pct}% posés</div>
+        </td>
+        ${isAdmin?`<td style="padding:10px 12px;"><button class="btn btn-sm cp-adjust-btn" data-pid="${p.id}" data-carried="${carriedOver}" data-extra="${extra}" data-note="${escapeHTML(adj.extra_note||'')}">✎ Ajuster</button></td>`:''}
+      </tr>`;
+    }).join('');
+
+    const yearBtns = [cpYear-1, cpYear, cpYear+1].map(y =>
+      `<button class="cp-year-btn" data-year="${y}" style="border:1.5px solid ${y===cpYear?'var(--color-primary)':'var(--color-border)'};background:${y===cpYear?'var(--color-secondary)':'var(--color-card)'};color:${y===cpYear?'var(--color-primary)':'var(--color-text)'};padding:5px 14px;border-radius:20px;font-size:13px;cursor:pointer;font-weight:${y===cpYear?'700':'400'};">${y}</button>`
+    ).join('');
+
+    container.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+        <div>
+          <div style="font-size:13.5px;font-weight:700;color:var(--color-text);">Période de référence : ${periodLabel}</div>
+          <div style="font-size:12px;color:var(--color-muted);">${CP_DAYS_PER_MONTH}j acquis/mois (proratisé selon le taux d'activité)</div>
+        </div>
+        <div style="display:flex;gap:6px;">${yearBtns}</div>
+      </div>
+      <div class="card" style="overflow-x:auto;">
+        <table class="recap-table" style="min-width:600px;">
+          <thead><tr>
+            <th style="text-align:left;">Personne</th>
+            <th style="text-align:center;">Acquis</th>
+            <th style="text-align:center;">Posés</th>
+            <th style="text-align:center;">Report N-1</th>
+            <th style="text-align:center;">Ajust.</th>
+            <th style="text-align:center;">Solde</th>
+            <th>Progression</th>
+            ${isAdmin?'<th></th>':''}
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div style="font-size:11.5px;color:var(--color-muted);margin-top:8px;">
+        🟢 ≥ 10j &nbsp;🟡 5–9j &nbsp;🔴 &lt; 5j · Jours "posés" = absences marquées CP/Congé dans le calendrier.
+      </div>
+    `;
+
+    container.querySelectorAll('.cp-year-btn').forEach(btn=>{
+      btn.onclick = ()=>{ renderDashboardConges._year = parseInt(btn.dataset.year,10); renderDashboardConges(); };
+    });
+
+    if(isAdmin){
+      container.querySelectorAll('.cp-adjust-btn').forEach(btn=>{
+        btn.onclick = ()=> openCPAdjustModal(btn.dataset.pid, cpYear, parseFloat(btn.dataset.carried)||0, parseFloat(btn.dataset.extra)||0, btn.dataset.note||'');
+      });
+    }
+  })();
+}
+renderDashboardConges._year = null;
+
+function openCPAdjustModal(personId, year, carriedOver, extra, note){
+  const person = allPeople().find(p=>p.id===personId);
+  const backdrop = document.getElementById('modal-backdrop');
+  const box = document.getElementById('modal-box');
+  box.className = 'modal-box';
+  box.innerHTML = `
+    <h3>✎ Ajuster les CP — ${escapeHTML(person?.short||personId)} (${year})</h3>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
+      <div>
+        <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Report N-1 (jours)</label>
+        <input id="cp-carried" type="number" step="0.5" min="0" value="${carriedOver}" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:6px;font-size:13.5px;background:var(--color-card);color:var(--color-text);">
+      </div>
+      <div>
+        <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Ajustement manuel (jours, + ou −)</label>
+        <input id="cp-extra" type="number" step="0.5" value="${extra}" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:6px;font-size:13.5px;background:var(--color-card);color:var(--color-text);">
+      </div>
+      <div>
+        <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Motif</label>
+        <textarea id="cp-note" rows="2" placeholder="Ancienneté, récupération…" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;resize:vertical;background:var(--color-card);color:var(--color-text);">${escapeHTML(note)}</textarea>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="cp-cancel">Annuler</button>
+      <button class="btn btn-primary" id="cp-save">Enregistrer</button>
+    </div>
+  `;
+  backdrop.classList.add('open');
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#cp-cancel').onclick = close;
+  backdrop.onclick = e=>{ if(e.target===backdrop) close(); };
+  box.querySelector('#cp-save').onclick = async ()=>{
+    const carried_over = parseFloat(box.querySelector('#cp-carried').value)||0;
+    const extra_days   = parseFloat(box.querySelector('#cp-extra').value)||0;
+    const extra_note   = box.querySelector('#cp-note').value.trim();
+    try{
+      const res = await fetch(`${SUPABASE_URL}cp_adjustments`, {
+        method:'POST',
+        headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=minimal,resolution=merge-duplicates' }),
+        body: JSON.stringify({ person_id:personId, year, carried_over, extra_days, extra_note, updated_at:new Date().toISOString() }),
+      });
+      if(!res.ok) throw new Error(`HTTP ${res.status}`);
+      close();
+      renderDashboardConges();
+      showToast(`CP ${escapeHTML(person?.short||personId)} mis à jour`, '✅');
+    }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
+  };
+}
+
+/* ================================================================
+   MODULE ABSENTÉISME
+   ================================================================ */
+function getAbsenteeismRate(personId, year, month){
+  const feries = getJoursFeries(year);
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  let workingDays = 0;
+  for(let d=1; d<=daysInMonth; d++){
+    const date = new Date(year, month, d);
+    const dow = date.getDay();
+    if(dow===0||dow===6) continue;
+    const iso = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    if(feries.has(iso)) continue;
+    workingDays++;
+  }
+  let absentHalves = 0;
+  for(const slot of ['M','AM']){
+    for(let d=1; d<=daysInMonth; d++){
+      const iso = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const key = `${iso}_${personId}_${slot}`;
+      if(DATA.slots[key] === 'absent'){
+        // For ASV: only count if decision is not 'rejected' (rejected means not absent)
+        if(isASVPerson(personId)){
+          const dec = getLeaveDecision(iso, personId, slot);
+          if(dec === 'rejected') continue;
+        }
+        absentHalves++;
+      }
+    }
+  }
+  const absentDays = absentHalves / 2;
+  const rate = workingDays > 0 ? Math.round(absentDays/workingDays*1000)/10 : 0;
+  return { rate, absentDays, workingDays };
+}
+
+function renderDashboardAbsences(){
+  const container = document.getElementById('dash-sub-absences');
+  const cy = getCurrentYear();
+  let absYear = (typeof renderDashboardAbsences._year === 'number') ? renderDashboardAbsences._year : cy;
+
+  const people = allPeople().filter(p => !p.archived);
+  const MONTH_SHORT_FR = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  const ALERT_THRESHOLD = 6;
+
+  // ---- Section A: SVG bar chart (12 derniers mois glissants) ----
+  const chartMonths = [];
+  for(let i=11; i>=0; i--){
+    const d = new Date(today.getFullYear(), today.getMonth()-i, 1);
+    chartMonths.push({ year:d.getFullYear(), month:d.getMonth() });
+  }
+
+  const svgW = 700, svgH = 220;
+  const padL = 38, padR = 10, padT = 10, padB = 40;
+  const chartW = svgW - padL - padR;
+  const chartH = svgH - padT - padB;
+  const groupW = chartW / 12;
+  const barW   = Math.max(2, Math.floor(groupW / (people.length + 1)));
+
+  // Compute max rate for Y axis
+  let maxRate = 0;
+  const rateGrid = chartMonths.map(cm => {
+    return people.map(p => {
+      const { rate } = getAbsenteeismRate(p.id, cm.year, cm.month);
+      if(rate > maxRate) maxRate = rate;
+      return rate;
+    });
+  });
+  const yMax = Math.max(maxRate + 2, ALERT_THRESHOLD + 2);
+  const yStep = 2;
+  const yTicks = [];
+  for(let v=0; v<=yMax; v+=yStep) yTicks.push(v);
+
+  function yPx(rate){ return padT + chartH - (rate/yMax)*chartH; }
+
+  // Grid lines
+  let gridLines = yTicks.map(v => {
+    const y = yPx(v);
+    return `<line x1="${padL}" y1="${y}" x2="${padL+chartW}" y2="${y}" stroke="var(--color-border)" stroke-width="1"/>
+      <text x="${padL-4}" y="${y+4}" font-size="10" fill="var(--color-muted)" text-anchor="end">${v}%</text>`;
+  }).join('');
+
+  // Alert threshold line
+  const yAlert = yPx(ALERT_THRESHOLD);
+  const alertLine = `<line x1="${padL}" y1="${yAlert}" x2="${padL+chartW}" y2="${yAlert}" stroke="#DC2626" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <text x="${padL+chartW-2}" y="${yAlert-3}" font-size="9.5" fill="#DC2626" text-anchor="end">Seuil ${ALERT_THRESHOLD}%</text>`;
+
+  // Bars
+  let bars = '';
+  let tooltipRects = '';
+  chartMonths.forEach((cm, mi) => {
+    const gX = padL + mi * groupW;
+    people.forEach((p, pi) => {
+      const rate = rateGrid[mi][pi];
+      const { absentDays, workingDays } = getAbsenteeismRate(p.id, cm.year, cm.month);
+      const bX = gX + pi * (barW+1) + (groupW - people.length*(barW+1))/2;
+      const bH = Math.max(0, (rate/yMax)*chartH);
+      const bY = padT + chartH - bH;
+      const label = `${p.short||p.name} — ${MONTH_SHORT_FR[cm.month]} ${cm.year} : ${rate}% (${absentDays}j/${workingDays}j)`;
+      bars += `<rect x="${bX}" y="${bY}" width="${barW}" height="${bH}" rx="2" fill="${p.color}" opacity="0.85">
+        <title>${label}</title>
+      </rect>`;
+    });
+    // X axis label
+    const labelX = gX + groupW/2;
+    bars += `<text x="${labelX}" y="${padT+chartH+14}" font-size="9" fill="var(--color-muted)" text-anchor="middle">${MONTH_SHORT_FR[cm.month]} ${String(cm.year).slice(2)}</text>`;
+  });
+
+  // Legend
+  const legend = people.map(p =>
+    `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;margin-right:12px;">
+      <span style="width:11px;height:11px;border-radius:3px;background:${p.color};display:inline-block;"></span>
+      ${escapeHTML(p.short||p.name)}
+    </span>`
+  ).join('');
+
+  const svgChart = `<svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;height:${svgH}px;" role="img" aria-label="Taux d'absentéisme 12 mois">
+    ${gridLines}${alertLine}${bars}
+    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+chartH}" stroke="var(--color-border)" stroke-width="1"/>
+    <line x1="${padL}" y1="${padT+chartH}" x2="${padL+chartW}" y2="${padT+chartH}" stroke="var(--color-border)" stroke-width="1"/>
+  </svg>`;
+
+  // ---- Section B: Annual table ----
+  function cellBg(rate){
+    if(rate < 3)  return '#DCFCE7';
+    if(rate <= 6) return '#FEF3C7';
+    return '#FEE2E2';
+  }
+  function cellColor(rate){
+    if(rate < 3)  return '#15803D';
+    if(rate <= 6) return '#92400E';
+    return '#991B1B';
+  }
+
+  const annualTable = (()=>{
+    const rates = people.map(p => {
+      const months = Array.from({length:12}, (_,m) => getAbsenteeismRate(p.id, absYear, m).rate);
+      const avg = months.reduce((a,b)=>a+b,0)/12;
+      const lastYrAvg = Array.from({length:12}, (_,m) => getAbsenteeismRate(p.id, absYear-1, m).rate).reduce((a,b)=>a+b,0)/12;
+      const trend = Math.round((avg - lastYrAvg)*10)/10;
+      return { p, months, avg, trend };
+    });
+    // Team averages
+    const teamMonths = Array.from({length:12}, (_,m) => {
+      const vals = people.map(p => getAbsenteeismRate(p.id, absYear, m).rate);
+      return Math.round(vals.reduce((a,b)=>a+b,0)/vals.length*10)/10;
+    });
+    const teamAvg = Math.round(teamMonths.reduce((a,b)=>a+b,0)/12*10)/10;
+
+    const headerCols = MONTH_SHORT_FR.map(m=>`<th style="text-align:center;min-width:38px;">${m}</th>`).join('');
+    const personRows = rates.map(({p, months, avg, trend}) => {
+      const cells = months.map(r=>`<td style="text-align:center;background:${cellBg(r)};color:${cellColor(r)};font-weight:${r>ALERT_THRESHOLD?'700':'400'};">${r}%</td>`).join('');
+      const avgC = cellColor(avg);
+      const trendStr = trend===0?'—':(trend>0?`↑ +${trend} pts`:`↓ ${trend} pts`);
+      const trendC = trend<=0?'#15803D':'#991B1B';
+      return `<tr>
+        <td style="padding:6px 10px;font-weight:600;white-space:nowrap;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:5px;"></span>${escapeHTML(p.short||p.name)}</td>
+        ${cells}
+        <td style="text-align:center;font-weight:700;color:${avgC};">${Math.round(avg*10)/10}%</td>
+        <td style="text-align:center;font-size:12px;color:${trendC};">${trendStr}</td>
+      </tr>`;
+    }).join('');
+
+    const teamCells = teamMonths.map(r=>`<td style="text-align:center;font-weight:700;background:${cellBg(r)};color:${cellColor(r)};">${r}%</td>`).join('');
+
+    return `<table class="recap-table" style="min-width:700px;font-size:12.5px;">
+      <thead><tr>
+        <th style="text-align:left;">Personne</th>${headerCols}
+        <th style="text-align:center;">Moy.</th><th style="text-align:center;">Trend</th>
+      </tr></thead>
+      <tbody>${personRows}
+      <tr style="background:var(--color-secondary);">
+        <td style="padding:6px 10px;font-weight:800;">Équipe</td>
+        ${teamCells}
+        <td style="text-align:center;font-weight:800;">${teamAvg}%</td>
+        <td></td>
+      </tr></tbody>
+    </table>`;
+  })();
+
+  // ---- Section C: Alerts ----
+  const alertsHtml = (()=>{
+    const alerts = [];
+    people.forEach(p => {
+      const last3 = [0,1,2].map(i => {
+        const d = new Date(today.getFullYear(), today.getMonth()-i, 1);
+        return getAbsenteeismRate(p.id, d.getFullYear(), d.getMonth()).rate;
+      });
+      if(last3.every(r => r > ALERT_THRESHOLD)){
+        const avg3 = Math.round(last3.reduce((a,b)=>a+b,0)/3*10)/10;
+        alerts.push(`<div style="border:1.5px solid #FECACA;background:#FEF2F2;border-radius:10px;padding:12px 16px;margin-bottom:8px;">
+          <span style="font-weight:700;color:#DC2626;">⚠️ ${escapeHTML(p.short||p.name)}</span> dépasse le seuil de ${ALERT_THRESHOLD}% d'absentéisme sur 3 mois consécutifs (moy. ${avg3}%).<br>
+          <span style="font-size:12.5px;color:#7F1D1D;">Point recommandé en entretien annuel.</span>
+        </div>`);
+      }
+    });
+    return alerts.length ? `<div style="margin-bottom:16px;">${alerts.join('')}</div>` : '';
+  })();
+
+  const yearBtns = [absYear-1, absYear, absYear+1].filter(y=>y<=cy+1).map(y =>
+    `<button class="abs-year-btn" data-year="${y}" style="border:1.5px solid ${y===absYear?'var(--color-primary)':'var(--color-border)'};background:${y===absYear?'var(--color-secondary)':'var(--color-card)'};color:${y===absYear?'var(--color-primary)':'var(--color-text)'};padding:5px 14px;border-radius:20px;font-size:13px;cursor:pointer;font-weight:${y===absYear?'700':'400'};">${y}</button>`
+  ).join('');
+
+  container.innerHTML = `
+    ${alertsHtml}
+    <div class="card" style="margin-bottom:20px;">
+      <h3 style="font-size:15px;margin-bottom:4px;">Taux d'absentéisme — 12 derniers mois</h3>
+      <p class="text-muted" style="font-size:12px;margin-bottom:10px;">Absences réelles / jours ouvrés (hors jours fériés). Seuil d'alerte : ${ALERT_THRESHOLD}%.</p>
+      <div style="overflow-x:auto;">${svgChart}</div>
+      <div style="margin-top:8px;">${legend}</div>
+    </div>
+    <div class="card" style="overflow-x:auto;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+        <h3 style="font-size:15px;margin:0;">Récapitulatif annuel ${absYear}</h3>
+        <div style="display:flex;gap:6px;">${yearBtns}</div>
+      </div>
+      <div style="font-size:11.5px;color:var(--color-muted);margin-bottom:10px;">
+        🟢 &lt;3% · 🟡 3–6% · 🔴 &gt;6%
+      </div>
+      ${annualTable}
+    </div>
+  `;
+
+  container.querySelectorAll('.abs-year-btn').forEach(btn=>{
+    btn.onclick = ()=>{ renderDashboardAbsences._year = parseInt(btn.dataset.year,10); renderDashboardAbsences(); };
+  });
+}
+renderDashboardAbsences._year = null;
+
+/* ================================================================
+   MODULE VISITES MÉDICALES
+   ================================================================ */
+function addMonthsToDate(dateISO, months){
+  const d = new Date(dateISO + 'T00:00:00');
+  d.setMonth(d.getMonth() + months);
+  return fmtISO(d);
+}
+
+function getMedicalAlert(visit){
+  if(!visit){
+    return { level:'red', label:'À planifier', effectiveNextDate:null, daysUntil:null };
+  }
+  const effectiveNextDate = visit.next_visit_date || addMonthsToDate(visit.visit_date, visit.frequency_months||60);
+  const todayMs = today.getTime();
+  const nextMs  = new Date(effectiveNextDate + 'T00:00:00').getTime();
+  const daysUntil = Math.floor((nextMs - todayMs) / 86400000);
+  let level, label;
+  if(daysUntil < 0){ level='red'; label=`⛔ Dépassée (${Math.abs(daysUntil)}j)`; }
+  else if(daysUntil < 90){ level='amber'; label=`⚠️ Dans ${daysUntil}j`; }
+  else { level='green'; label='✅ À jour'; }
+  return { level, label, effectiveNextDate, daysUntil };
+}
+
+function renderDashboardMedical(){
+  const container = document.getElementById('dash-sub-medical');
+  const isAdmin = currentUser?.role === 'admin';
+  container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--color-muted);">Chargement…</div>';
+
+  (async ()=>{
+    let visits = [];
+    try{
+      const res = await fetch(`${SUPABASE_URL}medical_visits?select=*&order=visit_date.desc`, { headers: supabaseHeaders() });
+      if(res.ok) visits = await res.json();
+    }catch(e){ console.warn('medical_visits inaccessibles', e); }
+
+    // Keep only latest visit per person
+    const latestByPerson = {};
+    visits.forEach(v => {
+      if(!latestByPerson[v.person_id] || v.visit_date > latestByPerson[v.person_id].visit_date)
+        latestByPerson[v.person_id] = v;
+    });
+
+    const people = allPeople().filter(p => !p.archived);
+    const VISIT_TYPE_LABELS = { embauche:'Embauche', periodique:'Périodique', reprise:'Reprise', spontanee:'Spontanée' };
+    const STATUS_LABELS = { apte:'Apte', apte_reserves:'Apte avec réserves', inapte:'Inapte', en_attente:'En attente' };
+    const levelIcon = { red:'⛔', amber:'⚠️', green:'✅' };
+    const levelColor = { red:'#DC2626', amber:'#CA8A04', green:'#16A34A' };
+
+    const rows = people.map(p => {
+      const v = latestByPerson[p.id] || null;
+      const alert = getMedicalAlert(v);
+      const nextDisplay = v ? (alert.effectiveNextDate ? new Date(alert.effectiveNextDate+'T00:00:00').toLocaleDateString('fr-FR') : '—') : '—';
+      const statusLabel = v ? (STATUS_LABELS[v.status] || v.status) : '—';
+      const reservesBtn = (v?.status === 'apte_reserves' && v?.reserves_note)
+        ? `<button class="med-reserves-btn btn btn-sm" title="${escapeHTML(v.reserves_note)}" style="font-size:11px;padding:2px 6px;margin-left:4px;">ℹ️</button>` : '';
+      return `<tr>
+        <td style="padding:8px 12px;text-align:center;font-size:16px;color:${levelColor[alert.level]};">${levelIcon[alert.level]}</td>
+        <td style="padding:8px 12px;font-weight:600;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:5px;"></span>${escapeHTML(p.short||p.name)}</td>
+        <td style="padding:8px 12px;">${v ? new Date(v.visit_date+'T00:00:00').toLocaleDateString('fr-FR') : '—'}</td>
+        <td style="padding:8px 12px;">${v ? (VISIT_TYPE_LABELS[v.visit_type]||v.visit_type) : '—'}</td>
+        <td style="padding:8px 12px;">${statusLabel}${reservesBtn}</td>
+        <td style="padding:8px 12px;color:${levelColor[alert.level]};font-weight:${alert.level!=='green'?'600':'400'};">${nextDisplay}</td>
+        <td style="padding:8px 12px;">
+          ${v && isAdmin ? `<button class="btn btn-sm med-edit-btn" data-visit-id="${v.id}" style="font-size:11.5px;padding:3px 8px;">✎</button>` : ''}
+          ${!v && isAdmin ? `<button class="btn btn-sm btn-primary med-add-btn" data-pid="${p.id}" style="font-size:11.5px;padding:3px 8px;">+ Ajouter</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+
+    container.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+        <div></div>
+        ${isAdmin ? `<button class="btn btn-sm btn-primary" id="med-add-global">+ Ajouter une visite</button>` : ''}
+      </div>
+      <div class="card" style="overflow-x:auto;margin-bottom:16px;">
+        <table class="recap-table" style="min-width:600px;">
+          <thead><tr>
+            <th style="text-align:center;">Statut</th>
+            <th>Personne</th>
+            <th>Dernière visite</th>
+            <th>Type</th>
+            <th>Aptitude</th>
+            <th>Prochaine visite</th>
+            ${isAdmin ? '<th></th>' : ''}
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div style="background:var(--color-secondary);border:1px solid var(--color-border);border-radius:10px;padding:14px 16px;font-size:12.5px;color:var(--color-muted);">
+        📋 <strong>Référence légale — Article R4624-10 du Code du travail</strong><br>
+        Visite d'aptitude à l'embauche obligatoire. Renouvellement périodique tous les 5 ans
+        (surveillance simple) ou tous les 2 ans (surveillance renforcée : exposition aux risques).
+      </div>
+    `;
+
+    // Reserves popover
+    container.querySelectorAll('.med-reserves-btn').forEach(btn => {
+      btn.onclick = e => {
+        e.stopPropagation();
+        const note = btn.getAttribute('title');
+        const box2 = document.getElementById('modal-box');
+        const backdrop2 = document.getElementById('modal-backdrop');
+        box2.className = 'modal-box';
+        box2.innerHTML = `<h3>ℹ️ Réserves d'aptitude</h3><p style="font-size:13.5px;line-height:1.6;">${escapeHTML(note)}</p><div class="modal-actions"><button class="btn btn-primary" id="med-res-ok">Fermer</button></div>`;
+        backdrop2.classList.add('open');
+        box2.querySelector('#med-res-ok').onclick = ()=> backdrop2.classList.remove('open');
+        backdrop2.onclick = ev=>{ if(ev.target===backdrop2) backdrop2.classList.remove('open'); };
+      };
+    });
+
+    if(isAdmin){
+      const openAdd = (personId) => openMedicalModal(null, visits, personId);
+      const openEdit = (visitId) => openMedicalModal(visits.find(v=>v.id===visitId), visits, null, ()=>{ renderDashboardMedical(); });
+      if(container.querySelector('#med-add-global'))
+        container.querySelector('#med-add-global').onclick = ()=> openAdd(null);
+      container.querySelectorAll('.med-add-btn').forEach(btn => btn.onclick = ()=> openAdd(btn.dataset.pid));
+      container.querySelectorAll('.med-edit-btn').forEach(btn => btn.onclick = ()=> openEdit(btn.dataset.visitId));
+    }
+  })();
+}
+
+function openMedicalModal(existingVisit, allVisits, preselectedPid, onSaved){
+  const isAdmin = currentUser?.role === 'admin';
+  if(!isAdmin) return;
+  const backdrop = document.getElementById('modal-backdrop');
+  const box = document.getElementById('modal-box');
+  box.className = 'modal-box';
+  const people = allPeople().filter(p=>!p.archived);
+  const FREQ_OPTIONS = [[12,'12 mois (1 an)'],[24,'24 mois (2 ans)'],[36,'36 mois (3 ans)'],[60,'60 mois (5 ans)']];
+  const curFreq = existingVisit?.frequency_months || 60;
+
+  function calcNextISO(visitDateISO, freqMonths){ return visitDateISO ? addMonthsToDate(visitDateISO, freqMonths) : ''; }
+
+  box.innerHTML = `
+    <h3>${existingVisit ? '✎ Modifier la visite' : '🏥 Ajouter une visite médicale'}</h3>
+    <div style="display:flex;flex-direction:column;gap:11px;max-height:70vh;overflow-y:auto;">
+      <div>
+        <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Personne</label>
+        ${existingVisit
+          ? `<div style="font-weight:700;padding:6px 0;">${escapeHTML(people.find(p=>p.id===existingVisit.person_id)?.short||existingVisit.person_id)}</div><input type="hidden" id="med-person" value="${existingVisit.person_id}">`
+          : `<select id="med-person" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;background:var(--color-card);color:var(--color-text);">${people.map(p=>`<option value="${p.id}"${p.id===preselectedPid?' selected':''}>${escapeHTML(p.short||p.name)}</option>`)}</select>`
+        }
+      </div>
+      <div><label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Date de la visite</label>
+        <input id="med-date" type="date" max="${fmtISO(today)}" value="${existingVisit?.visit_date||''}" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;background:var(--color-card);color:var(--color-text);">
+      </div>
+      <div><label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:6px;">Type de visite</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          ${[['embauche','Embauche'],['periodique','Périodique'],['reprise','Reprise'],['spontanee','Spontanée']].map(([v,l])=>
+            `<label style="font-size:13px;display:flex;align-items:center;gap:5px;cursor:pointer;border:1px solid var(--color-border);padding:5px 10px;border-radius:20px;"><input type="radio" name="med-type" value="${v}" ${(existingVisit?.visit_type||'periodique')===v?'checked':''}> ${l}</label>`
+          ).join('')}
+        </div>
+      </div>
+      <div><label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:6px;">Aptitude</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          ${[['apte','Apte'],['apte_reserves','Apte avec réserves'],['inapte','Inapte'],['en_attente','En attente']].map(([v,l])=>
+            `<label style="font-size:13px;display:flex;align-items:center;gap:5px;cursor:pointer;border:1px solid var(--color-border);padding:5px 10px;border-radius:20px;"><input type="radio" name="med-status" value="${v}" ${(existingVisit?.status||'apte')===v?'checked':''}> ${l}</label>`
+          ).join('')}
+        </div>
+      </div>
+      <div id="med-reserves-wrap" style="${(existingVisit?.status||'apte')==='apte_reserves'?'':'display:none;'}">
+        <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Réserves</label>
+        <textarea id="med-reserves" rows="2" placeholder="Détail des réserves…" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;resize:vertical;background:var(--color-card);color:var(--color-text);">${escapeHTML(existingVisit?.reserves_note||'')}</textarea>
+      </div>
+      <div><label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Fréquence de renouvellement</label>
+        <select id="med-freq" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;background:var(--color-card);color:var(--color-text);">
+          ${FREQ_OPTIONS.map(([v,l])=>`<option value="${v}"${v===curFreq?' selected':''}>${l}</option>`).join('')}
+        </select>
+      </div>
+      <div><label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Prochaine visite (calculée auto, modifiable)</label>
+        <input id="med-next" type="date" value="${existingVisit?.next_visit_date || calcNextISO(existingVisit?.visit_date, curFreq)}" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;background:var(--color-card);color:var(--color-text);">
+      </div>
+      <div><label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Médecin du travail</label>
+        <input id="med-doctor" type="text" value="${escapeHTML(existingVisit?.doctor_name||'')}" placeholder="Nom du médecin" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;background:var(--color-card);color:var(--color-text);">
+      </div>
+      <div><label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Notes</label>
+        <textarea id="med-notes" rows="2" placeholder="Observations, suivi…" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;resize:vertical;background:var(--color-card);color:var(--color-text);">${escapeHTML(existingVisit?.notes||'')}</textarea>
+      </div>
+    </div>
+    <div class="modal-actions" style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+      ${existingVisit?`<button class="btn btn-danger" id="med-delete-btn" style="margin-right:auto;">🗑️ Supprimer</button>`:''}
+      <button class="btn" id="med-cancel">Annuler</button>
+      <button class="btn btn-primary" id="med-save">Enregistrer</button>
+    </div>
+  `;
+  backdrop.classList.add('open');
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#med-cancel').onclick = close;
+  backdrop.onclick = e=>{ if(e.target===backdrop) close(); };
+
+  // Toggle reserves textarea
+  box.querySelectorAll('input[name="med-status"]').forEach(r=>{
+    r.onchange = ()=>{
+      box.querySelector('#med-reserves-wrap').style.display = r.value==='apte_reserves'?'':'none';
+    };
+  });
+
+  // Auto-calc next date when visit date or frequency changes
+  const autoNext = ()=>{
+    const dateVal = box.querySelector('#med-date').value;
+    const freqVal = parseInt(box.querySelector('#med-freq').value)||60;
+    if(dateVal) box.querySelector('#med-next').value = calcNextISO(dateVal, freqVal);
+  };
+  box.querySelector('#med-date').onchange = autoNext;
+  box.querySelector('#med-freq').onchange = autoNext;
+
+  if(existingVisit){
+    box.querySelector('#med-delete-btn').onclick = async ()=>{
+      if(!confirm('Supprimer cette visite ?')) return;
+      try{
+        await fetch(`${SUPABASE_URL}medical_visits?id=eq.${existingVisit.id}`, {
+          method:'DELETE', headers: supabaseHeaders({ Prefer:'return=minimal' }),
+        });
+        close(); renderDashboardMedical(); showToast('Visite supprimée', '🗑️');
+      }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
+    };
+  }
+
+  box.querySelector('#med-save').onclick = async ()=>{
+    const person_id     = box.querySelector('#med-person').value;
+    const visit_date    = box.querySelector('#med-date').value;
+    const visit_type    = box.querySelector('input[name="med-type"]:checked')?.value || 'periodique';
+    const status        = box.querySelector('input[name="med-status"]:checked')?.value || 'apte';
+    const reserves_note = status==='apte_reserves' ? box.querySelector('#med-reserves').value.trim() : '';
+    const frequency_months = parseInt(box.querySelector('#med-freq').value)||60;
+    const next_visit_date = box.querySelector('#med-next').value || null;
+    const doctor_name   = box.querySelector('#med-doctor').value.trim();
+    const notes         = box.querySelector('#med-notes').value.trim();
+    if(!visit_date){ showToast('Date de visite requise', '⚠️'); return; }
+    const payload = { person_id, visit_date, visit_type, status, reserves_note, frequency_months, next_visit_date, doctor_name, notes };
+    try{
+      if(existingVisit){
+        await fetch(`${SUPABASE_URL}medical_visits?id=eq.${existingVisit.id}`, {
+          method:'PATCH', headers: supabaseHeaders({ 'Content-Type':'application/json', Prefer:'return=minimal' }),
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await fetch(`${SUPABASE_URL}medical_visits`, {
+          method:'POST', headers: supabaseHeaders({ 'Content-Type':'application/json', Prefer:'return=minimal' }),
+          body: JSON.stringify(payload),
+        });
+      }
+      close(); renderDashboardMedical(); showToast(existingVisit?'Visite mise à jour':'Visite enregistrée', '✅');
+    }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
+  };
+}
+
+/* ================================================================
    15. VUE ANNUELLE (heatmap)
    ================================================================ */
 function stateLabel(iso, personId, slot){
@@ -5316,6 +6340,7 @@ function initApp(){
   syncFromSupabase();
   loadSignatures();
   loadInterviews();
+  loadAnnouncements();
   document.getElementById('login-overlay').classList.add('hidden');
   // Ouvrir le modal de confirmation si l'utilisateur vient d'un lien de signature email
   if(pendingSignToken){
