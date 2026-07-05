@@ -285,13 +285,16 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-cell.state-leave-rejected:hover{filter:brightness(0.96);}
 .cal-cell.sunday-cell{background:var(--color-sunday);cursor:default;}
 .cal-cell.sunday-cell:hover{background:var(--color-sunday);}
+.sunday-ot-badge{font-size:8px;font-weight:800;color:#16a34a;line-height:1;}
+.sunday-ot-neg{color:#EA580C;}
+.cal-cell.sunday-ot-cell{cursor:default;}
 .cal-cell .cell-mark{font-size:10px;}
 .cal-cell .ot-badge{
   position:absolute;bottom:0;right:1px;font-size:5.5px;font-weight:800;
   color:#7C3AED;line-height:1;
 }
-.cal-cell.overtime-row-cell{background:#fff;color:#7C3AED;cursor:pointer;}
-.cal-cell.overtime-row-cell:hover{background:var(--color-secondary);}
+.cal-cell.overtime-row-cell{background:#fff;color:#7C3AED;cursor:default;}
+.cal-cell.overtime-row-cell:hover{background:#fff;}
 .ot-row-total{font-size:8.5px;font-weight:800;}
 .cal-cell .ot-badge-neg{color:#EA580C;}
 .ot-row-total-neg{color:#EA580C;}
@@ -2714,19 +2717,14 @@ function renderWeekViewASV(){
   const amRow = `<tr><td class="week-time-label">15h00<br>↕<br>19h15</td>${days.map(d=>buildVisCell(d,'afternoon',220)).join('')}</tr>`;
 
   const totRow=`<tr><td class="week-footer-label">Heures</td>${days.map(d=>footerCell(d,iso=>{
-    const w=calcDayTE(iso,pid)+calcLunchTE(iso,pid); const aOT=calcAutoOT(iso,pid);
+    const w=calcDayTE(iso,pid)+calcLunchTE(iso,pid);
     if(!w) return '-';
-    return `<span class="week-total-h">${formatHHMM(w)}</span>${aOT!==0?` <span style="font-size:10px;font-weight:700;color:${aOT>0?'#16a34a':'#ea580c'}">${signedHHMM(aOT)}</span>`:''}`;
+    return `<span class="week-total-h">${formatHHMM(w)}</span>`;
   })).join('')}</tr>`;
 
   const absRow=`<tr><td class="week-footer-label">Absent</td>${days.map(d=>footerCell(d,iso=>{
     const ab=getSlotState(iso,pid,'M')==='absent'&&getSlotState(iso,pid,'AM')==='absent';
     return `<input type="checkbox" class="week-abs-chk" data-week-abs="${iso}" data-week-pid="${pid}" ${ab?'checked':''} ${canEditDay(d)?'':'disabled'}>`;
-  })).join('')}</tr>`;
-
-  const otRow=`<tr><td class="week-footer-label">H. +/−</td>${days.map(d=>footerCell(d,iso=>{
-    const ot=getOvertimeHours(iso,pid);
-    return `<input type="number" step="0.5" class="week-ot-input" data-week-ot="${iso}" data-week-pid="${pid}" value="${ot||''}" placeholder="0" style="width:48px;padding:2px 4px;border:1px solid var(--color-border);border-radius:4px;font-size:11px;font-family:inherit;text-align:center;" ${canEditDay(d)?'':'disabled'}>`;
   })).join('')}</tr>`;
 
   const noteRow=`<tr><td class="week-footer-label">Note</td>${days.map(d=>footerCell(d,iso=>{
@@ -2751,7 +2749,7 @@ function renderWeekViewASV(){
       ${asvPicker}
     </div>
     <div class="week-view-wrap card" style="padding:0;">
-      <table class="week-table"><thead>${headerRow}</thead><tbody>${mRow}${lRow}${amRow}${totRow}${absRow}${otRow}${noteRow}</tbody></table>
+      <table class="week-table"><thead>${headerRow}</thead><tbody>${mRow}${lRow}${amRow}${totRow}${absRow}${noteRow}</tbody></table>
     </div>`;
 
   container.querySelector('#week-prev').onclick=()=>{
@@ -3292,6 +3290,7 @@ function buildPersonRowCells(year, month, days, personId){
   // validée — à condition que le motif se poursuive identique de l'autre côté. Une demande
   // ASV refusée garde toujours le dimanche comme case "fermée" séparée.
   const canBridgeSunday = (decision)=> !isASVPerson(personId) || decision === 'pending' || decision === 'approved';
+  let weeklyOT = 0;
   days.forEach(day=>{
     const date = new Date(year, month, day);
     const iso = fmtISO(date);
@@ -3303,13 +3302,17 @@ function buildPersonRowCells(year, month, days, personId){
         const nextDecision = nextState === 'absent' && isASVPerson(personId) ? (getLeaveDecision(nextIso, personId, 'M') || 'pending') : null;
         if(nextState === 'absent' && nextLabel === run.label && nextDecision === run.decision){
           run.colspan += 2;
+          weeklyOT = 0;
           return;
         }
       }
       flush();
-      html += `<td class="cal-cell sunday-cell" colspan="2" aria-hidden="true"></td>`;
+      const wOT = Math.round(weeklyOT * 10) / 10;
+      html += `<td class="cal-cell sunday-cell${wOT !== 0 ? ' sunday-ot-cell' : ''}" colspan="2" aria-label="${wOT !== 0 ? 'Bilan semaine : ' + signedHHMM(wOT) : ''}">${wOT !== 0 ? `<span class="sunday-ot-badge${wOT < 0 ? ' sunday-ot-neg' : ''}">${signedHHMM(wOT)}</span>` : ''}</td>`;
+      weeklyOT = 0;
       return;
     }
+    weeklyOT += calcAutoOT(iso, personId);
     SLOTS.forEach(slot=>{
       const state = getSlotState(iso, personId, slot);
       const label = state === 'absent' ? getSlotLabel(iso, personId, slot) : '';
@@ -3341,21 +3344,30 @@ function buildPersonRowCells(year, month, days, personId){
 // toutes les ASV pour saisir leurs heures sup de cette date en une fois.
 function buildOvertimeRowCells(year, month, days, people){
   let html = '';
+  // Group days into Mon–Sun weeks then render one merged cell per week
+  const weeks = [];
+  let currentWeek = [];
   days.forEach(day=>{
-    const date = new Date(year, month, day);
-    const iso = fmtISO(date);
-    if(isSunday(date)){
-      html += `<td class="cal-cell sunday-cell" colspan="2" aria-hidden="true"></td>`;
-      return;
+    currentWeek.push(day);
+    if(isSunday(new Date(year, month, day))){
+      weeks.push(currentWeek);
+      currentWeek = [];
     }
-    const entries = people.map(p=>({ person:p, hours:getOvertimeHours(iso, p.id) })).filter(e=> e.hours !== 0);
-    const total = entries.reduce((sum,e)=> sum + e.hours, 0);
-    const title = entries.length
-      ? entries.map(e=> `${e.person.short} : ${signedHHMM(e.hours)}`).join(' · ')
-      : 'Cliquer pour saisir des ajustements d\'heures';
-    html += `<td class="cal-cell overtime-row-cell" colspan="2" data-action="overtime-day" data-date="${iso}"
-      tabindex="0" role="button" title="${escapeHTML(title)}"
-      aria-label="Ajustement d'heures du ${formatFR(iso)}. ${escapeHTML(title)}">${total !== 0 ? `<span class="ot-row-total${total < 0 ? ' ot-row-total-neg' : ''}">${signedHHMM(total)}</span>` : ''}</td>`;
+  });
+  if(currentWeek.length) weeks.push(currentWeek);
+
+  weeks.forEach(weekDays=>{
+    const colspan = weekDays.length * 2;
+    let weekTotal = 0;
+    weekDays.forEach(day=>{
+      const date = new Date(year, month, day);
+      if(isSunday(date)) return;
+      const iso = fmtISO(date);
+      people.forEach(p=>{ weekTotal += calcAutoOT(iso, p.id); });
+    });
+    weekTotal = Math.round(weekTotal * 10) / 10;
+    html += `<td class="cal-cell overtime-row-cell" colspan="${colspan}"
+      aria-label="Heures supplémentaires de la semaine">${weekTotal !== 0 ? `<span class="ot-row-total${weekTotal < 0 ? ' ot-row-total-neg' : ''}">${signedHHMM(weekTotal)}</span>` : ''}</td>`;
   });
   return html;
 }
