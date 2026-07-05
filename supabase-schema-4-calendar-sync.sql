@@ -34,7 +34,7 @@ begin
   return new_token;
 end;
 $$;
-grant execute on function generate_calendar_sync_token(text) to anon;
+grant execute on function generate_calendar_sync_token(text) to anon, authenticated;
 
 -- Désactive le lien d'un vétérinaire (l'ancien lien cesse de fonctionner).
 create or replace function revoke_calendar_sync_token(p_person_id text)
@@ -45,7 +45,7 @@ set search_path = public, extensions
 as $$
   update calendar_sync_tokens set token = null, updated_at = now() where person_id = p_person_id;
 $$;
-grant execute on function revoke_calendar_sync_token(text) to anon;
+grant execute on function revoke_calendar_sync_token(text) to anon, authenticated;
 
 -- Renvoie le jeton actif d'un vétérinaire (ou null s'il n'a pas encore activé la
 -- synchronisation), pour pouvoir réafficher/recopier son lien sans devoir le régénérer à
@@ -58,7 +58,7 @@ set search_path = public, extensions
 as $$
   select token from calendar_sync_tokens where person_id = p_person_id;
 $$;
-grant execute on function get_calendar_sync_status(text) to anon;
+grant execute on function get_calendar_sync_status(text) to anon, authenticated;
 
 -- Utilisée uniquement par la fonction Edge calendar-feed pour vérifier un jeton reçu dans
 -- l'URL d'abonnement (jamais appelée depuis le site).
@@ -70,4 +70,4 @@ set search_path = public, extensions
 as $$
   select token = p_token from calendar_sync_tokens where person_id = p_person_id and token is not null;
 $$;
-grant execute on function verify_calendar_sync_token(text, text) to anon;
+grant execute on function verify_calendar_sync_token(text, text) to anon, authenticated;

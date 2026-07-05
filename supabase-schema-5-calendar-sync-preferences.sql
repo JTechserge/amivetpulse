@@ -33,7 +33,7 @@ begin
   return new_token;
 end;
 $$;
-grant execute on function generate_calendar_sync_token(text) to anon;
+grant execute on function generate_calendar_sync_token(text) to anon, authenticated;
 
 -- Désactive le lien d'un vétérinaire : tous les appareils qui y sont abonnés (un même lien
 -- peut être ajouté à plusieurs téléphones/comptes) perdent l'accès en même temps.
@@ -47,7 +47,7 @@ as $$
   set previous_token = token, token = null, updated_at = now()
   where person_id = p_person_id;
 $$;
-grant execute on function revoke_calendar_sync_token(text) to anon;
+grant execute on function revoke_calendar_sync_token(text) to anon, authenticated;
 
 -- Renvoie l'état complet (jeton actif + préférences) pour réafficher le panneau de réglages
 -- sans devoir tout régénérer à chaque fois. Le type de retour change (texte -> table), donc
@@ -62,7 +62,7 @@ as $$
   select token, sync_presence, sync_absences, color
   from calendar_sync_tokens where person_id = p_person_id;
 $$;
-grant execute on function get_calendar_sync_status(text) to anon;
+grant execute on function get_calendar_sync_status(text) to anon, authenticated;
 
 -- Met à jour les préférences (quoi synchroniser, quelle couleur) sans toucher au jeton.
 create or replace function update_calendar_sync_preferences(p_person_id text, p_sync_presence boolean, p_sync_absences boolean, p_color text)
@@ -78,7 +78,7 @@ begin
     set sync_presence = p_sync_presence, sync_absences = p_sync_absences, color = p_color, updated_at = now();
 end;
 $$;
-grant execute on function update_calendar_sync_preferences(text, boolean, boolean, text) to anon;
+grant execute on function update_calendar_sync_preferences(text, boolean, boolean, text) to anon, authenticated;
 
 -- Utilisée uniquement par la fonction Edge calendar-feed. 'active' = jeton actuel (flux
 -- complet) ; 'stale' = ancien jeton tout juste révoqué/remplacé (flux vide, pour nettoyer
@@ -95,7 +95,7 @@ as $$
   from calendar_sync_tokens
   where person_id = p_person_id and (token = p_token or previous_token = p_token);
 $$;
-grant execute on function get_calendar_feed_access(text, text) to anon;
+grant execute on function get_calendar_feed_access(text, text) to anon, authenticated;
 
 -- L'ancienne fonction n'est plus appelée par le site ni par la fonction Edge.
 drop function if exists verify_calendar_sync_token(text, text);
