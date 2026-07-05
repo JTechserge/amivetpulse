@@ -3378,22 +3378,28 @@ function buildOvertimeRowCells(year, month, days, people){
       }
     }
 
-    // Calcul OT par personne (arrondi au quart d'heure)
+    // Calcul par personne : Σ heures travaillées vs quota 35h×tf (congés approuvés déduits).
     // Les jours du mois précédent (extraDates) ne sont inclus que si la personne
-    // a aussi des saisies d'heures dans la partie courante du mois — sinon leurs
-    // déficits de juin polluent le calcul de juillet pour les gens qui n'ont que des coches.
+    // a des saisies d'heures dans la partie courante du mois.
     const personOTs = people.map(p=>{
+      const tf = getASVTimeFraction(p.id);
       const hasCurrentEntries = weekDays.some(day=>{
         const date = new Date(year, month, day);
         return !isSunday(date) && calcDayTE(fmtISO(date), p.id) > 0;
       });
-      let ot = 0;
-      if(hasCurrentEntries) extraDates.forEach(d=>{ ot += calcAutoOT(fmtISO(d), p.id); });
-      weekDays.forEach(day=>{
-        const date = new Date(year, month, day);
-        if(!isSunday(date)) ot += calcAutoOT(fmtISO(date), p.id);
-      });
-      return { person: p, ot: roundTo15min(ot) };
+      let workedH = 0, leaveHD = 0;
+      const processDay = (iso)=>{
+        workedH += calcDayTE(iso, p.id) + calcLunchTE(iso, p.id);
+        SLOTS.forEach(slot=>{
+          if(getSlotState(iso, p.id, slot)==='absent' &&
+             (getLeaveDecision(iso, p.id, slot)||'pending')==='approved') leaveHD++;
+        });
+      };
+      if(hasCurrentEntries) extraDates.forEach(d=>processDay(fmtISO(d)));
+      weekDays.forEach(day=>{ const date=new Date(year,month,day); if(!isSunday(date)) processDay(fmtISO(date)); });
+      if(workedH===0) return { person:p, ot:0 };
+      const expected = Math.max(0, 35*tf - leaveHD*3.5*tf);
+      return { person:p, ot: roundTo15min(workedH - expected) };
     });
 
     const weekTotal = roundTo15min(personOTs.reduce((s, e)=> s + e.ot, 0));
@@ -5263,20 +5269,25 @@ function buildDashWeeklyMonthCard(year, month){
   let cur = getWeekMondayDate(firstDay);
   while(cur <= lastDay){ weeks.push(new Date(cur)); cur=new Date(cur); cur.setDate(cur.getDate()+7); }
 
-  // Calcul des heures travaillées par semaine et par ASV (jours de la semaine uniquement)
-  function weekHours(mon, pid){
-    let h=0;
+  // Heures travaillées + demi-journées de congé approuvé sur une semaine
+  function weekData(mon, pid){
+    let h=0, leaveHD=0;
     for(let d=0;d<6;d++){
       const dt=new Date(mon); dt.setDate(dt.getDate()+d);
+      if(isSunday(dt)) continue;
       const iso=fmtISO(dt);
-      if(!isSunday(dt)) h+=calcDayTE(iso,pid)+calcLunchTE(iso,pid);
+      h+=calcDayTE(iso,pid)+calcLunchTE(iso,pid);
+      SLOTS.forEach(slot=>{
+        if(getSlotState(iso,pid,slot)==='absent'&&
+           (getLeaveDecision(iso,pid,slot)||'pending')==='approved') leaveHD++;
+      });
     }
-    return Math.round(h*10)/10;
+    return {h, leaveHD};
   }
 
   const headers=ASV_PEOPLE.map(p=>{
     const q35=Math.round(35*getASVTimeFraction(p.id)*100)/100;
-    return `<th style="text-align:right;padding:6px 10px;">${escapeHTML(p.short)}<br><span class="text-muted" style="font-size:10px;font-weight:400;">quota ${formatNum(q35)}h/sem</span></th>`;
+    return `<th style="text-align:right;padding:6px 10px;">${escapeHTML(p.short)}<br><span class="text-muted" style="font-size:10px;font-weight:400;">quota ${formatHHMM(q35)}/sem</span></th>`;
   }).join('');
 
   let rows='', monthOT=ASV_PEOPLE.map(()=>0);
@@ -5285,14 +5296,15 @@ function buildDashWeeklyMonthCard(year, month){
     const wLabel=`${mon.getDate()}/${mon.getMonth()+1}–${endW.getDate()}/${endW.getMonth()+1}`;
     const isCurrentWeek = weekNavState.mondayISO && fmtISO(mon)===weekNavState.mondayISO;
     const cols=ASV_PEOPLE.map((p,i)=>{
-      const q35=35*getASVTimeFraction(p.id);
-      const h=weekHours(mon,p.id);
-      const delta=h>0?roundTo15min(h-q35):null;
-      if(h>0) monthOT[i]=roundTo15min(monthOT[i]+delta);
+      const tf=getASVTimeFraction(p.id);
+      const {h, leaveHD}=weekData(mon,p.id);
+      const expected=Math.max(0, 35*tf - leaveHD*3.5*tf);
+      const delta=h>0?roundTo15min(h-expected):null;
+      if(delta!==null) monthOT[i]=roundTo15min(monthOT[i]+delta);
       const dColor=delta===null?'':delta>0?'#16a34a':delta<0?'#ea580c':'var(--color-text-muted)';
       return `<td style="text-align:right;padding:5px 10px;">
-        ${h>0?`<strong>${formatNum(h)}h</strong>`:'<span class="text-muted">—</span>'}
-        ${delta!==null?`<span style="font-size:11px;color:${dColor};margin-left:4px;">${delta>=0?'+':''}${formatNum(delta)}h</span>`:''}
+        ${h>0?`<strong>${formatHHMM(h)}</strong>`:'<span class="text-muted">—</span>'}
+        ${delta!==null?`<span style="font-size:11px;color:${dColor};margin-left:4px;">${signedHHMM(delta)}</span>`:''}
       </td>`;
     }).join('');
     rows+=`<tr style="${isCurrentWeek?'background:#f0fdf4;':''}"><td style="padding:5px 10px;font-size:12px;white-space:nowrap;color:${isCurrentWeek?'var(--color-primary)':'inherit'};font-weight:${isCurrentWeek?'700':'400'};">S ${wLabel}</td>${cols}</tr>`;
@@ -5301,10 +5313,11 @@ function buildDashWeeklyMonthCard(year, month){
   // Ligne total mois avec écart et équivalent jours
   const totalCols=ASV_PEOPLE.map((p,i)=>{
     const ot=monthOT[i];
-    const dayEq=ot!==0?Math.round(ot/(7*getASVTimeFraction(p.id))*10)/10:null;
+    const tf=getASVTimeFraction(p.id);
+    const dayEq=ot!==0?Math.round(ot/(7*tf)*10)/10:null;
     const color=ot>0?'#16a34a':ot<0?'#ea580c':'var(--color-text-muted)';
     return `<td style="text-align:right;padding:7px 10px;font-weight:700;">
-      ${ot!==0?`<span style="color:${color}">${ot>=0?'+':''}${formatNum(ot)}h</span>
+      ${ot!==0?`<span style="color:${color}">${signedHHMM(ot)}</span>
       <span class="text-muted" style="font-size:11px;"> (${dayEq>=0?'+':''}${formatNum(dayEq)}j)</span>`:'<span class="text-muted">Équilibre</span>'}
     </td>`;
   }).join('');
