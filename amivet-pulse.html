@@ -5431,8 +5431,8 @@ function getJoursFeries(year){
 }
 
 function getCPTakenDays(personId, startISO, endISO){
-  // Count half-days absent with label containing 'CP' or 'Congé' (case-insensitive)
   let halfDays = 0;
+  const isASV = isASVPerson(personId);
   const labelRe = /cp|cong[eé]/i;
   for(const key of Object.keys(DATA.slots)){
     const m = key.match(/^(\d{4}-\d{2}-\d{2})_(.+)_(M|AM)$/);
@@ -5441,8 +5441,14 @@ function getCPTakenDays(personId, startISO, endISO){
     if(pid !== personId) continue;
     if(iso < startISO || iso > endISO) continue;
     if(DATA.slots[key] !== 'absent') continue;
-    const label = DATA.slots[key.replace(/_(M|AM)$/, '_$1_label')] || '';
-    if(labelRe.test(label)) halfDays++;
+    if(isASV){
+      // ASV : seules les absences avec motif CP/Congé comptent (les autres motifs
+      // comme Maladie ou Formation ne consomment pas de CP)
+      const label = DATA.slots[key.replace(/_(M|AM)$/, '_$1_label')] || '';
+      if(!labelRe.test(label)) continue;
+    }
+    // Vétérinaires : toute absence = CP (pas de workflow de demande de congé)
+    halfDays++;
   }
   return Math.round(halfDays / 2 * 100) / 100;
 }
