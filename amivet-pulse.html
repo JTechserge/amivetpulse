@@ -361,6 +361,54 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-row-archived .cal-cell{opacity:0.40;filter:grayscale(60%);}
 .cal-row-archived .cal-cell:hover{filter:grayscale(60%);}
 .row-label-archived{font-style:italic;opacity:0.55;}
+
+/* ============================================================
+   Calendrier — grille par semaine (buildWeekGrid)
+   ============================================================ */
+.cal-wg{border:1px solid var(--color-border);border-radius:var(--radius-card);overflow:hidden;background:var(--color-surface);}
+.cal-wg-head{display:grid;grid-template-columns:repeat(7,1fr);background:var(--color-secondary);border-bottom:1px solid var(--color-border);}
+.cal-wg-dh{padding:8px 0;text-align:center;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--color-text-muted);border-right:0.5px solid var(--color-border);}
+.cal-wg-dh:last-child{border-right:none;}
+.cal-wg-dh-we{opacity:0.6;}
+.cal-wg-person-legend{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--color-border);background:var(--color-surface);}
+.cal-wg-person-tag{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;border:1.5px solid transparent;}
+.cal-wg-status-tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--color-text-muted);}
+.cal-wg-status-tag::before{content:'';display:inline-block;width:12px;height:8px;border-radius:2px;}
+.cal-wg-status-absent::before{background:var(--color-absent);}
+.cal-wg-status-pending::before{background:var(--color-leave-pending);}
+.cal-wg-week-block+.cal-wg-week-block{border-top:3px solid var(--color-secondary);}
+.cal-wg-week{display:grid;grid-template-columns:repeat(7,1fr);}
+.cal-wg-week-ot{display:flex;align-items:center;gap:10px;padding:3px 12px;background:var(--color-secondary);border-top:1px solid var(--color-border);font-size:11px;flex-wrap:wrap;}
+.cal-wg-day{border-right:0.5px solid var(--color-border);display:flex;flex-direction:column;min-height:84px;}
+.cal-wg-day:last-child{border-right:none;}
+.cal-wg-day-empty{background:var(--color-secondary);}
+.cal-wg-day-sa{background:var(--color-saturday);}
+.cal-wg-day-su{background:var(--color-sunday);}
+.cal-wg-day-head{padding:6px 7px 3px;display:flex;align-items:center;gap:3px;min-height:32px;flex-shrink:0;}
+.cal-wg-daynum{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--color-text);flex-shrink:0;}
+.cal-wg-day-today .cal-wg-daynum{background:var(--color-primary);color:#fff;}
+.cal-wg-day-holiday .cal-wg-daynum{background:var(--color-holiday);color:#92400E;}
+.cal-wg-day-sa .cal-wg-daynum,.cal-wg-day-su .cal-wg-daynum{color:var(--color-text-muted);}
+.cal-wg-holiday-name{font-size:7px;font-weight:600;color:#D97706;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
+.cal-wg-tools{display:flex;gap:1px;margin-left:auto;flex-shrink:0;}
+.cal-wg-tool-btn{width:16px;height:16px;border:none;background:transparent;border-radius:4px;font-size:9px;color:var(--color-text-muted);display:flex;align-items:center;justify-content:center;transition:background var(--transition);cursor:pointer;padding:0;font-family:inherit;}
+.cal-wg-tool-btn:hover{background:rgba(15,118,110,0.1);color:var(--color-primary);}
+.cal-wg-tool-btn.has-comment{color:var(--color-primary);}
+.cal-wg-persons{flex:1;display:flex;flex-direction:column;padding:0 3px 3px;gap:2px;}
+.cal-wg-pstrip{flex:1;display:flex;border-radius:4px;overflow:hidden;min-height:20px;border:0.5px solid transparent;}
+.cal-wg-half{flex:1;display:flex;align-items:center;justify-content:center;font-size:7.5px;font-weight:600;cursor:pointer;transition:filter var(--transition);color:var(--color-text-muted);background:var(--color-surface);user-select:none;overflow:hidden;white-space:nowrap;}
+.cal-wg-half+.cal-wg-half{border-left:0.5px solid rgba(128,128,128,0.15);}
+.cal-wg-half:hover{filter:brightness(0.94);}
+.cal-wg-half-absent,.cal-wg-half-leave-approved{background:var(--color-absent);color:var(--color-absent-text);}
+.cal-wg-half-leave-pending{background:var(--color-leave-pending);color:var(--color-leave-pending-text);}
+.cal-wg-half-leave-rejected{background:var(--color-leave-rejected);color:var(--color-leave-rejected-text);font-size:6.5px;}
+.cal-wg-half-locked{cursor:not-allowed;opacity:0.62;filter:grayscale(35%);}
+.cal-wg-half-locked:hover{filter:grayscale(35%);}
+.cal-wg-half-readonly{cursor:default;opacity:0.70;filter:grayscale(20%);}
+.cal-wg-half-readonly:hover{filter:grayscale(20%);}
+.pstrip-archived .cal-wg-half{opacity:0.40;filter:grayscale(60%);cursor:default;}
+.pstrip-archived .cal-wg-half:hover{filter:grayscale(60%);}
+
 /* Contrôle du temps de travail ASV */
 .hours-control-grid{display:flex;flex-direction:column;gap:16px;}
 .hours-control-row{display:grid;grid-template-columns:90px 40px 1fr 1fr 1fr;gap:12px;align-items:start;}
@@ -903,6 +951,19 @@ body.role-asv [data-view="dashboard"]{display:none;}
   #dash-sub-medical .recap-table td[data-label="Statut"]::before { display:none; }
   #dash-sub-medical .recap-table td[data-label="Actions"] { justify-content:flex-end; padding:8px 12px; }
   #dash-sub-medical .recap-table td[data-label="Actions"]::before { display:none; }
+
+  /* ── T8 · Grille semaine mobile ── */
+  .cal-wg-day { min-height:68px; }
+  .cal-wg-daynum { width:20px; height:20px; font-size:11px; }
+  .cal-wg-day-head { padding:4px 4px 2px; min-height:26px; gap:2px; }
+  .cal-wg-persons { padding:0 2px 2px; gap:1px; }
+  .cal-wg-pstrip { min-height:17px; border-radius:3px; }
+  .cal-wg-half { font-size:0; }
+  .cal-wg-holiday-name { display:none; }
+  .cal-wg-dh { font-size:9px; padding:7px 0; }
+  .cal-wg-person-legend { padding:7px 10px; gap:8px; }
+  .cal-wg-person-tag { font-size:10px; padding:2px 6px; }
+  .cal-wg-tools { display:none; }
 }
 
 @media print{
@@ -3269,6 +3330,21 @@ function updateCellDOM(cellEl){
   cellEl.setAttribute('aria-label', cellAriaLabel(iso, personId, slot));
   cellEl.title = info.title || '';
 }
+// Équivalent pour la nouvelle grille-semaine (buildWeekGrid)
+function updateHalfDOM(halfEl){
+  const { date:iso, person:personId, slot } = halfEl.dataset;
+  const info = cellRenderInfo(iso, personId, slot);
+  const [y, m] = iso.split('-').map(Number);
+  const locked = isMonthSigned(personId, y, m - 1);
+  const noEdit = !canEditSlot(personId);
+  const lockCls = locked ? ' cal-wg-half-locked' : noEdit ? ' cal-wg-half-readonly' : '';
+  const stateCls = info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
+  halfEl.className = `cal-wg-half${stateCls}${lockCls}`;
+  halfEl.style.cssText = info.style || '';
+  halfEl.innerHTML = info.html || (slot === 'M' ? 'M' : 'A');
+  halfEl.title = info.title || '';
+  halfEl.setAttribute('aria-label', cellAriaLabel(iso, personId, slot));
+}
 
 function buildCalendarToolbar(viewKey){
   const cfg = CAL_VIEWS[viewKey];
@@ -3570,6 +3646,121 @@ function buildOvertimeRowCells(year, month, days, people){
   return html;
 }
 
+// Nouvelle grille hebdomadaire : remplace buildHalfTable. Chaque mois = blocs de 7 colonnes
+// (Lundi → Dimanche). Pas de colspan ni de fusion : chaque demi-journée est une bande
+// distincte. L'overtime ASV est calculé par semaine complète (avec dimanche dans ce mois).
+function buildWeekGrid(year, month, people){
+  const nbDays = daysInMonth(year, month);
+  const firstWD = isoWeekday(new Date(year, month, 1)); // 0=Lun…6=Dim
+  const todayISO = fmtISO(today);
+  const isASV = people.length > 0 && isASVPerson(people[0].id);
+
+  // Tableau de semaines : chaque semaine = 7 éléments (null = hors mois, ou numéro de jour)
+  const weeks = [];
+  let week = new Array(firstWD).fill(null);
+  for(let d = 1; d <= nbDays; d++){
+    week.push(d);
+    if(week.length === 7){ weeks.push(week); week = []; }
+  }
+  if(week.length > 0){ while(week.length < 7) week.push(null); weeks.push(week); }
+
+  const DAY_LETTERS = ['L','M','M','J','V','SA','DI'];
+  const head = `<div class="cal-wg-head">${DAY_LETTERS.map((l,i)=>
+    `<div class="cal-wg-dh${i>=5?' cal-wg-dh-we':''}">${l}</div>`
+  ).join('')}</div>`;
+
+  const legendHtml = `<div class="cal-wg-person-legend">
+    ${people.map(p=>`<span class="cal-wg-person-tag" style="background:${p.present.bg};color:${p.present.text};border-color:${p.present.border};">${p.short}</span>`).join('')}
+    <span class="cal-wg-status-tag cal-wg-status-absent">Congé</span>
+    ${isASV?`<span class="cal-wg-status-tag cal-wg-status-pending">En attente</span>`:''}
+  </div>`;
+
+  const weekBlocksHtml = weeks.map((weekDays, weekIdx)=>{
+    const dayCols = weekDays.map((day, wd)=>{
+      if(day === null) return `<div class="cal-wg-day cal-wg-day-empty" aria-hidden="true"></div>`;
+      const date = new Date(year, month, day);
+      const iso = fmtISO(date);
+      const isSat = wd === 5, isSun = wd === 6;
+      const hName = holidayName(iso);
+      const comment = getDayComment(iso);
+      let dayCls = 'cal-wg-day';
+      if(isSat || isSun) dayCls += ' cal-wg-day-we';
+      if(isSat) dayCls += ' cal-wg-day-sa';
+      if(isSun) dayCls += ' cal-wg-day-su';
+      if(hName) dayCls += ' cal-wg-day-holiday';
+      if(iso === todayISO) dayCls += ' cal-wg-day-today';
+
+      const toolsHtml = !isSat && !isSun ? `<div class="cal-wg-tools">
+        <button class="cal-wg-tool-btn${comment?' has-comment':''}" data-action="comment" data-date="${iso}" aria-label="Commentaire du ${day}/${month+1}" title="${comment?escapeHTML(comment):'Ajouter un commentaire'}">💬</button>
+        <button class="cal-wg-tool-btn" data-action="edit-day" data-date="${iso}" aria-label="Édition rapide du ${day}/${month+1}">✏️</button>
+      </div>` : '<div class="cal-wg-tools"></div>';
+
+      const dayHead = `<div class="cal-wg-day-head">
+        <div class="cal-wg-daynum">${day}</div>
+        ${hName?`<div class="cal-wg-holiday-name" title="${escapeHTML(hName)}">${escapeHTML(hName)}</div>`:''}
+        ${toolsHtml}
+      </div>`;
+
+      if(isSat || isSun) return `<div class="${dayCls}" data-date="${iso}">${dayHead}</div>`;
+
+      const personStrips = people.map(person=>{
+        const locked = isMonthSigned(person.id, year, month);
+        const noEdit = !canEditSlot(person.id);
+        const blocked = locked || noEdit;
+        const blockTitle = locked ? 'Feuille de présence signée — verrouillée' : noEdit ? 'Lecture seule' : '';
+        const archived = person.archived === true;
+        const halves = SLOTS.map(slot=>{
+          const info = cellRenderInfo(iso, person.id, slot);
+          const lockCls = locked ? ' cal-wg-half-locked' : noEdit ? ' cal-wg-half-readonly' : '';
+          const stateCls = info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
+          return `<div class="cal-wg-half${stateCls}${lockCls}"
+            data-date="${iso}" data-person="${person.id}" data-slot="${slot}"
+            ${blocked?'data-action="locked"':''}
+            style="${info.style||''}"
+            tabindex="${blocked?'-1':'0'}" role="button"
+            title="${escapeHTML(blocked?blockTitle:(info.title||''))}"
+            aria-label="${cellAriaLabel(iso, person.id, slot)}">${info.html||(slot==='M'?'M':'A')}</div>`;
+        }).join('');
+        return `<div class="cal-wg-pstrip${archived?' pstrip-archived':''}" data-person="${person.id}">${halves}</div>`;
+      }).join('');
+
+      return `<div class="${dayCls}" data-date="${iso}">${dayHead}<div class="cal-wg-persons">${personStrips}</div></div>`;
+    }).join('');
+
+    // Barre heures supplémentaires ASV : uniquement pour les semaines complètes (dimanche dans ce mois)
+    let otBarHtml = '';
+    if(isASV && weekDays[6] !== null){
+      const weekDayNums = weekDays.filter(d => d !== null);
+      let extraDates = [];
+      if(weekIdx === 0){
+        const firstInWeek = weekDays.find(d => d !== null);
+        const firstDateInWeek = new Date(year, month, firstInWeek);
+        for(let i = isoWeekday(firstDateInWeek); i > 0; i--){
+          const d = new Date(firstDateInWeek.getTime() - i * 86400000);
+          if(!isSunday(d)) extraDates.push(d);
+        }
+      }
+      const personOTs = people.map(p=>{
+        const hasCurrentEntries = weekDayNums.some(dn=>{ const d=new Date(year,month,dn); return !isSunday(d)&&calcDayTE(fmtISO(d),p.id)>0; });
+        let ot = 0;
+        if(hasCurrentEntries) extraDates.forEach(d=>{ ot+=calcAutoOT(fmtISO(d),p.id); });
+        weekDayNums.forEach(dn=>{ const d=new Date(year,month,dn); if(!isSunday(d)) ot+=calcAutoOT(fmtISO(d),p.id); });
+        return { person:p, ot:roundTo15min(ot) };
+      });
+      const nonZero = personOTs.filter(e=>e.ot!==0);
+      if(nonZero.length>0){
+        const weekTotal = roundTo15min(personOTs.reduce((s,e)=>s+e.ot,0));
+        const detail = nonZero.map(e=>`<span class="${e.ot<0?'ot-neg':'ot-pos'}">${escapeHTML(e.person.short)} ${signedHHMM(e.ot)}</span>`).join('<span class="ot-sep">·</span>');
+        otBarHtml = `<div class="cal-wg-week-ot"><span class="ot-week-detail">${detail}</span><span class="ot-week-sum${weekTotal<0?' ot-week-sum-neg':''}">${signedHHMM(weekTotal)}</span></div>`;
+      }
+    }
+
+    return `<div class="cal-wg-week-block"><div class="cal-wg-week">${dayCols}</div>${otBarHtml}</div>`;
+  }).join('');
+
+  return `<div class="cal-wg">${head}${legendHtml}${weekBlocksHtml}</div>`;
+}
+
 function buildHalfTable(year, month, days, people){
   let headCells = '';
   days.forEach(day=>{
@@ -3642,9 +3833,7 @@ function buildHalfTable(year, month, days, people){
 function buildCalendarGrid(viewKey){
   const cfg = CAL_VIEWS[viewKey];
   const month = cfg.navState.month;
-  const halves = splitMonthIntoHalves(cfg.year, month);
-  const tables = halves.map(days => buildHalfTable(cfg.year, month, days, cfg.people)).join('');
-  return `<div class="cal-scroll"><div class="cal-tables">${tables}</div></div>`;
+  return buildWeekGrid(cfg.year, month, cfg.people);
 }
 
 function buildLegendColors(people = PEOPLE){
@@ -3673,7 +3862,6 @@ function buildLegend(people = PEOPLE){
         <span class="legend-help-item">🖱️ <strong>Clic</strong> sur une case : fait défiler Vide → Présent → ${hasASV?'Demande de congé':'Absent'}</span>
         <span class="legend-help-item">↔️ <strong>Glisser</strong> le clic sur plusieurs cases : les remplit toutes d'un coup</span>
         <span class="legend-help-item">👆 <strong>Clic droit</strong> (ou appui long) sur une case : ouvre la saisie d'un motif ${hasASV?'de la demande':'d\'absence'}</span>
-        <span class="legend-help-item">🧩 Plusieurs demi-journées contiguës avec le même motif s'affichent <strong>fusionnées en une seule case</strong> — cliquez-la pour changer le motif, l'effacer, ou tout <strong>vider</strong> pour ressaisir la période jour par jour</span>
         ${hasASV ? `<span class="legend-help-item">📋 Chaque absence saisie est automatiquement <strong>soumise aux vétérinaires</strong> pour validation (onglet Tableau de bord → Demandes de congé)</span>` : ''}
       </div>
     </div>
@@ -4172,7 +4360,7 @@ function cycleCellAndSave(cell){
   const { date:iso, person:personId, slot } = cell.dataset;
   const next = cycleState(getSlotState(iso, personId, slot));
   setSlotState(iso, personId, slot, next);
-  updateCellDOM(cell);
+  updateHalfDOM(cell);
   saveData();
 }
 
@@ -4198,7 +4386,7 @@ function applyPaint(cell, value){
   const { date:iso, person:personId, slot } = cell.dataset;
   dragCtx.touched.add(`${iso}_${personId}_${slot}`);
   setSlotState(iso, personId, slot, value);
-  updateCellDOM(cell);
+  updateHalfDOM(cell);
 }
 function enterDragCell(cell){
   if(!dragCtx || dragCtx.cancelled) return;
@@ -4231,7 +4419,7 @@ function openAbsenceLabelPopover(cell, forceAbsent){
   snapshotBeforeChange();
   if(forceAbsent && getSlotState(iso,personId,slot) !== 'absent'){
     setSlotState(iso,personId,slot,'absent');
-    updateCellDOM(cell);
+    updateHalfDOM(cell);
     saveData(false);
   }
   const currentLabel = getSlotLabel(iso,personId,slot);
@@ -4553,24 +4741,24 @@ function openDaySidebar(iso, viewKey){
 
 // --- Initialisation globale des interactions calendrier (délégation sur document) ---
 function initCalendarInteractions(){
-  // cell.dataset.action distingue les cases "spéciales" (ex. ligne Heures supplémentaires)
-  // qui ne participent pas au cycle vide/présent/absent ni au glisser-peindre.
+  // Les cases interactives sont désormais des .cal-wg-half (grille-semaine).
+  // data-action="locked" bloque tous les handlers pour les mois signés / lecture seule.
   document.addEventListener('mousedown', (e)=>{
-    const cell = e.target.closest('.cal-cell');
-    if(!cell || cell.classList.contains('sunday-cell') || cell.dataset.slots || cell.dataset.action) return;
+    const cell = e.target.closest('.cal-wg-half');
+    if(!cell || cell.dataset.action) return;
     if(!canEditSlot(cell.dataset.person)) return;
     e.preventDefault();
     startDrag(cell);
   });
   document.addEventListener('mouseover', (e)=>{
     if(!dragCtx) return;
-    const cell = e.target.closest('.cal-cell');
-    if(cell && !cell.classList.contains('sunday-cell') && !cell.dataset.slots && !cell.dataset.action && canEditSlot(cell.dataset.person)) enterDragCell(cell);
+    const cell = e.target.closest('.cal-wg-half');
+    if(cell && !cell.dataset.action && canEditSlot(cell.dataset.person)) enterDragCell(cell);
   });
   document.addEventListener('mouseup', endDrag);
   document.addEventListener('touchstart', (e)=>{
-    const cell = e.target.closest('.cal-cell');
-    if(!cell || cell.classList.contains('sunday-cell') || cell.dataset.slots || cell.dataset.action) return;
+    const cell = e.target.closest('.cal-wg-half');
+    if(!cell || cell.dataset.action) return;
     if(!canEditSlot(cell.dataset.person)) return;
     startDrag(cell);
   }, { passive:true });
@@ -4578,47 +4766,40 @@ function initCalendarInteractions(){
     if(!dragCtx) return;
     const touch = e.touches[0];
     const el = document.elementFromPoint(touch.clientX, touch.clientY);
-    const cell = el && el.closest('.cal-cell');
-    if(cell && !cell.classList.contains('sunday-cell') && !cell.dataset.slots && !cell.dataset.action) enterDragCell(cell);
+    const cell = el && el.closest('.cal-wg-half');
+    if(cell && !cell.dataset.action) enterDragCell(cell);
   }, { passive:true });
   document.addEventListener('touchend', endDrag);
 
-  // Double-clic sur l'entête d'une colonne du calendrier mensuel ASV → vue hebdomadaire
+  // Double-clic sur une colonne-jour du calendrier ASV → vue hebdomadaire
   document.addEventListener('dblclick', (e)=>{
-    const th = e.target.closest('th[data-col-date]');
-    if(!th || currentView !== 'asv' || subNavState.asv === 'week') return;
-    const iso = th.dataset.colDate;
+    const dayCol = e.target.closest('.cal-wg-day[data-date]');
+    if(!dayCol || currentView !== 'asv' || subNavState.asv === 'week') return;
+    if(dayCol.classList.contains('cal-wg-day-we')) return; // SA/DI : pas de vue semaine
+    const iso = dayCol.dataset.date;
     if(!iso) return;
     weekNavState.mondayISO = fmtISO(getWeekMondayDate(new Date(iso+'T00:00:00')));
     switchSubPage('asv', 'week');
   });
 
   document.addEventListener('contextmenu', (e)=>{
-    const cell = e.target.closest('.cal-cell');
-    if(!cell || cell.classList.contains('sunday-cell') || cell.dataset.action) return;
+    const cell = e.target.closest('.cal-wg-half');
+    if(!cell || cell.dataset.action) return;
     if(!canEditSlot(cell.dataset.person)) return;
     e.preventDefault();
     if(dragCtx){ clearTimeout(dragCtx.longPressTimer); dragCtx = null; }
-    if(cell.dataset.slots){
-      openAbsenceRangePopover(JSON.parse(cell.dataset.slots), cell.dataset.person, calViewKeyOfEventTarget(cell));
-    } else {
-      openAbsenceLabelPopover(cell, true);
-    }
+    openAbsenceLabelPopover(cell, true);
   });
 
   document.addEventListener('keydown', (e)=>{
-    const cell = e.target.closest && e.target.closest('.cal-cell');
-    if(!cell || cell.classList.contains('sunday-cell')) return;
+    const cell = e.target.closest && e.target.closest('.cal-wg-half');
+    if(!cell) return;
     if(e.key === 'Enter' || e.key === ' '){
       e.preventDefault();
-      if(cell.dataset.action === 'overtime-day'){
-        openOvertimeDayPopover(cell.dataset.date, CAL_VIEWS[calViewKeyOfEventTarget(cell)].people, calViewKeyOfEventTarget(cell));
-      } else if(cell.dataset.action){
-        // Autre case spéciale future sans comportement clavier dédié : ne rien faire.
+      if(cell.dataset.action){
+        // Case verrouillée : ne rien faire
       } else if(!canEditSlot(cell.dataset.person)){
-        // Pas les droits sur cette ligne → ignorer la touche
-      } else if(cell.dataset.slots){
-        openAbsenceRangePopover(JSON.parse(cell.dataset.slots), cell.dataset.person, calViewKeyOfEventTarget(cell));
+        // Lecture seule
       } else {
         cycleCellAndSave(cell);
       }
@@ -4626,13 +4807,6 @@ function initCalendarInteractions(){
   });
 
   document.addEventListener('click', (e)=>{
-    const mergedCell = e.target.closest('.cal-cell[data-slots]');
-    if(mergedCell){
-      if(!canEditSlot(mergedCell.dataset.person)) return;
-      openAbsenceRangePopover(JSON.parse(mergedCell.dataset.slots), mergedCell.dataset.person, calViewKeyOfEventTarget(mergedCell));
-      return;
-    }
-
     const viewKey = calViewKeyOfEventTarget(e.target);
     if(!viewKey) return;
 
