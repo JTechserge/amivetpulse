@@ -35,7 +35,7 @@ function emptyCalendar(personLabel: string){
   return [
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Amivet PULSE//Calendar Sync//FR',
     'CALSCALE:GREGORIAN', `X-WR-CALNAME:${icsEscape(`Amivet — ${personLabel}`)}`,
-    'REFRESH-INTERVAL;VALUE=DURATION:PT4H', 'X-PUBLISHED-TTL:PT4H', 'END:VCALENDAR',
+    'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H', 'END:VCALENDAR',
   ].join('\r\n');
 }
 
@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
       // disparaître les événements déjà ajoutés au prochain rafraîchissement de l'appareil
       // — c'est le plus proche d'une "suppression automatique" que permet ce mécanisme.
       return new Response(emptyCalendar(personLabel), {
-        headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'no-cache' },
+        headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' },
       });
     }
     const { sync_presence, sync_absences, color } = access;
@@ -133,8 +133,8 @@ Deno.serve(async (req) => {
       `X-WR-CALNAME:${icsEscape(`Amivet — ${personLabel}`)}`,
       `X-APPLE-CALENDAR-COLOR:${hexColor}`,
       `COLOR:${css3Color}`,
-      'REFRESH-INTERVAL;VALUE=DURATION:PT4H',
-      'X-PUBLISHED-TTL:PT4H',
+      'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
+      'X-PUBLISHED-TTL:PT1H',
     ];
     for(const ev of events){
       const summary = ev.status === 'present' ? 'Présent — Clinique Amivet' : `Absent${ev.label ? ' — ' + ev.label : ''}`;
@@ -157,7 +157,8 @@ Deno.serve(async (req) => {
       headers: {
         'Content-Type': 'text/calendar; charset=utf-8',
         'Content-Disposition': 'inline; filename="amivet-pulse.ics"',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
       },
     });
   }catch(e){
