@@ -4736,7 +4736,7 @@ function hasLunchTE(iso,pid){ return !!(getTE(iso,pid,'ls')||getTE(iso,pid,'le')
 function calcAutoOT(iso,pid){
   const total = calcDayTE(iso,pid) + calcLunchTE(iso,pid);
   const expected = 7 * getASVTimeFraction(pid);
-  return total > 0 ? Math.round((total - expected) * 10) / 10 : 0;
+  return total > 0 ? total - expected : 0;
 }
 function roundTo15min(h){ return Math.round(h * 4) / 4; }
 function dayNoteKey(iso,pid){ return `${iso}_${pid}_day_note`; }
