@@ -557,6 +557,7 @@ table.recap-table th:first-child,table.recap-table td:first-child{text-align:lef
 table.recap-table thead th{font-size:11px;text-transform:uppercase;letter-spacing:0.03em;color:var(--color-text-muted);font-weight:700;border-bottom:2px solid var(--color-border);}
 table.recap-table tbody tr:hover{background:var(--color-secondary);}
 table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-border);border-bottom:none;}
+.recap-table-scroll{overflow-x:auto;}
 .ecart-david{color:var(--color-david);font-weight:700;}
 .ecart-stephane{color:var(--color-stephane);font-weight:700;}
 .ecart-equilibre{color:var(--color-text-muted);font-weight:700;}
@@ -831,6 +832,66 @@ body.role-asv [data-view="dashboard"]{display:none;}
   #pwa-ios-install-tip, #pwa-android-install-banner {
     bottom:calc(56px + env(safe-area-inset-bottom));
   }
+
+  /* ── T7a · Dashboard sub-nav : scrollable horizontal + snap ── */
+  .sub-nav-row .sub-nav {
+    overflow-x:auto; overflow-y:hidden; width:100%;
+    -webkit-overflow-scrolling:touch; scroll-snap-type:x mandatory;
+    -webkit-mask-image:linear-gradient(to right, black 88%, transparent 100%);
+    mask-image:linear-gradient(to right, black 88%, transparent 100%);
+  }
+  .sub-tab { scroll-snap-align:start; flex-shrink:0; }
+
+  /* ── T7b · Masquer les boutons de réinitialisation ── */
+  #dash-reset-current, #dash-reset-forecast { display:none; }
+
+  /* ── T7c · Cartes stat : taille de police réduite ── */
+  .stat-value.big { font-size:22px; }
+  .dash-grid { gap:12px; }
+
+  /* ── T7d · Tables récap (hors visites médicales) : scroll + colonne sticky ── */
+  #dash-sub-stats .recap-table-scroll, #dash-sub-hours .recap-table-scroll {
+    -webkit-overflow-scrolling:touch;
+    -webkit-mask-image:linear-gradient(to right, black 85%, transparent 100%);
+    mask-image:linear-gradient(to right, black 85%, transparent 100%);
+  }
+  #dash-sub-stats table.recap-table td:first-child,
+  #dash-sub-stats table.recap-table th:first-child,
+  #dash-sub-hours table.recap-table td:first-child,
+  #dash-sub-hours table.recap-table th:first-child {
+    position:sticky; left:0; z-index:1; background:var(--color-card);
+  }
+
+  /* ── T7e · Table visites médicales → cards ── */
+  #dash-sub-medical .recap-table { min-width:0 !important; }
+  #dash-sub-medical .recap-table,
+  #dash-sub-medical .recap-table thead,
+  #dash-sub-medical .recap-table tbody,
+  #dash-sub-medical .recap-table tfoot,
+  #dash-sub-medical .recap-table td,
+  #dash-sub-medical .recap-table tr { display:block; }
+  #dash-sub-medical .recap-table thead { display:none; }
+  #dash-sub-medical .recap-table tr {
+    border:1px solid var(--color-border); border-radius:10px;
+    margin-bottom:10px; overflow:hidden; background:var(--color-card);
+  }
+  #dash-sub-medical .recap-table td {
+    display:flex; align-items:center; padding:7px 12px;
+    border-bottom:1px solid var(--color-border); font-size:13px; text-align:left;
+  }
+  #dash-sub-medical .recap-table td:last-child { border-bottom:none; }
+  #dash-sub-medical .recap-table td::before {
+    content:attr(data-label); font-size:11px; font-weight:700;
+    text-transform:uppercase; letter-spacing:0.04em;
+    color:var(--color-text-muted); width:120px; flex-shrink:0;
+  }
+  #dash-sub-medical .recap-table td[data-label="Statut"] {
+    font-size:18px; justify-content:center;
+    border-bottom:2px solid var(--color-border); padding:10px 12px;
+  }
+  #dash-sub-medical .recap-table td[data-label="Statut"]::before { display:none; }
+  #dash-sub-medical .recap-table td[data-label="Actions"] { justify-content:flex-end; padding:8px 12px; }
+  #dash-sub-medical .recap-table td[data-label="Actions"]::before { display:none; }
 }
 
 @media print{
@@ -4762,11 +4823,13 @@ function buildRecapTable(year){
   const totalDiffClass = totalDiff>0?'ecart-david':totalDiff<0?'ecart-stephane':'ecart-equilibre';
   const totalDiffTxt = totalDiff===0?'Équilibre':`+${formatNum(Math.abs(totalDiff))} ${totalDiff>0?'David':'Stéphane'}`;
   return `
+    <div class="recap-table-scroll">
     <table class="recap-table">
       <thead><tr><th>Mois</th><th>David (j)</th><th>Stéphane (j)</th><th>Samedis David</th><th>Samedis Stéphane</th><th>Écart</th></tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr><td>Total</td><td>${formatNum(totalD)}</td><td>${formatNum(totalS)}</td><td>${totalSatD}</td><td>${totalSatS}</td><td class="${totalDiffClass}">${totalDiffTxt}</td></tr></tfoot>
     </table>
+    </div>
   `;
 }
 
@@ -4809,11 +4872,13 @@ function buildRecapTableASV(year){
     rows += `<tr><td>${MONTH_NAMES[m]}</td>${vals.map(v=>`<td>${formatNum(v)}</td>`).join('')}<td>${formatNum(monthTotal)}</td></tr>`;
   }
   return `
+    <div class="recap-table-scroll">
     <table class="recap-table">
       <thead><tr><th>Mois</th>${ASV_PEOPLE.map(p=>`<th>${p.short} (j)</th>`).join('')}<th>Total ASV (j)</th></tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr><td>Total</td>${totals.map(t=>`<td>${formatNum(t)}</td>`).join('')}<td>${formatNum(grandTotal)}</td></tr></tfoot>
     </table>
+    </div>
   `;
 }
 
@@ -5492,14 +5557,16 @@ function renderDashboardHours(){
     ${personCards}
     ${chartCard}
     ${buildDashWeeklyMonthCard(year, year===cy?cm:0)}
-    <div class="card" style="overflow-x:auto;">
+    <div class="card">
       <h3 style="font-size:16px;margin-bottom:2px;">Vue annuelle ${year}</h3>
       <p class="text-muted" style="font-size:12px;margin-bottom:12px;">Heures travaillées vs quota mensuel. 🟢 OK &nbsp;🟡 ≥ 90% &nbsp;🔴 dépassé</p>
+      <div class="recap-table-scroll">
       <table class="recap-table" style="min-width:400px;">
         <thead><tr><th style="text-align:left;">Mois</th>${ASV_PEOPLE.map(p=>`<th style="text-align:right;">${escapeHTML(p.short)} (${Math.round(getASVTimeFraction(p.id)*100)}%)</th>`).join('')}</tr></thead>
         <tbody>${annualRows}</tbody>
         <tfoot><tr><td style="font-weight:800;padding:8px 10px;">Total annuel</td>${annualCols}</tr></tfoot>
       </table>
+      </div>
     </div>
     <div id="dash-asv-cp"></div>
   `;
@@ -5912,13 +5979,13 @@ function renderDashboardMedical(){
       const reservesBtn = (v?.status === 'apte_reserves' && v?.reserves_note)
         ? `<button class="med-reserves-btn btn btn-sm" title="${escapeHTML(v.reserves_note)}" style="font-size:11px;padding:2px 6px;margin-left:4px;">ℹ️</button>` : '';
       return `<tr>
-        <td style="padding:8px 12px;text-align:center;font-size:16px;color:${levelColor[alert.level]};">${levelIcon[alert.level]}</td>
-        <td style="padding:8px 12px;font-weight:600;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:5px;"></span>${escapeHTML(p.short||p.name)}</td>
-        <td style="padding:8px 12px;">${v ? new Date(v.visit_date+'T00:00:00').toLocaleDateString('fr-FR') : '—'}</td>
-        <td style="padding:8px 12px;">${v ? (VISIT_TYPE_LABELS[v.visit_type]||v.visit_type) : '—'}</td>
-        <td style="padding:8px 12px;">${statusLabel}${reservesBtn}</td>
-        <td style="padding:8px 12px;color:${levelColor[alert.level]};font-weight:${alert.level!=='green'?'600':'400'};">${nextDisplay}</td>
-        <td style="padding:8px 12px;">
+        <td data-label="Statut" style="padding:8px 12px;text-align:center;font-size:16px;color:${levelColor[alert.level]};">${levelIcon[alert.level]}</td>
+        <td data-label="Personne" style="padding:8px 12px;font-weight:600;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:5px;"></span>${escapeHTML(p.short||p.name)}</td>
+        <td data-label="Dernière visite" style="padding:8px 12px;">${v ? new Date(v.visit_date+'T00:00:00').toLocaleDateString('fr-FR') : '—'}</td>
+        <td data-label="Type" style="padding:8px 12px;">${v ? (VISIT_TYPE_LABELS[v.visit_type]||v.visit_type) : '—'}</td>
+        <td data-label="Aptitude" style="padding:8px 12px;">${statusLabel}${reservesBtn}</td>
+        <td data-label="Prochaine visite" style="padding:8px 12px;color:${levelColor[alert.level]};font-weight:${alert.level!=='green'?'600':'400'};">${nextDisplay}</td>
+        <td data-label="Actions" style="padding:8px 12px;">
           ${v && isAdmin ? `<button class="btn btn-sm med-edit-btn" data-visit-id="${v.id}" style="font-size:11.5px;padding:3px 8px;">✎</button>` : ''}
           ${!v && isAdmin ? `<button class="btn btn-sm btn-primary med-add-btn" data-pid="${p.id}" style="font-size:11.5px;padding:3px 8px;">+ Ajouter</button>` : ''}
         </td>
