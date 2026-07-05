@@ -4726,7 +4726,7 @@ function teKey(iso,pid,f){ return `${iso}_${pid}_te_${f}`; }
 function getTE(iso,pid,f){ return DATA.slots[teKey(iso,pid,f)]||''; }
 function setTE(iso,pid,f,v){ if(v) DATA.slots[teKey(iso,pid,f)]=v; else delete DATA.slots[teKey(iso,pid,f)]; }
 function timeToMins(t){ if(!t)return 0; const[h,m]=t.split(':').map(Number); return h*60+(m||0); }
-function minsToH(m){ return Math.round(m/6)/10; } // round to .1h
+function minsToH(m){ return m / 60; }
 function calcSessionH(s,e){ if(!s||!e)return 0; const d=timeToMins(e)-timeToMins(s); return d>0?minsToH(d):0; }
 function calcDayTE(iso,pid){ return calcSessionH(getTE(iso,pid,'ms'),getTE(iso,pid,'me'))+calcSessionH(getTE(iso,pid,'as'),getTE(iso,pid,'ae')); }
 function hasTE(iso,pid){ return !!(getTE(iso,pid,'ms')||getTE(iso,pid,'me')||getTE(iso,pid,'as')||getTE(iso,pid,'ae')); }
