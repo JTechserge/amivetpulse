@@ -708,10 +708,12 @@ body.role-asv [data-view="dashboard"]{display:none;}
         <button class="sub-tab active" data-sub="calendar">📅 Calendrier mensuel</button>
         <button class="sub-tab" data-sub="annual">🗓️ Vue Annuelle</button>
         <button class="sub-tab" data-sub="forecast">🔮 Prévisionnel</button>
+        <button class="sub-tab" data-sub="conges">📆 Compteur CP</button>
       </div>
       <div id="vets-sub-calendar" class="sub-page" data-cal-view="vets-current"></div>
       <div id="vets-sub-annual" class="sub-page hidden"></div>
       <div id="vets-sub-forecast" class="sub-page hidden" data-cal-view="vets-forecast"></div>
+      <div id="vets-sub-conges" class="sub-page hidden"></div>
     </section>
 
     <!-- Onglet groupé ASV : Calendrier mensuel / Vue annuelle / Prévisionnel -->
@@ -721,11 +723,13 @@ body.role-asv [data-view="dashboard"]{display:none;}
         <button class="sub-tab active" data-sub="calendar">📅 Calendrier mensuel</button>
         <button class="sub-tab" data-sub="annual">🗓️ Vue Annuelle</button>
         <button class="sub-tab" data-sub="forecast">🔮 Prévisionnel</button>
+        <button class="sub-tab" data-sub="conges">📆 Compteur CP</button>
       </div>
       <div id="asv-sub-calendar" class="sub-page" data-cal-view="asv-current"></div>
       <div id="asv-sub-annual" class="sub-page hidden"></div>
       <div id="asv-sub-forecast" class="sub-page hidden" data-cal-view="asv-forecast"></div>
       <div id="asv-sub-week" class="sub-page hidden"></div>
+      <div id="asv-sub-conges" class="sub-page hidden"></div>
     </section>
 
     <!-- Vue Tableau de bord -->
@@ -789,7 +793,7 @@ function allPeople(){ return [...PEOPLE, ...ASV_PEOPLE]; }
 // Constantes Module CP (Congés Payés)
 // ----------------------------------------------------------------
 const CP_DAYS_PER_MONTH = 2.5;      // jours ouvrables acquis par mois travaillé
-const CP_REFERENCE_START_MONTH = 5; // juin = index 5 (période 1 juin N-1 → 31 mai N)
+const CP_REFERENCE_START_MONTH = 0; // janvier = index 0 (période 1 janv. N → 31 déc. N)
 
 // ----------------------------------------------------------------
 // Constantes Module Annonces
@@ -2567,6 +2571,7 @@ function renderGroupSubPage(group){
   if(sub === 'calendar') renderCalendarView(g.calendarViewKey);
   else if(sub === 'forecast') renderCalendarView(g.forecastViewKey);
   else if(sub === 'week' && group === 'asv') renderWeekViewASV();
+  else if(sub === 'conges') renderGroupConges(group);
   else renderAnnualViewForGroup(group);
 }
 function switchSubPage(group, subKey){
@@ -2580,6 +2585,8 @@ function switchSubPage(group, subKey){
   document.getElementById(g.forecastContainer).classList.toggle('hidden', subKey !== 'forecast');
   const weekEl = document.getElementById('asv-sub-week');
   if(weekEl) weekEl.classList.toggle('hidden', !(group === 'asv' && subKey === 'week'));
+  const congesEl = document.getElementById(`${group}-sub-conges`);
+  if(congesEl) congesEl.classList.toggle('hidden', subKey !== 'conges');
   renderCurrentView();
   saveViewState();
 }
@@ -4882,8 +4889,6 @@ function renderDashboard(){
       <div class="sub-nav" id="dash-sub-nav">
         <button class="sub-tab ${dashSubState.tab==='stats'?'active':''}" data-sub="stats">🩺 Suivi vétérinaires</button>
         <button class="sub-tab ${dashSubState.tab==='hours'?'active':''}" data-sub="hours">🐾 Suivi ASV</button>
-        <button class="sub-tab ${dashSubState.tab==='conges'?'active':''}" data-sub="conges">📆 Compteur CP</button>
-        <button class="sub-tab ${dashSubState.tab==='absences'?'active':''}" data-sub="absences">📊 Absentéisme</button>
         <button class="sub-tab ${dashSubState.tab==='medical'?'active':''}" data-sub="medical">🏥 Visites médicales</button>
         <button class="sub-tab ${dashSubState.tab==='requests'?'active':''}" data-sub="requests">📋 Demandes de congé${pendingCount>0?` <span class="nav-badge">${pendingCount}</span>`:''}</button>
         <button class="sub-tab ${dashSubState.tab==='signatures'?'active':''}" data-sub="signatures">✍️ Feuilles signées</button>
@@ -4892,8 +4897,6 @@ function renderDashboard(){
     </div>
     <div id="dash-sub-stats" class="sub-page ${dashSubState.tab!=='stats'?'hidden':''}"></div>
     <div id="dash-sub-hours" class="sub-page ${dashSubState.tab!=='hours'?'hidden':''}"></div>
-    <div id="dash-sub-conges" class="sub-page ${dashSubState.tab!=='conges'?'hidden':''}"></div>
-    <div id="dash-sub-absences" class="sub-page ${dashSubState.tab!=='absences'?'hidden':''}"></div>
     <div id="dash-sub-medical" class="sub-page ${dashSubState.tab!=='medical'?'hidden':''}"></div>
     <div id="dash-sub-requests" class="sub-page ${dashSubState.tab!=='requests'?'hidden':''}"></div>
     <div id="dash-sub-signatures" class="sub-page ${dashSubState.tab!=='signatures'?'hidden':''}"></div>
@@ -4908,8 +4911,6 @@ function renderDashboard(){
   });
   if(dashSubState.tab === 'stats') renderDashboardStats();
   else if(dashSubState.tab === 'hours') renderDashboardHours();
-  else if(dashSubState.tab === 'conges') renderDashboardConges();
-  else if(dashSubState.tab === 'absences') renderDashboardAbsences();
   else if(dashSubState.tab === 'medical') renderDashboardMedical();
   else if(dashSubState.tab === 'signatures') renderDashboardSignatures();
   else if(dashSubState.tab === 'interviews') renderDashboardInterviews();
@@ -5452,9 +5453,9 @@ function getCPTakenDays(personId, startISO, endISO){
 
 function cpPeriodISO(referenceYear){
   const y = referenceYear;
-  const start = `${y-1}-06-01`;
-  const end   = `${y}-05-31`;
-  return { start, end, label:`1 juin ${y-1} → 31 mai ${y}` };
+  const start = `${y}-01-01`;
+  const end   = `${y}-12-31`;
+  return { start, end, label:`1 janv. ${y} → 31 déc. ${y}` };
 }
 
 function getCPAcquired(person, referenceYear){
@@ -5472,16 +5473,17 @@ function getCPAcquired(person, referenceYear){
   return Math.round(months * CP_DAYS_PER_MONTH * (person.timeFraction ?? 1.0) * 100) / 100;
 }
 
-function renderDashboardConges(){
-  const container = document.getElementById('dash-sub-conges');
+function renderGroupConges(group){
+  const container = document.getElementById(`${group}-sub-conges`);
+  if(!container) return;
   const isAdmin = currentUser?.role === 'admin';
   const cy = getCurrentYear();
-  let cpYear = (typeof renderDashboardConges._year === 'number') ? renderDashboardConges._year : cy;
+  if(!renderGroupConges._year) renderGroupConges._year = {};
+  let cpYear = (typeof renderGroupConges._year[group] === 'number') ? renderGroupConges._year[group] : cy;
 
   container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--color-muted);">Chargement…</div>';
 
   (async ()=>{
-    // Load cp_adjustments for this referenceYear
     let adjustments = [];
     try{
       const res = await fetch(`${SUPABASE_URL}cp_adjustments?year=eq.${cpYear}&select=*`, { headers: supabaseHeaders() });
@@ -5491,7 +5493,7 @@ function renderDashboardConges(){
     const adjByPerson = {};
     adjustments.forEach(a => { adjByPerson[a.person_id] = a; });
 
-    const people = allPeople().filter(p => !p.archived);
+    const people = (group === 'vets' ? PEOPLE : ASV_PEOPLE).filter(p => !p.archived);
     const { label: periodLabel, start: startISO, end: endISO } = cpPeriodISO(cpYear);
 
     function soldeColor(b){ return b >= 10 ? '#16A34A' : b >= 5 ? '#CA8A04' : '#DC2626'; }
@@ -5507,7 +5509,7 @@ function renderDashboardConges(){
       const total     = acquired + carriedOver + extra;
       const pct       = total > 0 ? Math.min(100, Math.round(taken/total*100)) : 0;
       const balC      = soldeColor(balance);
-      return `<tr data-person-id="${p.id}">
+      return `<tr>
         <td style="padding:10px 12px;font-weight:600;">${swatch(p.color)}${escapeHTML(p.short||p.name)}</td>
         <td style="padding:10px 12px;text-align:center;">${acquired}j</td>
         <td style="padding:10px 12px;text-align:center;">${taken}j</td>
@@ -5557,19 +5559,19 @@ function renderDashboardConges(){
     `;
 
     container.querySelectorAll('.cp-year-btn').forEach(btn=>{
-      btn.onclick = ()=>{ renderDashboardConges._year = parseInt(btn.dataset.year,10); renderDashboardConges(); };
+      btn.onclick = ()=>{ renderGroupConges._year[group] = parseInt(btn.dataset.year,10); renderGroupConges(group); };
     });
 
     if(isAdmin){
       container.querySelectorAll('.cp-adjust-btn').forEach(btn=>{
-        btn.onclick = ()=> openCPAdjustModal(btn.dataset.pid, cpYear, parseFloat(btn.dataset.carried)||0, parseFloat(btn.dataset.extra)||0, btn.dataset.note||'');
+        btn.onclick = ()=> openCPAdjustModal(btn.dataset.pid, cpYear, parseFloat(btn.dataset.carried)||0, parseFloat(btn.dataset.extra)||0, btn.dataset.note||'', group);
       });
     }
   })();
 }
-renderDashboardConges._year = null;
+renderGroupConges._year = {};
 
-function openCPAdjustModal(personId, year, carriedOver, extra, note){
+function openCPAdjustModal(personId, year, carriedOver, extra, note, group){
   const person = allPeople().find(p=>p.id===personId);
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
@@ -5611,16 +5613,13 @@ function openCPAdjustModal(personId, year, carriedOver, extra, note){
       });
       if(!res.ok) throw new Error(`HTTP ${res.status}`);
       close();
-      renderDashboardConges();
+      renderGroupConges(group);
       showToast(`CP ${escapeHTML(person?.short||personId)} mis à jour`, '✅');
     }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
   };
 }
 
-/* ================================================================
-   MODULE ABSENTÉISME
-   ================================================================ */
-function getAbsenteeismRate(personId, year, month){
+function getAbsenteeismRate(personId, year, month){ // module absentéisme supprimé de l'UI
   const feries = getJoursFeries(year);
   const daysInMonth = new Date(year, month+1, 0).getDate();
   let workingDays = 0;
@@ -5652,198 +5651,10 @@ function getAbsenteeismRate(personId, year, month){
   return { rate, absentDays, workingDays };
 }
 
-function renderDashboardAbsences(){
+function renderDashboardAbsences(){ // stub — module supprimé
   const container = document.getElementById('dash-sub-absences');
-  const cy = getCurrentYear();
-  let absYear = (typeof renderDashboardAbsences._year === 'number') ? renderDashboardAbsences._year : cy;
-
-  const people = allPeople().filter(p => !p.archived);
-  const MONTH_SHORT_FR = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
-  const ALERT_THRESHOLD = 6;
-
-  // ---- Section A: SVG bar chart (12 derniers mois glissants) ----
-  const chartMonths = [];
-  for(let i=11; i>=0; i--){
-    const d = new Date(today.getFullYear(), today.getMonth()-i, 1);
-    chartMonths.push({ year:d.getFullYear(), month:d.getMonth() });
-  }
-
-  const svgW = 700, svgH = 220;
-  const padL = 38, padR = 10, padT = 10, padB = 40;
-  const chartW = svgW - padL - padR;
-  const chartH = svgH - padT - padB;
-  const groupW = chartW / 12;
-  const barW   = Math.max(2, Math.floor(groupW / (people.length + 1)));
-
-  // Compute max rate for Y axis
-  let maxRate = 0;
-  const rateGrid = chartMonths.map(cm => {
-    return people.map(p => {
-      const { rate } = getAbsenteeismRate(p.id, cm.year, cm.month);
-      if(rate > maxRate) maxRate = rate;
-      return rate;
-    });
-  });
-  const yMax = Math.max(maxRate + 2, ALERT_THRESHOLD + 2);
-  const yStep = 2;
-  const yTicks = [];
-  for(let v=0; v<=yMax; v+=yStep) yTicks.push(v);
-
-  function yPx(rate){ return padT + chartH - (rate/yMax)*chartH; }
-
-  // Grid lines
-  let gridLines = yTicks.map(v => {
-    const y = yPx(v);
-    return `<line x1="${padL}" y1="${y}" x2="${padL+chartW}" y2="${y}" stroke="var(--color-border)" stroke-width="1"/>
-      <text x="${padL-4}" y="${y+4}" font-size="10" fill="var(--color-muted)" text-anchor="end">${v}%</text>`;
-  }).join('');
-
-  // Alert threshold line
-  const yAlert = yPx(ALERT_THRESHOLD);
-  const alertLine = `<line x1="${padL}" y1="${yAlert}" x2="${padL+chartW}" y2="${yAlert}" stroke="#DC2626" stroke-width="1.5" stroke-dasharray="5,3"/>
-    <text x="${padL+chartW-2}" y="${yAlert-3}" font-size="9.5" fill="#DC2626" text-anchor="end">Seuil ${ALERT_THRESHOLD}%</text>`;
-
-  // Bars
-  let bars = '';
-  let tooltipRects = '';
-  chartMonths.forEach((cm, mi) => {
-    const gX = padL + mi * groupW;
-    people.forEach((p, pi) => {
-      const rate = rateGrid[mi][pi];
-      const { absentDays, workingDays } = getAbsenteeismRate(p.id, cm.year, cm.month);
-      const bX = gX + pi * (barW+1) + (groupW - people.length*(barW+1))/2;
-      const bH = Math.max(0, (rate/yMax)*chartH);
-      const bY = padT + chartH - bH;
-      const label = `${p.short||p.name} — ${MONTH_SHORT_FR[cm.month]} ${cm.year} : ${rate}% (${absentDays}j/${workingDays}j)`;
-      bars += `<rect x="${bX}" y="${bY}" width="${barW}" height="${bH}" rx="2" fill="${p.color}" opacity="0.85">
-        <title>${label}</title>
-      </rect>`;
-    });
-    // X axis label
-    const labelX = gX + groupW/2;
-    bars += `<text x="${labelX}" y="${padT+chartH+14}" font-size="9" fill="var(--color-muted)" text-anchor="middle">${MONTH_SHORT_FR[cm.month]} ${String(cm.year).slice(2)}</text>`;
-  });
-
-  // Legend
-  const legend = people.map(p =>
-    `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;margin-right:12px;">
-      <span style="width:11px;height:11px;border-radius:3px;background:${p.color};display:inline-block;"></span>
-      ${escapeHTML(p.short||p.name)}
-    </span>`
-  ).join('');
-
-  const svgChart = `<svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;height:${svgH}px;" role="img" aria-label="Taux d'absentéisme 12 mois">
-    ${gridLines}${alertLine}${bars}
-    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+chartH}" stroke="var(--color-border)" stroke-width="1"/>
-    <line x1="${padL}" y1="${padT+chartH}" x2="${padL+chartW}" y2="${padT+chartH}" stroke="var(--color-border)" stroke-width="1"/>
-  </svg>`;
-
-  // ---- Section B: Annual table ----
-  function cellBg(rate){
-    if(rate < 3)  return '#DCFCE7';
-    if(rate <= 6) return '#FEF3C7';
-    return '#FEE2E2';
-  }
-  function cellColor(rate){
-    if(rate < 3)  return '#15803D';
-    if(rate <= 6) return '#92400E';
-    return '#991B1B';
-  }
-
-  const annualTable = (()=>{
-    const rates = people.map(p => {
-      const months = Array.from({length:12}, (_,m) => getAbsenteeismRate(p.id, absYear, m).rate);
-      const avg = months.reduce((a,b)=>a+b,0)/12;
-      const lastYrAvg = Array.from({length:12}, (_,m) => getAbsenteeismRate(p.id, absYear-1, m).rate).reduce((a,b)=>a+b,0)/12;
-      const trend = Math.round((avg - lastYrAvg)*10)/10;
-      return { p, months, avg, trend };
-    });
-    // Team averages
-    const teamMonths = Array.from({length:12}, (_,m) => {
-      const vals = people.map(p => getAbsenteeismRate(p.id, absYear, m).rate);
-      return Math.round(vals.reduce((a,b)=>a+b,0)/vals.length*10)/10;
-    });
-    const teamAvg = Math.round(teamMonths.reduce((a,b)=>a+b,0)/12*10)/10;
-
-    const headerCols = MONTH_SHORT_FR.map(m=>`<th style="text-align:center;min-width:38px;">${m}</th>`).join('');
-    const personRows = rates.map(({p, months, avg, trend}) => {
-      const cells = months.map(r=>`<td style="text-align:center;background:${cellBg(r)};color:${cellColor(r)};font-weight:${r>ALERT_THRESHOLD?'700':'400'};">${r}%</td>`).join('');
-      const avgC = cellColor(avg);
-      const trendStr = trend===0?'—':(trend>0?`↑ +${trend} pts`:`↓ ${trend} pts`);
-      const trendC = trend<=0?'#15803D':'#991B1B';
-      return `<tr>
-        <td style="padding:6px 10px;font-weight:600;white-space:nowrap;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:5px;"></span>${escapeHTML(p.short||p.name)}</td>
-        ${cells}
-        <td style="text-align:center;font-weight:700;color:${avgC};">${Math.round(avg*10)/10}%</td>
-        <td style="text-align:center;font-size:12px;color:${trendC};">${trendStr}</td>
-      </tr>`;
-    }).join('');
-
-    const teamCells = teamMonths.map(r=>`<td style="text-align:center;font-weight:700;background:${cellBg(r)};color:${cellColor(r)};">${r}%</td>`).join('');
-
-    return `<table class="recap-table" style="min-width:700px;font-size:12.5px;">
-      <thead><tr>
-        <th style="text-align:left;">Personne</th>${headerCols}
-        <th style="text-align:center;">Moy.</th><th style="text-align:center;">Trend</th>
-      </tr></thead>
-      <tbody>${personRows}
-      <tr style="background:var(--color-secondary);">
-        <td style="padding:6px 10px;font-weight:800;">Équipe</td>
-        ${teamCells}
-        <td style="text-align:center;font-weight:800;">${teamAvg}%</td>
-        <td></td>
-      </tr></tbody>
-    </table>`;
-  })();
-
-  // ---- Section C: Alerts ----
-  const alertsHtml = (()=>{
-    const alerts = [];
-    people.forEach(p => {
-      const last3 = [0,1,2].map(i => {
-        const d = new Date(today.getFullYear(), today.getMonth()-i, 1);
-        return getAbsenteeismRate(p.id, d.getFullYear(), d.getMonth()).rate;
-      });
-      if(last3.every(r => r > ALERT_THRESHOLD)){
-        const avg3 = Math.round(last3.reduce((a,b)=>a+b,0)/3*10)/10;
-        alerts.push(`<div style="border:1.5px solid #FECACA;background:#FEF2F2;border-radius:10px;padding:12px 16px;margin-bottom:8px;">
-          <span style="font-weight:700;color:#DC2626;">⚠️ ${escapeHTML(p.short||p.name)}</span> dépasse le seuil de ${ALERT_THRESHOLD}% d'absentéisme sur 3 mois consécutifs (moy. ${avg3}%).<br>
-          <span style="font-size:12.5px;color:#7F1D1D;">Point recommandé en entretien annuel.</span>
-        </div>`);
-      }
-    });
-    return alerts.length ? `<div style="margin-bottom:16px;">${alerts.join('')}</div>` : '';
-  })();
-
-  const yearBtns = [absYear-1, absYear, absYear+1].filter(y=>y<=cy+1).map(y =>
-    `<button class="abs-year-btn" data-year="${y}" style="border:1.5px solid ${y===absYear?'var(--color-primary)':'var(--color-border)'};background:${y===absYear?'var(--color-secondary)':'var(--color-card)'};color:${y===absYear?'var(--color-primary)':'var(--color-text)'};padding:5px 14px;border-radius:20px;font-size:13px;cursor:pointer;font-weight:${y===absYear?'700':'400'};">${y}</button>`
-  ).join('');
-
-  container.innerHTML = `
-    ${alertsHtml}
-    <div class="card" style="margin-bottom:20px;">
-      <h3 style="font-size:15px;margin-bottom:4px;">Taux d'absentéisme — 12 derniers mois</h3>
-      <p class="text-muted" style="font-size:12px;margin-bottom:10px;">Absences réelles / jours ouvrés (hors jours fériés). Seuil d'alerte : ${ALERT_THRESHOLD}%.</p>
-      <div style="overflow-x:auto;">${svgChart}</div>
-      <div style="margin-top:8px;">${legend}</div>
-    </div>
-    <div class="card" style="overflow-x:auto;">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-        <h3 style="font-size:15px;margin:0;">Récapitulatif annuel ${absYear}</h3>
-        <div style="display:flex;gap:6px;">${yearBtns}</div>
-      </div>
-      <div style="font-size:11.5px;color:var(--color-muted);margin-bottom:10px;">
-        🟢 &lt;3% · 🟡 3–6% · 🔴 &gt;6%
-      </div>
-      ${annualTable}
-    </div>
-  `;
-
-  container.querySelectorAll('.abs-year-btn').forEach(btn=>{
-    btn.onclick = ()=>{ renderDashboardAbsences._year = parseInt(btn.dataset.year,10); renderDashboardAbsences(); };
-  });
+  if(container) container.innerHTML = '';
 }
-renderDashboardAbsences._year = null;
 
 /* ================================================================
    MODULE VISITES MÉDICALES
