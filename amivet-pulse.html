@@ -3690,7 +3690,7 @@ function buildWeekGrid(year, month, people){
       if(hName) dayCls += ' cal-wg-day-holiday';
       if(iso === todayISO) dayCls += ' cal-wg-day-today';
 
-      const toolsHtml = !isSat && !isSun ? `<div class="cal-wg-tools">
+      const toolsHtml = !isSun ? `<div class="cal-wg-tools">
         <button class="cal-wg-tool-btn${comment?' has-comment':''}" data-action="comment" data-date="${iso}" aria-label="Commentaire du ${day}/${month+1}" title="${comment?escapeHTML(comment):'Ajouter un commentaire'}">💬</button>
         <button class="cal-wg-tool-btn" data-action="edit-day" data-date="${iso}" aria-label="Édition rapide du ${day}/${month+1}">✏️</button>
       </div>` : '<div class="cal-wg-tools"></div>';
@@ -3701,7 +3701,7 @@ function buildWeekGrid(year, month, people){
         ${toolsHtml}
       </div>`;
 
-      if(isSat || isSun) return `<div class="${dayCls}" data-date="${iso}">${dayHead}</div>`;
+      if(isSun) return `<div class="${dayCls}" data-date="${iso}">${dayHead}</div>`;
 
       const personStrips = people.map(person=>{
         const locked = isMonthSigned(person.id, year, month);
