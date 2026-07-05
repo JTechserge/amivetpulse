@@ -1420,113 +1420,6 @@ function openEditUserModal(userId, users, onBack){
   box.querySelector('#edit-send-reset').onclick = ()=> sendAccessEmail('recovery');
 }
 
-// Réglages de l'email récapitulatif des congés ASV (destinataire + fréquence), partagés
-// via Supabase puisque c'est le script GitHub Actions (côté serveur) qui les lit, pas
-// seulement ce navigateur. La modale affiche d'abord "Chargement…" puis se met à jour
-// avec la valeur réellement en vigueur dès que la requête répond.
-// "now" (envoi à chaque vérification) a existé temporairement pour les tests, mais fait
-// double emploi avec le bouton "Envoyer maintenant" plus bas — retiré pour éviter qu'il
-// reste choisi comme fréquence "normale" et spamme la boîte mail chaque jour.
-const EMAIL_FREQUENCY_LABELS = { weekly:'Hebdomadaire', monthly:'Mensuelle' };
-async function fetchEmailSettings(){
-  const res = await fetch(`${SUPABASE_URL}email_settings?select=*&id=eq.singleton`, { headers: supabaseHeaders() });
-  if(!res.ok) throw new Error(`HTTP ${res.status}`);
-  const rows = await res.json();
-  if(!rows[0]) throw new Error('Aucun réglage trouvé (la table email_settings existe-t-elle ?).');
-  return rows[0];
-}
-function openEmailSettingsModal(){
-  const backdrop = document.getElementById('modal-backdrop');
-  const box = document.getElementById('modal-box');
-  box.className = 'modal-box';
-  box.innerHTML = `
-    <h3>📧 Email récapitulatif des congés</h3>
-    <p>Envoyé automatiquement à la clinique avec les demandes de congé ASV en attente, selon la fréquence choisie.</p>
-    <p class="text-muted" id="email-settings-loading" style="font-size:13px;">Chargement des réglages actuels…</p>
-    <div id="email-settings-form" class="hidden">
-      <p style="font-size:12.5px;color:var(--color-text-muted);margin-bottom:4px;">Adresse actuellement configurée : <strong id="email-current-value" style="color:var(--color-text);"></strong></p>
-      <input type="email" id="email-recipient-input" placeholder="cliniqueamivet@hotmail.fr" style="margin-bottom:12px;">
-      <label style="display:block;font-size:12.5px;font-weight:700;color:var(--color-text);margin-bottom:6px;">Fréquence d'envoi</label>
-      <select id="email-frequency-select" style="width:100%;padding:9px 11px;border:1px solid var(--color-border);border-radius:8px;font-family:inherit;font-size:13px;margin-bottom:6px;">
-        ${Object.entries(EMAIL_FREQUENCY_LABELS).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}
-      </select>
-      <p class="text-muted" style="font-size:11.5px;">Le vérificateur tourne tous les jours ; au-delà de la fréquence choisie, il n'envoie un email que s'il y a au moins une demande en attente.</p>
-      <button type="button" class="btn" id="email-send-now-btn" style="width:100%;justify-content:center;margin-top:4px;">📨 Envoyer maintenant (sans attendre la fréquence)</button>
-      <p id="email-send-now-result" style="font-size:12px;margin:8px 0 0;display:none;"></p>
-    </div>
-    <p id="email-settings-error" style="color:#B91C1C;font-size:12px;display:none;margin:10px 0 0;"></p>
-    <div class="modal-actions" style="margin-top:16px;">
-      <button class="btn" id="modal-cancel">Annuler</button>
-      <button class="btn btn-primary hidden" id="email-settings-save">Enregistrer</button>
-    </div>
-  `;
-  backdrop.classList.add('open');
-  const close = ()=> backdrop.classList.remove('open');
-  box.querySelector('#modal-cancel').onclick = close;
-  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
-
-  fetchEmailSettings().then(settings=>{
-    box.querySelector('#email-settings-loading').classList.add('hidden');
-    box.querySelector('#email-settings-form').classList.remove('hidden');
-    box.querySelector('#email-settings-save').classList.remove('hidden');
-    box.querySelector('#email-current-value').textContent = settings.recipient_email;
-    box.querySelector('#email-recipient-input').value = settings.recipient_email;
-    box.querySelector('#email-frequency-select').value = settings.frequency;
-    box.querySelector('#email-send-now-btn').onclick = async ()=>{
-      const btn = box.querySelector('#email-send-now-btn');
-      const resultEl = box.querySelector('#email-send-now-result');
-      btn.disabled = true;
-      resultEl.style.display = 'none';
-      try{
-        const res = await fetch(`${SUPABASE_FUNCTIONS_URL}send-leave-recap`, {
-          method:'POST',
-          headers: supabaseHeaders({ 'Content-Type':'application/json' }),
-          body: JSON.stringify({}),
-        });
-        const result = await res.json();
-        if(!res.ok || !result.ok) throw new Error(result.error || `HTTP ${res.status}`);
-        resultEl.style.color = 'var(--color-primary)';
-        resultEl.textContent = result.sent
-          ? `Email envoyé à ${result.recipient} (${result.count} demande${result.count>1?'s':''} en attente).`
-          : 'Aucune demande en attente : rien à envoyer.';
-        resultEl.style.display = 'block';
-      }catch(e){
-        resultEl.style.color = '#B91C1C';
-        resultEl.textContent = 'Échec de l\'envoi (connexion impossible).';
-        resultEl.style.display = 'block';
-        console.warn(e);
-      }finally{
-        btn.disabled = false;
-      }
-    };
-    box.querySelector('#email-settings-save').onclick = ()=>{
-      const recipient = box.querySelector('#email-recipient-input').value.trim();
-      const frequency = box.querySelector('#email-frequency-select').value;
-      const errorEl = box.querySelector('#email-settings-error');
-      if(!recipient || !recipient.includes('@')){
-        errorEl.textContent = 'Adresse email invalide.';
-        errorEl.style.display = 'block';
-        return;
-      }
-      fetch(`${SUPABASE_URL}email_settings?id=eq.singleton`, {
-        method:'PATCH',
-        headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=minimal' }),
-        body: JSON.stringify({ recipient_email:recipient, frequency, updated_at:new Date().toISOString() }),
-      }).then(res=>{
-        if(!res.ok) throw new Error(`HTTP ${res.status}`);
-        close();
-        showToast('Réglages email enregistrés', '📧');
-      }).catch(e=>{
-        errorEl.textContent = 'Échec de l\'enregistrement (connexion à Supabase impossible).';
-        errorEl.style.display = 'block';
-        console.warn(e);
-      });
-    };
-  }).catch(e=>{
-    box.querySelector('#email-settings-loading').textContent = 'Impossible de charger les réglages (connexion à Supabase impossible).';
-    console.warn(e);
-  });
-}
 
 // Synchronisation calendrier (lien d'abonnement ICS) : chaque vétérinaire active/désactive
 // la sienne indépendamment depuis ce même panneau, pas d'identité par compte sur ce site —
@@ -2399,9 +2292,6 @@ function buildSettingsMenuHtml(){
       <div class="settings-section-label">Personnalisation</div>
       <button id="action-colors" role="menuitem">🎨 Couleurs des associés</button>
       <hr>
-      <div class="settings-section-label">Notifications</div>
-      <button id="action-email-settings" role="menuitem">📧 Email récapitulatif des congés</button>
-      <hr>
       <div class="settings-section-label">Synchronisation</div>
       <button id="action-calendar-sync" role="menuitem">📅 Synchronisation calendrier</button>
       <hr>
@@ -2445,9 +2335,6 @@ function initSettingsMenu(){
   if(canAccessSettings()){
     document.getElementById('action-colors').addEventListener('click', ()=>{
       menu.classList.remove('open'); openColorPickerModal();
-    });
-    document.getElementById('action-email-settings').addEventListener('click', ()=>{
-      menu.classList.remove('open'); openEmailSettingsModal();
     });
     document.getElementById('action-calendar-sync').addEventListener('click', ()=>{
       menu.classList.remove('open'); openCalendarSyncModal();
