@@ -3323,8 +3323,7 @@ function buildPersonRowCells(year, month, days, personId){
         }
       }
       flush();
-      const wOT = isASVPerson(personId) ? roundTo15min(weeklyOT) : 0;
-      html += `<td class="cal-cell sunday-cell${wOT !== 0 ? ' sunday-ot-cell' : ''}" colspan="2" aria-label="${wOT !== 0 ? 'Bilan semaine : ' + signedHHMM(wOT) : ''}">${wOT !== 0 ? `<span class="sunday-ot-badge${wOT < 0 ? ' sunday-ot-neg' : ''}">${signedHHMM(wOT)}</span>` : ''}</td>`;
+      html += `<td class="cal-cell sunday-cell" colspan="2" aria-hidden="true"></td>`;
       weeklyOT = 0;
       return;
     }
