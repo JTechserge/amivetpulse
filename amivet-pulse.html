@@ -2021,7 +2021,6 @@ function loadData(){
     }
   }catch(e){ console.warn('Lecture localStorage impossible, ré-initialisation.', e); }
   DATA = { version:2, slots:{} };
-  seedDemoData();
 }
 function saveData(showToast = true){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
