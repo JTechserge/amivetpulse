@@ -3395,12 +3395,15 @@ function buildOvertimeRowCells(year, month, days, people){
       `<span class="${e.ot < 0 ? 'ot-neg' : 'ot-pos'}">${escapeHTML(e.person.short)} ${signedHHMM(e.ot)}</span>`
     ).join('<span class="ot-sep">·</span>');
 
-    html += `<td class="cal-cell overtime-row-cell" colspan="${colspan}" aria-label="Heures supp. semaine">
+    // Cellule fusionnée = jours ouvrés uniquement (sans dimanche), + cellule dimanche vide séparée
+    const hasSunday = isSunday(new Date(year, month, weekDays[weekDays.length - 1]));
+    const workColspan = hasSunday ? (weekDays.length - 1) * 2 : colspan;
+    html += `<td class="cal-cell overtime-row-cell" colspan="${workColspan}" aria-label="Heures supp. semaine">
       <div class="ot-week-wrap">
         ${detail ? `<div class="ot-week-detail">${detail}</div>` : ''}
         ${weekTotal !== 0 ? `<div class="ot-week-sum${weekTotal < 0 ? ' ot-week-sum-neg' : ''}">${signedHHMM(weekTotal)}</div>` : ''}
       </div>
-    </td>`;
+    </td>${hasSunday ? '<td class="cal-cell sunday-cell" colspan="2" aria-hidden="true"></td>' : ''}`;
   });
   return html;
 }
