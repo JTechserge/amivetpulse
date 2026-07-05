@@ -3379,9 +3379,16 @@ function buildOvertimeRowCells(year, month, days, people){
     }
 
     // Calcul OT par personne (arrondi au quart d'heure)
+    // Les jours du mois précédent (extraDates) ne sont inclus que si la personne
+    // a aussi des saisies d'heures dans la partie courante du mois — sinon leurs
+    // déficits de juin polluent le calcul de juillet pour les gens qui n'ont que des coches.
     const personOTs = people.map(p=>{
+      const hasCurrentEntries = weekDays.some(day=>{
+        const date = new Date(year, month, day);
+        return !isSunday(date) && calcDayTE(fmtISO(date), p.id) > 0;
+      });
       let ot = 0;
-      extraDates.forEach(d=>{ ot += calcAutoOT(fmtISO(d), p.id); });
+      if(hasCurrentEntries) extraDates.forEach(d=>{ ot += calcAutoOT(fmtISO(d), p.id); });
       weekDays.forEach(day=>{
         const date = new Date(year, month, day);
         if(!isSunday(date)) ot += calcAutoOT(fmtISO(date), p.id);
