@@ -708,12 +708,10 @@ body.role-asv [data-view="dashboard"]{display:none;}
         <button class="sub-tab active" data-sub="calendar">📅 Calendrier mensuel</button>
         <button class="sub-tab" data-sub="annual">🗓️ Vue Annuelle</button>
         <button class="sub-tab" data-sub="forecast">🔮 Prévisionnel</button>
-        <button class="sub-tab" data-sub="conges">📆 Compteur CP</button>
       </div>
       <div id="vets-sub-calendar" class="sub-page" data-cal-view="vets-current"></div>
       <div id="vets-sub-annual" class="sub-page hidden"></div>
       <div id="vets-sub-forecast" class="sub-page hidden" data-cal-view="vets-forecast"></div>
-      <div id="vets-sub-conges" class="sub-page hidden"></div>
     </section>
 
     <!-- Onglet groupé ASV : Calendrier mensuel / Vue annuelle / Prévisionnel -->
@@ -723,13 +721,11 @@ body.role-asv [data-view="dashboard"]{display:none;}
         <button class="sub-tab active" data-sub="calendar">📅 Calendrier mensuel</button>
         <button class="sub-tab" data-sub="annual">🗓️ Vue Annuelle</button>
         <button class="sub-tab" data-sub="forecast">🔮 Prévisionnel</button>
-        <button class="sub-tab" data-sub="conges">📆 Compteur CP</button>
       </div>
       <div id="asv-sub-calendar" class="sub-page" data-cal-view="asv-current"></div>
       <div id="asv-sub-annual" class="sub-page hidden"></div>
       <div id="asv-sub-forecast" class="sub-page hidden" data-cal-view="asv-forecast"></div>
       <div id="asv-sub-week" class="sub-page hidden"></div>
-      <div id="asv-sub-conges" class="sub-page hidden"></div>
     </section>
 
     <!-- Vue Tableau de bord -->
@@ -2571,7 +2567,6 @@ function renderGroupSubPage(group){
   if(sub === 'calendar') renderCalendarView(g.calendarViewKey);
   else if(sub === 'forecast') renderCalendarView(g.forecastViewKey);
   else if(sub === 'week' && group === 'asv') renderWeekViewASV();
-  else if(sub === 'conges') renderGroupConges(group);
   else renderAnnualViewForGroup(group);
 }
 function switchSubPage(group, subKey){
@@ -2585,8 +2580,6 @@ function switchSubPage(group, subKey){
   document.getElementById(g.forecastContainer).classList.toggle('hidden', subKey !== 'forecast');
   const weekEl = document.getElementById('asv-sub-week');
   if(weekEl) weekEl.classList.toggle('hidden', !(group === 'asv' && subKey === 'week'));
-  const congesEl = document.getElementById(`${group}-sub-conges`);
-  if(congesEl) congesEl.classList.toggle('hidden', subKey !== 'conges');
   renderCurrentView();
   saveViewState();
 }
@@ -4949,7 +4942,7 @@ function renderDashboardStats(){
       <p class="text-muted" style="font-size:11.5px;margin-bottom:10px;">Écart = nombre de jours travaillés en plus, pour le vétérinaire concerné</p>
       ${buildRecapTable(year)}
     </div>
-
+    <div id="dash-vets-cp"></div>
   `;
   container.querySelector('#dash-year-toggle').addEventListener('click', (e)=>{
     const btn = e.target.closest('button');
@@ -4959,6 +4952,7 @@ function renderDashboardStats(){
   });
   container.querySelector('#dash-reset-current').onclick = ()=> openResetYearModal(cy, false);
   container.querySelector('#dash-reset-forecast').onclick = ()=> openResetYearModal(cy + 1, true);
+  renderGroupConges('vets', 'dash-vets-cp');
 }
 
 // --- Sous-page "Feuilles signées" : récapitulatif annuel des signatures ASV, avec
@@ -5329,11 +5323,13 @@ function renderDashboardHours(){
         <tfoot><tr><td style="font-weight:800;padding:8px 10px;">Total annuel</td>${annualCols}</tr></tfoot>
       </table>
     </div>
+    <div id="dash-asv-cp"></div>
   `;
   container.querySelector('#dash-hours-year-toggle').addEventListener('click', (e)=>{
     const btn=e.target.closest('button'); if(!btn) return;
     dashState.year=parseInt(btn.dataset.year,10); renderDashboardHours();
   });
+  renderGroupConges('asv', 'dash-asv-cp');
 }
 
 // --- Sous-page "Demandes de congé" : liste groupée, triée en attente -> approuvées ->
@@ -5473,8 +5469,8 @@ function getCPAcquired(person, referenceYear){
   return Math.round(months * CP_DAYS_PER_MONTH * (person.timeFraction ?? 1.0) * 100) / 100;
 }
 
-function renderGroupConges(group){
-  const container = document.getElementById(`${group}-sub-conges`);
+function renderGroupConges(group, containerId){
+  const container = document.getElementById(containerId || `${group}-sub-conges`);
   if(!container) return;
   const isAdmin = currentUser?.role === 'admin';
   const cy = getCurrentYear();
@@ -5559,19 +5555,19 @@ function renderGroupConges(group){
     `;
 
     container.querySelectorAll('.cp-year-btn').forEach(btn=>{
-      btn.onclick = ()=>{ renderGroupConges._year[group] = parseInt(btn.dataset.year,10); renderGroupConges(group); };
+      btn.onclick = ()=>{ renderGroupConges._year[group] = parseInt(btn.dataset.year,10); renderGroupConges(group, containerId); };
     });
 
     if(isAdmin){
       container.querySelectorAll('.cp-adjust-btn').forEach(btn=>{
-        btn.onclick = ()=> openCPAdjustModal(btn.dataset.pid, cpYear, parseFloat(btn.dataset.carried)||0, parseFloat(btn.dataset.extra)||0, btn.dataset.note||'', group);
+        btn.onclick = ()=> openCPAdjustModal(btn.dataset.pid, cpYear, parseFloat(btn.dataset.carried)||0, parseFloat(btn.dataset.extra)||0, btn.dataset.note||'', group, containerId);
       });
     }
   })();
 }
 renderGroupConges._year = {};
 
-function openCPAdjustModal(personId, year, carriedOver, extra, note, group){
+function openCPAdjustModal(personId, year, carriedOver, extra, note, group, containerId){
   const person = allPeople().find(p=>p.id===personId);
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
@@ -5613,7 +5609,7 @@ function openCPAdjustModal(personId, year, carriedOver, extra, note, group){
       });
       if(!res.ok) throw new Error(`HTTP ${res.status}`);
       close();
-      renderGroupConges(group);
+      renderGroupConges(group, containerId);
       showToast(`CP ${escapeHTML(person?.short||personId)} mis à jour`, '✅');
     }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
   };
