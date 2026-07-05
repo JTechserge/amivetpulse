@@ -2061,8 +2061,12 @@ async function syncFromSupabase(){
       localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
       renderCurrentView();
       updateDashboardNavBadge();
-    } else {
-      pushDataToSupabase();
+    } else if(remoteSlots !== null && remoteSlots !== undefined){
+      // Supabase est vide (purge ou première utilisation) : vider aussi le cache local
+      DATA = { version:2, slots:{} };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+      renderCurrentView();
+      updateDashboardNavBadge();
     }
   }catch(e){ console.warn('Supabase inaccessible, données locales conservées.', e); }
 }
