@@ -698,6 +698,141 @@ body.role-asv [data-view="dashboard"]{display:none;}
 }
 #impersonation-banner .imp-back:hover{background:rgba(255,255,255,0.3);}
 .print-signature-status{display:none;}
+
+/* ============================================================
+   Mobile (≤767px) — desktop inchangé au-dessus de ce breakpoint
+   ============================================================ */
+@media (max-width:767px){
+
+  /* ── T6a · Inputs : empêche le zoom automatique iOS au focus ── */
+  input:not([type="hidden"]), textarea, select { font-size:16px; }
+
+  /* ── T2 · Header compact ── */
+  .app-header-inner { height:52px; padding:0 12px; }
+  .brand-logo { width:30px; height:30px; }
+  .brand-title { font-size:16px; }
+  .brand-sub { display:none; }
+
+  /* ── T6b · Toast au-dessus de la tab bar ── */
+  #toast-container {
+    bottom:calc(56px + env(safe-area-inset-bottom) + 12px);
+    left:12px; right:12px; right:12px;
+    align-items:stretch;
+  }
+  .toast { justify-content:center; }
+
+  /* ── T1 · Cache la nav desktop, révèle la nav mobile ── */
+  .main-nav { display:none; }
+
+  /* ── Bottom tab bar ── */
+  #mobile-bottom-nav {
+    position:fixed; bottom:0; left:0; right:0;
+    height:calc(56px + env(safe-area-inset-bottom));
+    padding-bottom:env(safe-area-inset-bottom);
+    background:#fff; border-top:1px solid var(--color-border);
+    box-shadow:0 -2px 12px rgba(15,23,42,.08);
+    display:flex; z-index:70;
+  }
+  .mb-tab {
+    flex:1; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:3px;
+    border:none; background:transparent; padding:6px 4px 4px;
+    color:var(--color-text-muted); cursor:pointer;
+    font-family:inherit; position:relative;
+  }
+  .mb-tab .mb-icon { font-size:21px; line-height:1; }
+  .mb-tab .mb-label { font-size:10px; font-weight:600; line-height:1; }
+  .mb-tab .mb-badge { display:inline-block; }
+  .mb-tab.active { color:var(--color-primary); }
+  .mb-tab.active::before {
+    content:''; position:absolute; top:0; left:20%; right:20%;
+    height:2px; background:var(--color-primary); border-radius:0 0 2px 2px;
+  }
+  body.role-asv .mb-tab[data-view="dashboard"] { display:none; }
+
+  /* ── Padding-bottom de l'app pour ne pas être caché sous la tab bar ── */
+  .app-main { padding-bottom:calc(56px + env(safe-area-inset-bottom) + 16px); }
+
+  /* ── T3 · Sidebar → bottom sheet ── */
+  .day-sidebar {
+    top:auto; right:0; left:0; bottom:0; width:100%; height:85vh;
+    border-radius:20px 20px 0 0;
+    transform:translateY(100%);
+    transition:transform 0.28s cubic-bezier(0.32,0.72,0,1);
+  }
+  .day-sidebar.open { transform:translateY(0); }
+  .day-sidebar-head { padding:14px 16px 12px; }
+
+  /* Handle de glissement générique ── */
+  .mobile-sheet-handle {
+    width:36px; height:4px; background:var(--color-border);
+    border-radius:2px; margin:10px auto 6px; flex-shrink:0;
+    cursor:grab;
+  }
+
+  /* ── T3 · Modal → bottom sheet ── */
+  .modal-backdrop { align-items:flex-end; }
+  .modal-box {
+    width:100%; max-width:100%; border-radius:20px 20px 0 0;
+    max-height:90vh; overflow-y:auto;
+    padding-bottom:calc(env(safe-area-inset-bottom) + 16px);
+  }
+  .modal-box.modal-box-wide { width:100%; }
+
+  /* ── T3 · Popover → bottom sheet ── */
+  .popover-backdrop { align-items:flex-end; }
+  .popover-box {
+    width:100%; border-radius:20px 20px 0 0;
+    max-height:70vh; overflow-y:auto;
+    padding-bottom:calc(env(safe-area-inset-bottom) + 16px);
+  }
+
+  /* ── T3 · Settings menu → bottom sheet ── */
+  .settings-menu.open {
+    position:fixed; top:auto; bottom:0; left:0; right:0;
+    width:100%; border-radius:20px 20px 0 0;
+    max-height:80vh; overflow-y:auto;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+
+  /* ── T4 · Calendrier mensuel ── */
+  .cal-cell { min-height:36px; font-size:11px; }
+  .cal-col-tools { display:none; }
+  .cal-toolbar { flex-direction:column; gap:8px; }
+  .cal-toolbar-actions { justify-content:space-between; width:100%; }
+  .cal-month-label { font-size:18px; min-width:auto; }
+  .cal-scroll { -webkit-overflow-scrolling:touch; }
+  .cal-table .col-label { width:58px; }
+  .sub-nav-row { flex-direction:column; align-items:flex-start; gap:8px; }
+  .sub-nav-row .sub-nav { margin-bottom:0; }
+  .sub-tab { padding:10px 16px; }
+
+  /* ── T5 · Vue semaine ASV ── */
+  .week-view-wrap { -webkit-overflow-scrolling:touch; }
+  .week-time-label { position:sticky; left:0; z-index:2; background:var(--color-secondary); }
+  .week-asv-pick { width:100%; display:block; margin-bottom:10px; }
+  .week-nav { justify-content:center; }
+  .week-nav-label { font-size:14px; min-width:auto; }
+
+  /* ── FAB ── */
+  #mobile-fab {
+    position:fixed;
+    bottom:calc(56px + env(safe-area-inset-bottom) + 14px);
+    right:16px; width:52px; height:52px;
+    border-radius:50%; background:var(--color-primary);
+    color:#fff; border:none; font-size:26px; line-height:1;
+    box-shadow:0 4px 16px rgba(15,118,110,.4);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; z-index:69; font-family:inherit;
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  /* ── PWA install tip au-dessus de la tab bar ── */
+  #pwa-ios-install-tip, #pwa-android-install-banner {
+    bottom:calc(56px + env(safe-area-inset-bottom));
+  }
+}
+
 @media print{
   .app-header,.sub-nav-row,.legend,.section-desc,.rollover-banner,.forecast-banner,
   .cal-toolbar-actions,.cal-col-tools,#toast-container,.signature-panel{display:none!important;}
@@ -6669,6 +6804,149 @@ async function openNotificationSettingsModal(){
 initServiceWorker();
 setTimeout(showIOSInstallTip, 4000);
 updatePwaOfflineBanner();
+
+/* ============================================================
+   Mobile (≤767px) — bottom nav, bottom sheets, FAB
+   ============================================================ */
+(function initMobileUI(){
+  function debounce(fn, ms){ let t; return function(){ clearTimeout(t); t=setTimeout(()=>fn.apply(this,arguments),ms); }; }
+
+  /* ── Bottom Tab Bar ── */
+  const TABS = [
+    { view:'dashboard', icon:'📊', label:'Tableau de bord', shortLabel:'Tableau',  badgeId:'dash-nav-badge' },
+    { view:'vets',      icon:'🩺', label:'Vétérinaires',    shortLabel:'Vétos',     badgeId:null },
+    { view:'asv',       icon:'🐾', label:'ASV',              shortLabel:'ASV',       badgeId:null },
+    { view:'annonces',  icon:'📣', label:'Annonces',         shortLabel:'Annonces',  badgeId:'annonces-nav-badge' },
+  ];
+  let bottomNav=null, fab=null;
+
+  function createBottomNav(){
+    const nav=document.createElement('nav');
+    nav.id='mobile-bottom-nav';
+    nav.setAttribute('aria-label','Navigation principale');
+    TABS.forEach(tab=>{
+      const btn=document.createElement('button');
+      btn.className='mb-tab'; btn.dataset.view=tab.view;
+      btn.setAttribute('aria-label',tab.label);
+      const icon=document.createElement('span'); icon.className='mb-icon'; icon.textContent=tab.icon;
+      const lbl=document.createElement('span');  lbl.className='mb-label'; lbl.textContent=tab.shortLabel;
+      btn.appendChild(icon); btn.appendChild(lbl);
+      if(tab.badgeId){
+        const bw=document.createElement('span'); bw.id='mb-'+tab.badgeId; bw.className='mb-badge';
+        btn.appendChild(bw);
+      }
+      btn.addEventListener('click',()=>{ if(typeof switchView==='function') switchView(tab.view); });
+      nav.appendChild(btn);
+    });
+    return nav;
+  }
+
+  function syncBottomNav(){
+    if(!bottomNav) return;
+    const activeView=document.querySelector('.nav-tab.active')?.dataset.view;
+    bottomNav.querySelectorAll('.mb-tab').forEach(b=>b.classList.toggle('active',b.dataset.view===activeView));
+    TABS.forEach(tab=>{
+      if(!tab.badgeId) return;
+      const src=document.getElementById(tab.badgeId);
+      const dst=document.getElementById('mb-'+tab.badgeId);
+      if(src&&dst) dst.innerHTML=src.innerHTML;
+    });
+  }
+
+  function mountBottomNav(){
+    if(bottomNav||window.innerWidth>=768) return;
+    bottomNav=createBottomNav();
+    document.getElementById('app').appendChild(bottomNav);
+    syncBottomNav();
+    const obs=new MutationObserver(syncBottomNav);
+    document.querySelectorAll('.nav-tab').forEach(b=>obs.observe(b,{attributes:true,attributeFilter:['class']}));
+    ['dash-nav-badge','annonces-nav-badge'].forEach(id=>{
+      const el=document.getElementById(id); if(el) obs.observe(el,{childList:true,subtree:true,characterData:true});
+    });
+  }
+  function unmountBottomNav(){ if(bottomNav){ bottomNav.remove(); bottomNav=null; } }
+
+  /* ── FAB ── */
+  function mountFAB(){
+    if(fab||window.innerWidth>=768) return;
+    if(typeof switchView!=='function'||typeof switchSubPage!=='function') return;
+    fab=document.createElement('button');
+    fab.id='mobile-fab'; fab.setAttribute('aria-label','Demander un congé'); fab.textContent='+';
+    fab.addEventListener('click',()=>{ switchView('asv'); switchSubPage('asv','calendar'); });
+    document.getElementById('app').appendChild(fab);
+  }
+  function unmountFAB(){ if(fab){ fab.remove(); fab=null; } }
+
+  /* ── Drag-handle + swipe-to-dismiss ── */
+  function addSheetHandle(el, dismissFn){
+    if(window.innerWidth>=768) return;
+    // Retire l'ancien handle s'il existe (re-render du contenu)
+    el.querySelectorAll(':scope > .mobile-sheet-handle').forEach(h=>h.remove());
+    const handle=document.createElement('div');
+    handle.className='mobile-sheet-handle';
+    el.insertBefore(handle, el.firstChild);
+
+    let startY=0, startT=0, swiping=false;
+    handle.addEventListener('touchstart',e=>{
+      startY=e.touches[0].clientY; startT=Date.now(); swiping=false;
+      el.style.transition='none';
+    },{passive:true});
+    handle.addEventListener('touchmove',e=>{
+      const dy=e.touches[0].clientY-startY;
+      if(dy>0){ swiping=true; el.style.transform=`translateY(${dy}px)`; }
+    },{passive:true});
+    handle.addEventListener('touchend',e=>{
+      const dy=e.changedTouches[0].clientY-startY;
+      const vel=dy/Math.max(1,Date.now()-startT);
+      el.style.transition=''; el.style.transform='';
+      if(swiping && dy>80 && vel>0.3) dismissFn();
+    });
+  }
+
+  /* ── Sidebar ── */
+  (function(){
+    const sidebar=document.getElementById('day-sidebar');
+    const overlay=document.getElementById('sidebar-overlay');
+    if(!sidebar) return;
+    const dismiss=()=>{ sidebar.classList.remove('open'); overlay&&overlay.classList.remove('open'); };
+    new MutationObserver(()=>{ if(window.innerWidth<768) addSheetHandle(sidebar,dismiss); })
+      .observe(sidebar,{childList:true});
+  })();
+
+  /* ── Modal ── */
+  (function(){
+    const box=document.getElementById('modal-box');
+    const backdrop=document.getElementById('modal-backdrop');
+    if(!box||!backdrop) return;
+    const dismiss=()=>backdrop.classList.remove('open');
+    new MutationObserver(()=>{ if(window.innerWidth<768) addSheetHandle(box,dismiss); })
+      .observe(box,{childList:true});
+    new MutationObserver(()=>{
+      if(backdrop.classList.contains('open')&&window.innerWidth<768) addSheetHandle(box,dismiss);
+    }).observe(backdrop,{attributes:true,attributeFilter:['class']});
+  })();
+
+  /* ── Popover ── */
+  (function(){
+    const box=document.getElementById('popover-box');
+    const backdrop=document.getElementById('popover-backdrop');
+    if(!box||!backdrop) return;
+    const dismiss=()=>backdrop.classList.remove('open');
+    new MutationObserver(()=>{ if(window.innerWidth<768) addSheetHandle(box,dismiss); })
+      .observe(box,{childList:true});
+    new MutationObserver(()=>{
+      if(backdrop.classList.contains('open')&&window.innerWidth<768) addSheetHandle(box,dismiss);
+    }).observe(backdrop,{attributes:true,attributeFilter:['class']});
+  })();
+
+  /* ── Resize ── */
+  function onResize(){
+    if(window.innerWidth<768){ mountBottomNav(); mountFAB(); }
+    else { unmountBottomNav(); unmountFAB(); }
+  }
+  window.addEventListener('resize',debounce(onResize,200));
+  onResize();
+})();
 </script>
 </body>
 </html>
