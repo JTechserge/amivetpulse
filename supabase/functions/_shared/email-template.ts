@@ -3,7 +3,7 @@
 // amivet-planning.html). Tableaux + styles en ligne uniquement : c'est ce qui rend le mieux
 // de façon fiable dans les clients mail (Gmail, Outlook, Apple Mail...).
 export const LOGO_URL = 'https://jtechserge.github.io/amivetpulse/logo.png';
-export const APP_URL = 'https://jtechserge.github.io/amivetpulse/amivet-pulse.html';
+export const APP_URL = 'https://jtechserge.github.io/amivetpulse/';
 export const COLORS = {
   primary: '#0F766E',
   primaryLight: '#14B8A6',
