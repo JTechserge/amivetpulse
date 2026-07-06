@@ -15,7 +15,7 @@ test.describe("Amivet Pulse - coquille statique", () => {
     });
     page.on("pageerror", (err) => pageErrors.push(err.message));
 
-    const response = await page.goto("/amivet-pulse.html");
+    const response = await page.goto("./");
     expect(response?.ok()).toBeTruthy();
 
     // Laisse le temps a init()/DOMContentLoaded de s'executer.
@@ -29,7 +29,7 @@ test.describe("Amivet Pulse - coquille statique", () => {
   });
 
   test("le titre et les meta PWA essentiels sont presents", async ({ page }) => {
-    await page.goto("/amivet-pulse.html");
+    await page.goto("./");
     await expect(page).toHaveTitle(/Amivet PULSE/);
     const manifestHref = await page.locator('link[rel="manifest"]').getAttribute("href");
     expect(manifestHref).toBeTruthy();
@@ -38,7 +38,7 @@ test.describe("Amivet Pulse - coquille statique", () => {
   });
 
   test("l'ecran de connexion s'affiche par defaut (pas de session)", async ({ page }) => {
-    await page.goto("/amivet-pulse.html");
+    await page.goto("./");
     await expect(page.locator("#login-overlay")).not.toHaveClass(/hidden/);
     await expect(page.locator("#login-email")).toBeVisible();
     await expect(page.locator("#login-password")).toBeVisible();
@@ -46,7 +46,7 @@ test.describe("Amivet Pulse - coquille statique", () => {
   });
 
   test("la navigation principale est presente dans le DOM", async ({ page }) => {
-    await page.goto("/amivet-pulse.html");
+    await page.goto("./");
     const nav = page.locator("#main-nav");
     await expect(nav).toBeAttached();
     await expect(page.locator('.nav-tab[data-view="dashboard"]')).toBeAttached();
@@ -54,19 +54,19 @@ test.describe("Amivet Pulse - coquille statique", () => {
   });
 
   test("le manifest.json est accessible et valide", async ({ page, request }) => {
-    const res = await request.get("/manifest.json");
+    const res = await request.get("manifest.json");
     expect(res.ok()).toBeTruthy();
     const manifest = await res.json();
     expect(manifest.name || manifest.short_name).toBeTruthy();
   });
 
   test("le service worker (sw.js) est accessible", async ({ request }) => {
-    const res = await request.get("/sw.js");
+    const res = await request.get("sw.js");
     expect(res.ok()).toBeTruthy();
   });
 
   test("le formulaire de connexion rejette un identifiant invalide sans planter la page", async ({ page }) => {
-    await page.goto("/amivet-pulse.html");
+    await page.goto("./");
     await page.fill("#login-email", "test-tnr-inexistant@example.com");
     await page.fill("#login-password", "mot-de-passe-invalide-tnr");
     await page.click('#login-form button[type="submit"]');

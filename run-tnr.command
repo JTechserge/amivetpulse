@@ -24,9 +24,19 @@ LATEST=".tnr/latest.log"
     npx playwright install --with-deps chromium
   fi
 
-  echo "--- npx playwright test ---"
-  npx playwright test
-  TEST_EXIT=$?
+  echo "--- npm run build ---"
+  npm run build
+  BUILD_EXIT=$?
+  echo "build_exit=$BUILD_EXIT"
+
+  if [ "$BUILD_EXIT" -ne 0 ]; then
+    TEST_EXIT=1
+  else
+    lsof -ti:4173 | xargs kill -9 2>/dev/null || true
+    echo "--- npx playwright test ---"
+    npx playwright test
+    TEST_EXIT=$?
+  fi
 
   echo ""
   echo "=== RESUME ==="
