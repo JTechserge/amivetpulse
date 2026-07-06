@@ -2,13 +2,17 @@
   "name": "calendrier-amivet",
   "version": "1.0.0",
   "private": true,
-  "description": "TNR (smoke tests Playwright) pour la PWA Amivet Pulse",
+  "description": "Amivet PULSE — PWA planning vétérinaire",
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "test": "playwright test",
     "test:install": "playwright install --with-deps chromium"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
-    "http-server": "^14.1.1"
+    "http-server": "^14.1.1",
+    "vite": "^8.1.3"
   }
 }
