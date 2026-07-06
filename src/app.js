@@ -1079,7 +1079,7 @@ async function authSendPasswordReset(email){
   const res = await fetch(`${SUPABASE_AUTH_URL}recover`, {
     method:'POST',
     headers:{ apikey:SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
-    body:JSON.stringify({ email }),
+    body:JSON.stringify({ email, redirectTo:'https://jtechserge.github.io/amivetpulse/' }),
   });
   if(!res.ok) throw new Error('Impossible d\'envoyer l\'email de réinitialisation.');
 }
