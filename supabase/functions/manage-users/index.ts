@@ -127,12 +127,21 @@ serve(async (req) => {
       const displayName = targetProfile?.display_name || targetUserData.user.email || 'Collaborateur';
       const targetEmail = targetUserData.user.email!;
 
-      const linkType: 'invite' | 'recovery' = emailType === 'invite' ? 'invite' : 'recovery';
-      const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+      let linkType: 'invite' | 'recovery' = emailType === 'invite' ? 'invite' : 'recovery';
+      let { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
         type: linkType,
         email: targetEmail,
         options: { redirectTo: APP_URL },
       });
+      // inviteUserByEmail échoue si l'utilisateur est déjà enregistré → fallback recovery
+      if (linkError && linkType === 'invite') {
+        linkType = 'recovery';
+        ({ data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+          type: 'recovery',
+          email: targetEmail,
+          options: { redirectTo: APP_URL },
+        }));
+      }
       if (linkError) throw new Error(linkError.message);
 
       const accessLink = linkData.properties.action_link;
