@@ -631,10 +631,11 @@ function openEditUserModal(userId, users, onBack){
     box.querySelector('#edit-send-invite').disabled = true;
     box.querySelector('#edit-send-reset').disabled = true;
     try{
-      const res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
+      let res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
         method:'POST', headers:supabaseHeaders({'Content-Type':'application/json'}),
         body:JSON.stringify({ action:'send_access_email', user_id:userId, type }),
       });
+      if(res.status === 401){ await authRefreshSession(); res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, { method:'POST', headers:supabaseHeaders({'Content-Type':'application/json'}), body:JSON.stringify({ action:'send_access_email', user_id:userId, type }) }); }
       if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
       const d = await res.json();
       msgEl.style.color='var(--color-primary)';
@@ -5577,6 +5578,8 @@ function initApp(){
   applyRoleToDOM();
   loadASVRoster();
   loadPersonColors();
+  // Rafraîchir le token toutes les 45 min pour éviter les 401 après expiration
+  setInterval(()=> authRefreshSession(), 45 * 60 * 1000);
   loadData();
   initNav();
   initSettingsMenu();
