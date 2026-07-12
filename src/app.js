@@ -2955,14 +2955,9 @@ function buildWeekGrid(year, month, people){
     </div>
   </div>`;
 
-  const legendHtml = `<div class="cal-wg-person-legend">
-    ${isASV
-      ? `<span class="cal-wg-status-tag" style="background:var(--color-opening);color:var(--color-opening-text);border-color:var(--color-opening-border);">O — Ouverture</span>
-         <span class="cal-wg-status-tag" style="background:var(--color-closing);color:var(--color-closing-text);border-color:var(--color-closing-border);">F — Fermeture</span>`
-      : people.map(p=>`<span class="cal-wg-person-tag" style="background:${p.present.bg};color:${p.present.text};border-color:${p.present.border};">${p.short}</span>`).join('')
-    }
-    <span class="cal-wg-status-tag cal-wg-status-absent">Congé</span>
-    ${isASV?`<span class="cal-wg-status-tag cal-wg-status-pending">En attente</span><span class="cal-wg-status-tag" style="background:var(--color-off);color:var(--color-off-text);border-color:var(--color-off-border);">Repos</span><span class="cal-wg-status-tag" style="background:var(--color-sick);color:var(--color-sick-text);border-color:var(--color-sick-border);">🤒 Maladie</span>`:''}
+  const legendHtml = isASV ? '' : `<div class="cal-wg-person-legend">
+    ${people.map(p=>`<span class="cal-wg-person-tag" style="background:${p.present.bg};color:${p.present.text};border-color:${p.present.border};">${p.short}</span>`).join('')}
+    <span class="cal-wg-status-tag cal-wg-status-absent">Absent</span>
   </div>`;
 
   const weekBlocksHtml = weeks.map((weekDays, weekIdx)=>{
