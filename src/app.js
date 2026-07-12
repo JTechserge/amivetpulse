@@ -3694,8 +3694,8 @@ function endDrag(){
     if(dragCtx.touched.size > 0){
       saveData();
       if(dragCtx.viewKey) renderCalendarView(dragCtx.viewKey);
-      // Mode congé ASV : ouvrir le popover de motif après le drag
-      if(dragCtx.paintMode === 'conge' && dragCtx.touched.size > 0){
+      // Mode congé ou repos ASV : soumettre aux vétérinaires pour validation
+      if((dragCtx.paintMode === 'conge' || dragCtx.paintMode === 'repos') && dragCtx.touched.size > 0){
         const slotsArr = Array.from(dragCtx.touched).map(k=>{ const [iso2,pid2,slot2]=k.split('|'); return {iso:iso2,slot:slot2}; });
         const pid2 = dragCtx.personId;
         const vk = dragCtx.viewKey;
