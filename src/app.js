@@ -2675,9 +2675,9 @@ function buildWeekGrid(year, month, people){
   }
   if(week.length > 0){ while(week.length < 7) week.push(null); weeks.push(week); }
 
-  const DAY_LETTERS = ['L','M','M','J','V','SA','DI'];
+  const DAY_LETTERS = ['L','M','M','J','V','SA', isASV ? 'Alertes' : 'DI'];
   const head = `<div class="cal-wg-head"><div class="cal-wg-dh cal-wg-dh-label" aria-hidden="true"></div>${DAY_LETTERS.map((l,i)=>
-    `<div class="cal-wg-dh${i>=5?' cal-wg-dh-we':''}">${l}</div>`
+    `<div class="cal-wg-dh${i>=5?' cal-wg-dh-we':''}" ${i===6&&isASV?'title="Motif d\'alerte réglementaire"':''}>${l}</div>`
   ).join('')}</div>`;
 
   const labelColHtml = `<div class="cal-wg-label-col" aria-hidden="true">
@@ -2719,7 +2719,18 @@ function buildWeekGrid(year, month, people){
         ${toolsHtml}
       </div>`;
 
-      if(isSun) return `<div class="${dayCls}" data-date="${iso}">${dayHead}</div>`;
+      if(isSun){
+        let alertContent = '';
+        if(isASV){
+          const perPersonAlerts = people.map(person => {
+            const als = getWeekAlerts(person.id, iso);
+            if(als.length === 0) return `<div class="cal-wg-pstrip" data-person="${person.id}" style="min-height:18px;"></div>`;
+            return `<div class="cal-wg-pstrip" data-person="${person.id}" style="padding:2px 3px;min-height:18px;">${als.map(a=>`<div style="font-size:9px;color:#DC2626;font-weight:700;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHTML(a)}">${a}</div>`).join('')}</div>`;
+          }).join('');
+          if(perPersonAlerts) alertContent = `<div class="cal-wg-persons" style="pointer-events:none;">${perPersonAlerts}</div>`;
+        }
+        return `<div class="${dayCls}" data-date="${iso}">${dayHead}${alertContent}</div>`;
+      }
 
       const personStrips = people.map(person=>{
         const locked = isMonthSigned(person.id, year, month);
