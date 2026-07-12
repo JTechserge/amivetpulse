@@ -1912,7 +1912,7 @@ function renderWeekViewASV(){
     const iso=fmtISO(d);
     const cg=cellGrey(d);
     if(isSunday(d)||holidayName(iso)) return `<td class="week-ot-cell" style="background:#f8fafc;"></td>`;
-    if(!isDayPresent(d)) return `<td class="week-ot-cell" style="${cg}"><div class="week-ot-slots">${Array.from({length:LUNCH_SLOTS},()=>'<div class="week-ot-slot"></div>').join('')}</div></td>`;
+    if(!isDayPresent(d)) return `<td class="week-ot-cell" style="${cg}"></td>`;
     const otMins=getLunchOtMins(iso,pid);
     const filledSlots=Math.ceil(otMins/15);
     const ce=canEditDay(d)&&weekTool==='overtime';
@@ -1928,7 +1928,7 @@ function renderWeekViewASV(){
     const iso=fmtISO(d);
     const cg=cellGrey(d);
     if(isSunday(d)||holidayName(iso)) return `<td class="week-ot-cell" style="background:#f8fafc;"></td>`;
-    if(!isDayPresent(d)) return `<td class="week-ot-cell" style="${cg}"><div class="week-ot-slots">${Array.from({length:OT_SLOTS},()=>'<div class="week-ot-slot"></div>').join('')}</div></td>`;
+    if(!isDayPresent(d)) return `<td class="week-ot-cell" style="${cg}"></td>`;
     const otMins=getWeekOtMins(iso,pid);
     const filledSlots=Math.ceil(otMins/15);
     const ce=canEditDay(d)&&weekTool==='overtime';
