@@ -1760,18 +1760,24 @@ function openMonthPrintWindow(pids, year, month){
   const nb = daysInMonth(year, month);
   const printStyle = `
     <style>
+      @page{size:A4 portrait;margin:10mm 12mm;}
       #wk-print-tmp *{box-sizing:border-box;font-family:Arial,sans-serif;}
-      #wk-print-tmp .ph1{font-size:17px;margin-bottom:2px;font-weight:700;}
-      #wk-print-tmp .ph2{font-size:13px;font-weight:normal;color:#555;margin:0 0 16px;}
-      #wk-print-tmp table{width:100%;border-collapse:collapse;margin-bottom:18px;font-size:12px;}
-      #wk-print-tmp th{background:#F3F4F6;padding:7px 10px;text-align:left;font-size:11px;border-bottom:2px solid #D1D5DB;}
-      #wk-print-tmp td{padding:5px 10px;border-bottom:1px solid #E5E7EB;}
+      #wk-print-tmp .sheet{page-break-after:always;break-after:page;padding:0;}
+      #wk-print-tmp .sheet:last-child{page-break-after:auto;break-after:auto;}
+      #wk-print-tmp .ph1{font-size:13px;margin-bottom:1px;font-weight:700;line-height:1.2;}
+      #wk-print-tmp .ph2{font-size:10px;font-weight:normal;color:#555;margin:0 0 6px;}
+      #wk-print-tmp table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:9px;}
+      #wk-print-tmp th{background:#F3F4F6;padding:3px 6px;text-align:left;font-size:8.5px;border-bottom:1.5px solid #D1D5DB;}
+      #wk-print-tmp td{padding:2px 6px;border-bottom:1px solid #E5E7EB;line-height:1.3;}
       #wk-print-tmp tr.sat-row td{background:#FFFBEB;}
-      #wk-print-tmp .total-row td{background:#F0FDF4;font-weight:700;border-top:2px solid #D1D5DB;}
-      #wk-print-tmp .sig-box{border:1px solid #9CA3AF;border-radius:6px;padding:16px 22px;margin-top:24px;}
-      #wk-print-tmp .sig-line{border-bottom:1px solid #6B7280;height:44px;margin-top:8px;}
-      #wk-print-tmp .pfooter{font-size:10px;color:#9CA3AF;margin-top:24px;text-align:right;}
-      @media print{#wk-print-tmp .page-break{page-break-before:always;}}
+      #wk-print-tmp .total-row td{background:#F0FDF4;font-weight:700;border-top:1.5px solid #D1D5DB;font-size:9px;}
+      #wk-print-tmp .sig-box{border:1px solid #9CA3AF;border-radius:4px;padding:8px 12px;margin-top:8px;}
+      #wk-print-tmp .sig-row{display:flex;gap:20px;margin-top:6px;}
+      #wk-print-tmp .sig-col{flex:1;}
+      #wk-print-tmp .sig-lbl{font-size:8px;color:#6B7280;margin-bottom:2px;}
+      #wk-print-tmp .sig-line{border-bottom:1px solid #6B7280;height:26px;}
+      #wk-print-tmp .sig-date{font-size:8px;color:#6B7280;margin-top:6px;}
+      #wk-print-tmp .pfooter{font-size:8px;color:#9CA3AF;margin-top:6px;text-align:right;}
     </style>`;
   let allSheets = '';
   pids.forEach((pid, pi)=>{
@@ -1808,44 +1814,24 @@ function openMonthPrintWindow(pids, year, month){
       const hCell=present?formatHHMM(total):'—';
       const otCell=otH>0?`<span style="color:#16A34A;font-weight:600;">+${formatHHMM(otH)}</span>`:'—';
       const defCell=defH>0?`<span style="color:#DC2626;font-weight:600;">-${formatHHMM(defH)}</span>`:'—';
-      rows+=`<tr${isSat?' class="sat-row"':''}>
-        <td style="font-weight:600;white-space:nowrap;">${DOW_FR[dow]}&nbsp;${day}</td>
-        <td>${stateCell}</td>
-        <td style="text-align:center;">${hCell}</td>
-        <td style="text-align:center;">${otCell}</td>
-        <td style="text-align:center;">${defCell}</td>
-      </tr>`;
+      rows+=`<tr${isSat?' class="sat-row"':''}><td style="font-weight:600;white-space:nowrap;">${DOW_FR[dow]}&nbsp;${day}</td><td>${stateCell}</td><td style="text-align:center;">${hCell}</td><td style="text-align:center;">${otCell}</td><td style="text-align:center;">${defCell}</td></tr>`;
     }
     const mTH=Math.round(monthTotalH*100)/100;
     const mTOt=Math.round(monthTotalOt*100)/100;
     const mTDef=Math.round(monthTotalDef*100)/100;
-    allSheets+=`${pi>0?'<div class="page-break"></div>':''}
-    <div style="padding:28px 32px;color:#111;font-size:13px;">
+    allSheets+=`<div class="sheet">
       <div class="ph1">Planning mensuel — ${escapeHTML(p?.short||pid)}</div>
       <div class="ph2">${monthLabel}</div>
       <table>
-        <thead><tr>
-          <th style="width:60px;">Jour</th>
-          <th>Statut / Poste</th>
-          <th style="text-align:center;width:70px;">Heures</th>
-          <th style="text-align:center;width:70px;">H.supp.</th>
-          <th style="text-align:center;width:70px;">H.déf.</th>
-        </tr></thead>
-        <tbody>${rows}
-        <tr class="total-row">
-          <td colspan="2" style="font-weight:700;">Total mensuel</td>
-          <td style="text-align:center;">${formatHHMM(mTH)}</td>
-          <td style="text-align:center;color:#16A34A;">${mTOt>0?'+'+formatHHMM(mTOt):'—'}</td>
-          <td style="text-align:center;color:#DC2626;">${mTDef>0?'-'+formatHHMM(mTDef):'—'}</td>
-        </tr></tbody>
+        <thead><tr><th style="width:52px;">Jour</th><th>Statut / Poste</th><th style="text-align:center;width:58px;">Heures</th><th style="text-align:center;width:58px;">H.supp.</th><th style="text-align:center;width:58px;">H.déf.</th></tr></thead>
+        <tbody>${rows}<tr class="total-row"><td colspan="2">Total mensuel</td><td style="text-align:center;">${formatHHMM(mTH)}</td><td style="text-align:center;color:#16A34A;">${mTOt>0?'+'+formatHHMM(mTOt):'—'}</td><td style="text-align:center;color:#DC2626;">${mTDef>0?'-'+formatHHMM(mTDef):'—'}</td></tr></tbody>
       </table>
-      <div class="sig-box">
-        <strong>Lu et approuvé</strong>
-        <div style="display:flex;gap:40px;margin-top:12px;">
-          <div style="flex:1;"><div style="font-size:11px;color:#6B7280;margin-bottom:4px;">Signature ASV</div><div class="sig-line"></div></div>
-          <div style="flex:1;"><div style="font-size:11px;color:#6B7280;margin-bottom:4px;">Signature vétérinaire</div><div class="sig-line"></div></div>
+      <div class="sig-box"><strong style="font-size:9px;">Lu et approuvé</strong>
+        <div class="sig-row">
+          <div class="sig-col"><div class="sig-lbl">Signature ASV</div><div class="sig-line"></div></div>
+          <div class="sig-col"><div class="sig-lbl">Signature vétérinaire</div><div class="sig-line"></div></div>
         </div>
-        <div style="font-size:11px;color:#6B7280;margin-top:10px;">Date de remise : _________________________</div>
+        <div class="sig-date">Date de remise : _________________________</div>
       </div>
       <p class="pfooter">Imprimé le ${printDate} — Amivet PULSE</p>
     </div>`;

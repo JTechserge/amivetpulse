@@ -735,7 +735,7 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 #wk-print-tmp{display:none;}
 @media print{
   body.is-printing>*:not(#wk-print-tmp){display:none!important;}
-  #wk-print-tmp{display:block!important;position:fixed;inset:0;z-index:9999;background:#fff;}
+  #wk-print-tmp{display:block!important;position:static;width:100%;background:#fff;}
 }
 .week-time-row{
   display:flex;align-items:center;justify-content:center;gap:2px;
