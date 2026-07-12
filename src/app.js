@@ -1969,7 +1969,9 @@ function renderWeekViewASV(){
     snapshotBeforeChange();
     setTE(iso,pid2,s,minsToTimeStr(Math.max(timeToMins(pS),startMin)));
     setTE(iso,pid2,ef,minsToTimeStr(Math.min(timeToMins(pE),endMin)));
-    syncTEToMonthly(iso,pid2); saveData(); renderWeekViewASV();
+    syncTEToMonthly(iso,pid2); saveData();
+    if(blockIfOver42h(pid2, iso)){ renderWeekViewASV(); return; }
+    renderWeekViewASV();
   }
   function wkDragBlock(el,session,sm,em){
     const {pS,pE,cls}=WEEK_SESSIONS[session];
@@ -2002,7 +2004,9 @@ function renderWeekViewASV(){
     const cur=getTE(adjIso,adjPid,adjF)||(adjF.endsWith('s')?min:max);
     snapshotBeforeChange();
     setTE(adjIso,adjPid,adjF,adjTime(cur,parseInt(adjD,10),min,max));
-    syncTEToMonthly(adjIso,adjPid); saveData(); renderWeekViewASV();
+    syncTEToMonthly(adjIso,adjPid); saveData();
+    if(blockIfOver42h(adjPid, adjIso)){ renderWeekViewASV(); return; }
+    renderWeekViewASV();
   });
 
   container.querySelectorAll('.week-abs-chk').forEach(chk=>{
@@ -2090,7 +2094,9 @@ function openWeekTimePopover(iso, pid){
     ['ms','me','as','ae','ls','le'].forEach(f=>{ const v=box.querySelector(`#te-${f}`).value; if(v) DATA.slots[teKey(iso,pid,f)]=v; else delete DATA.slots[teKey(iso,pid,f)]; });
     syncTEToMonthly(iso,pid);
     setDayNote(iso,pid,box.querySelector('#te-note').value.trim());
-    saveData(); close(); renderWeekViewASV();
+    saveData(); close();
+    if(blockIfOver42h(pid, iso)){ renderWeekViewASV(); return; }
+    renderWeekViewASV();
   };
   box.querySelector('#te-note').focus();
 }
@@ -2430,6 +2436,74 @@ function propagateLabelAcrossSunday(personId, slots, label){
 // Construit les <td> de la ligne d'une personne, en fusionnant les demi-journées
 // d'absence contiguës (même motif, et pour les ASV même statut de demande de congé) en
 // une seule cellule.
+// Calcule les heures totales travaillées sur la semaine (lun–sam) contenant mondayDate.
+function computeWeekTotalHours(pid, mondayDate){
+  let h = 0;
+  for(let d = 0; d < 6; d++){
+    const dt = new Date(mondayDate); dt.setDate(dt.getDate() + d);
+    if(isSunday(dt)) continue;
+    const iso = fmtISO(dt);
+    if(hasTE(iso, pid)){
+      h += calcDayTE(iso, pid) + calcLunchTE(iso, pid);
+    } else {
+      if(getSlotState(iso, pid, 'M')  === 'present') h += HALFDAY_HOURS;
+      if(getSlotState(iso, pid, 'AM') === 'present') h += HALFDAY_HOURS;
+    }
+    h += getOvertimeHours(iso, pid);
+  }
+  return Math.round(h * 100) / 100;
+}
+
+// Après une saisie : vérifie le plafond 42h. Si dépassé, restaure le snapshot et affiche un toast.
+// Renvoie true si la saisie a été bloquée.
+function blockIfOver42h(pid, isoDate){
+  if(personOf(pid)?.saturdayOnly) return false;
+  const mon = getWeekMondayDate(new Date(isoDate + 'T00:00:00'));
+  const weekH = computeWeekTotalHours(pid, mon);
+  if(weekH > WEEKLY_MAX_HOURS){
+    if(UNDO_STACK.length > 0){ DATA.slots = JSON.parse(UNDO_STACK.pop()); updateUndoButtons(); }
+    saveData(false);
+    showToast(`Plafond 42h dépassé (${formatHHMM(weekH)}) — saisie annulée`, '🚫');
+    return true;
+  }
+  return false;
+}
+
+// Calcule les alertes réglementaires pour la semaine se terminant par le dimanche passé.
+// Renvoie un tableau de chaînes (vide = tout va bien).
+function getWeekAlerts(personId, sundayISO){
+  if(!isASVPerson(personId)) return [];
+  const p = personOf(personId);
+  if(!p) return [];
+  const sun = new Date(sundayISO + 'T00:00:00');
+  const mon = getWeekMondayDate(sun);
+  let workDays = 0, approvedLeaveDays = 0;
+  for(let d = 0; d < 6; d++){
+    const dt = new Date(mon); dt.setDate(dt.getDate() + d);
+    const iso = fmtISO(dt);
+    const mS = getSlotState(iso, personId, 'M'), amS = getSlotState(iso, personId, 'AM');
+    if(mS === 'present' || amS === 'present'){ workDays++; continue; }
+    const mD = mS === 'absent' ? getLeaveDecision(iso, personId, 'M') : null;
+    const aD = amS === 'absent' ? getLeaveDecision(iso, personId, 'AM') : null;
+    if(mD === 'approved' || aD === 'approved') approvedLeaveDays++;
+  }
+  const alerts = [];
+  // Règle jours travaillés
+  if(p.saturdayOnly){
+    const satIso = fmtISO(new Date(mon.getTime() + 5 * 86400000));
+    const satOk = getSlotState(satIso, personId, 'M') === 'present' || getSlotState(satIso, personId, 'AM') === 'present';
+    if(!satOk) alerts.push('Samedi non travaillé');
+  } else {
+    const expected = p.timeFraction >= 1 ? 4 : 3;
+    const required = Math.max(0, expected - approvedLeaveDays);
+    if(workDays < required) alerts.push(`${workDays}j / ${required}j attendus`);
+  }
+  // Règle 42h
+  const weekH = computeWeekTotalHours(personId, mon);
+  if(!p.saturdayOnly && weekH >= WEEKLY_MAX_HOURS) alerts.push(`${formatHHMM(weekH)} ≥ 42h`);
+  return alerts;
+}
+
 function buildPersonRowCells(year, month, days, personId){
   let html = '';
   let run = null;
@@ -2482,7 +2556,17 @@ function buildPersonRowCells(year, month, days, personId){
         }
       }
       flush();
-      html += `<td class="cal-cell sunday-cell" colspan="2" aria-hidden="true"></td>`;
+      if(isASVPerson(personId)){
+        const alerts = getWeekAlerts(personId, iso);
+        if(alerts.length > 0){
+          const alertHtml = alerts.map(a => `<div style="font-size:9px;color:#DC2626;font-weight:700;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a}</div>`).join('');
+          html += `<td class="cal-cell sunday-cell" colspan="2" title="${escapeHTML(alerts.join(' · '))}" style="vertical-align:middle;padding:2px 3px;"><div style="display:flex;flex-direction:column;gap:1px;align-items:center;">${alertHtml}</div></td>`;
+        } else {
+          html += `<td class="cal-cell sunday-cell" colspan="2" aria-hidden="true"></td>`;
+        }
+      } else {
+        html += `<td class="cal-cell sunday-cell" colspan="2" aria-hidden="true"></td>`;
+      }
       weeklyOT = 0;
       return;
     }
@@ -2784,7 +2868,7 @@ function buildLegendColors(people = PEOPLE){
         <div class="legend-item"><span class="legend-swatch" style="background:var(--color-leave-rejected);border:1.5px solid var(--color-leave-rejected-border)"></span>Demande refusée</div>
       ` : ''}
       <div class="legend-item"><span class="legend-swatch" style="background:var(--color-holiday);border:1.5px solid var(--color-holiday)"></span>Jour férié</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:var(--color-sunday);border:1.5px solid var(--color-border)"></span>Dimanche (fermé)</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--color-sunday);border:1.5px solid var(--color-border)"></span>${hasASV ? 'Dimanche — Motif d\'alerte' : 'Dimanche (fermé)'}</div>
     </div>
   `;
 }
@@ -4261,7 +4345,7 @@ function renderDashboard(){
         <button class="sub-tab ${dashSubState.tab==='stats'?'active':''}" data-sub="stats">🩺 Suivi vétérinaires</button>
         <button class="sub-tab ${dashSubState.tab==='hours'?'active':''}" data-sub="hours">🐾 Suivi ASV</button>
         <button class="sub-tab ${dashSubState.tab==='medical'?'active':''}" data-sub="medical">🏥 Visites médicales</button>
-        <button class="sub-tab ${dashSubState.tab==='requests'?'active':''}" data-sub="requests">📋 Demandes de congé${pendingCount>0?` <span class="nav-badge">${pendingCount}</span>`:''}</button>
+        <button class="sub-tab ${dashSubState.tab==='requests'?'active':''}" data-sub="requests">📋 Demandes de congé et de modification${pendingCount>0?` <span class="nav-badge">${pendingCount}</span>`:''}</button>
         <button class="sub-tab ${dashSubState.tab==='signatures'?'active':''}" data-sub="signatures">✍️ Feuilles signées</button>
         <button class="sub-tab ${dashSubState.tab==='interviews'?'active':''}" data-sub="interviews">📝 Entretiens annuels</button>
       </div>
@@ -4681,6 +4765,11 @@ function buildASVModulationCard(year){
       const dc   = Math.abs(diff) < 20 ? '#16A34A' : diff > 0 ? '#F59E0B' : '#EA580C';
       estim = `<div style="display:flex;justify-content:flex-end;margin-top:3px;"><span style="font-size:11px;color:${dc};">proj. fin d'année : ${formatNum(proj)}h (${diff >= 0 ? '+' : ''}${formatNum(diff)}h vs cible)</span></div>`;
     }
+    const overNotif = (worked > target && target > 0)
+      ? `<div style="margin-top:5px;padding:5px 8px;background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;font-size:11px;color:#DC2626;display:flex;align-items:center;gap:6px;">
+          <span style="flex-shrink:0;">⚠️</span><span>Heures dépassant la modulation — à régulariser sur le bulletin de <strong>décembre / janvier</strong></span>
+        </div>`
+      : '';
     return `<div style="margin-bottom:16px;">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
         <span style="width:8px;height:8px;border-radius:2px;background:${p.color};display:inline-block;flex-shrink:0;"></span>
@@ -4692,7 +4781,7 @@ function buildASVModulationCard(year){
       <div style="background:var(--color-border);border-radius:99px;height:8px;overflow:hidden;">
         <div style="width:${pct}%;background:${barC};height:100%;border-radius:99px;"></div>
       </div>
-      ${estim}
+      ${estim}${overNotif}
     </div>`;
   }).join('');
 
