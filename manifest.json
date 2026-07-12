@@ -1,0 +1,52 @@
+{
+  "name": "Amivet Pulse RH",
+  "short_name": "Amivet RH",
+  "description": "Gestion RH de la clinique vétérinaire Amivet : plannings, congés, visites médicales, entretiens et annonces.",
+  "lang": "fr",
+  "start_url": "./amivet-pulse.html?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#0F766E",
+  "background_color": "#F0FDF9",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "./icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nouveau congé",
+      "short_name": "Congé",
+      "url": "./amivet-pulse.html?action=new-leave",
+      "icons": [{ "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Planning semaine",
+      "short_name": "Semaine",
+      "url": "./amivet-pulse.html?action=week-view",
+      "icons": [{ "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

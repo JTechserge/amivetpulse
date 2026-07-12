@@ -1,0 +1,9 @@
+.DS_Store
+dist/
+amivet-planning.backup-*.html
+.claude/
+supabase/.temp/
+node_modules/
+.tnr/
+playwright-report/
+test-results/

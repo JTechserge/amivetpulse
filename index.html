@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Amivet PULSE — Clinique Vétérinaire</title>
+<link rel="manifest" href="/amivetpulse/manifest.json">
+<meta name="theme-color" content="#0F766E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Amivet RH">
+<link rel="apple-touch-icon" href="/amivetpulse/icons/apple-touch-icon.png">
+<link rel="apple-touch-startup-image" href="/amivetpulse/icons/splash/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="/amivetpulse/icons/splash/splash-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="/amivetpulse/icons/splash/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="/amivetpulse/icons/splash/splash-1242x2688.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="/amivetpulse/icons/splash/splash-828x1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)">
+<link rel="apple-touch-startup-image" href="/amivetpulse/icons/splash/splash-2048x2732.png" media="(min-device-width: 1024px) and (min-device-height: 1366px)">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
+  <script type="module" crossorigin src="/amivetpulse/assets/index-BNzgDSpK.js"></script>
+  <link rel="stylesheet" crossorigin href="/amivetpulse/assets/index-BjFsvqBx.css">
+</head>
+<body>
+<div id="pwa-update-banner"></div>
+<div id="pwa-offline-banner"></div>
+<div id="pwa-ios-install-tip"></div>
+<div id="pwa-android-install-banner"></div>
+<div id="login-overlay">
+  <div class="login-card">
+    <img src="/amivetpulse/logo.png" class="login-logo" alt="Amivet">
+    <h1>Amivet PULSE</h1>
+    <p class="login-sub">Clinique Vétérinaire — Dr. Pelois &amp; Dr. Maquinay</p>
+    <div id="login-content"></div>
+  </div>
+</div>
+<div id="app">
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="app-header-inner">
+      <div class="brand">
+        <img class="brand-logo" src="/amivetpulse/logo.png" alt="Logo Clinique Amivet">
+        <div>
+          <div class="brand-title">Amivet PULSE</div>
+          <div class="brand-sub">Clinique Vétérinaire — Dr. Pelois &amp; Dr. Maquinay</div>
+        </div>
+      </div>
+
+      <nav class="main-nav" id="main-nav" aria-label="Navigation principale">
+        <button class="nav-tab" data-view="dashboard">📊 Tableau de bord<span id="dash-nav-badge"></span></button>
+        <button class="nav-tab active" data-view="vets" aria-current="page">🩺 Vétérinaires</button>
+        <button class="nav-tab" data-view="asv">🐾 ASV</button>
+        <button class="nav-tab" data-view="annonces">📣 Annonces<span id="annonces-nav-badge"></span></button>
+      </nav>
+
+      <div class="header-actions">
+        <div class="settings-wrap">
+          <button class="btn-icon" id="settings-toggle" aria-label="Ouvrir le menu réglages" aria-haspopup="true" aria-expanded="false">⚙️</button>
+          <div class="settings-menu" id="settings-menu" role="menu"></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <div id="impersonation-banner" class="hidden"></div>
+  <main class="app-main" id="app-main">
+
+    <section id="view-vets" class="view-section">
+      <div class="sub-nav" id="vets-sub-nav">
+        <button class="sub-tab active" data-sub="calendar">📅 Calendrier mensuel</button>
+        <button class="sub-tab" data-sub="annual">🗓️ Vue Annuelle</button>
+        <button class="sub-tab" data-sub="forecast">🔮 Prévisionnel</button>
+      </div>
+      <div id="vets-sub-calendar" class="sub-page" data-cal-view="vets-current"></div>
+      <div id="vets-sub-annual" class="sub-page hidden"></div>
+      <div id="vets-sub-forecast" class="sub-page hidden" data-cal-view="vets-forecast"></div>
+    </section>
+
+    <section id="view-asv" class="view-section hidden">
+      <div class="sub-nav" id="asv-sub-nav">
+        <button class="sub-tab" data-sub="week">⏱️ Hebdomadaire</button>
+        <button class="sub-tab active" data-sub="calendar">📅 Calendrier mensuel</button>
+        <button class="sub-tab" data-sub="annual">🗓️ Vue Annuelle</button>
+        <button class="sub-tab" data-sub="forecast">🔮 Prévisionnel</button>
+      </div>
+      <div id="asv-sub-calendar" class="sub-page" data-cal-view="asv-current"></div>
+      <div id="asv-sub-annual" class="sub-page hidden"></div>
+      <div id="asv-sub-forecast" class="sub-page hidden" data-cal-view="asv-forecast"></div>
+      <div id="asv-sub-week" class="sub-page hidden"></div>
+    </section>
+
+    <section id="view-dashboard" class="view-section hidden"></section>
+    <section id="view-annonces" class="view-section hidden"></section>
+
+  </main>
+</div>
+
+<!-- Popover absence / commentaire -->
+<div class="popover-backdrop" id="popover-backdrop">
+  <div class="popover-box" id="popover-box"></div>
+</div>
+
+<!-- Sidebar édition colonne -->
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+<aside class="day-sidebar" id="day-sidebar" aria-label="Édition rapide de la journée"></aside>
+
+<!-- Modale confirmation -->
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal-box" id="modal-box"></div>
+</div>
+
+<!-- Toasts -->
+<div id="toast-container" aria-live="polite"></div>
+</body>
+</html>

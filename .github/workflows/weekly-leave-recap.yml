@@ -1,0 +1,21 @@
+name: Récapitulatif des congés ASV en attente
+
+on:
+  schedule:
+    # Tous les samedis à 14h30 UTC = 16h30 heure de Paris (CEST, UTC+2).
+    - cron: '30 14 * * 6'
+  workflow_dispatch: {} # bouton "Run workflow" dans l'onglet Actions, pour tester manuellement
+
+jobs:
+  send-recap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Envoyer le récapitulatif par email
+        env:
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/send-weekly-recap.mjs
