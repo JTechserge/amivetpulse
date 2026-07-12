@@ -2743,14 +2743,10 @@ function getWeekAlerts(personId, sundayISO){
       const who = present.length ? present.map(q=>q.short).join('+') : '0';
       staffIssues.push(`${DAY_MINI[d]}:${present.length}ASV${present.length>0&&present.length<2?' ('+who+')':''}`);
     }
-    // Même poste les jours de semaine (pas samedi) — seulement si le poste est explicitement défini
+    // Même poste les jours de semaine (pas samedi) — uniquement via shiftType stocké (pas TE)
     if(present.length === 2 && dt.getDay() !== 6){
-      const explicitShift = q => {
-        const ms = getTE(iso2, q.id, 'ms');
-        if(ms) return ms <= '08:45' ? 'O' : 'F';
-        return DATA.slots[shiftTypeKey(iso2, q.id)] || null; // null = non défini
-      };
-      const s0 = explicitShift(present[0]), s1 = explicitShift(present[1]);
+      const s0 = DATA.slots[shiftTypeKey(iso2, present[0].id)] || null;
+      const s1 = DATA.slots[shiftTypeKey(iso2, present[1].id)] || null;
       if(s0 && s1 && s0 === s1){
         sameShiftIssues.push(`${DAY_MINI[d]}:2×${s0==='O'?'Ouv':'Fer'} (${present.map(q=>q.short).join('+')})`);
       }
