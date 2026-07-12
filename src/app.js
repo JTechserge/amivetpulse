@@ -1363,6 +1363,19 @@ function setLeaveDecisionComment(isoDate, personId, slot, text){
   const key = decisionCommentKey(isoDate,personId,slot);
   if(text) DATA.slots[key] = text; else delete DATA.slots[key];
 }
+// Modifications urgentes dans les 14 jours à venir (vue mensuelle ASV uniquement)
+function changeKey(iso, pid, slot){ return `${iso}_${pid}_${slot}_chg`; }
+function getChangeDecision(iso, pid, slot){ return DATA.slots[changeKey(iso,pid,slot)] || null; }
+function setChangeDecision(iso, pid, slot, dec){
+  const k = changeKey(iso,pid,slot);
+  if(dec) DATA.slots[k] = dec; else delete DATA.slots[k];
+}
+// Retourne true si la date ISO est dans les 14 prochains jours (aujourd'hui inclus)
+function isWithinNextTwoWeeks(iso){
+  const d = new Date(iso+'T00:00:00');
+  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  return d.getTime() >= t0 && d.getTime() <= t0 + 14*24*60*60*1000;
+}
 
 // Heures supplémentaires ASV — un nombre d'heures par personne et par jour (pas par
 // demi-journée : une ASV peut faire 1h30 de plus sans que ça corresponde à un créneau M/AM).
@@ -2253,6 +2266,7 @@ function cellRenderInfo(iso, personId, slot){
   const state = getSlotState(iso, personId, slot);
   const label = state === 'absent' ? getSlotLabel(iso, personId, slot) : '';
   const decision = state === 'absent' && isASVPerson(personId) ? (getLeaveDecision(iso, personId, slot) || 'pending') : null;
+  const changeDecision = isASVPerson(personId) ? getChangeDecision(iso, personId, slot) : null;
   let style = '';
   let html = '';
   let title = label;
@@ -2307,7 +2321,17 @@ function cellRenderInfo(iso, personId, slot){
   } else {
     style = `border-left:3px solid ${hexToRgba(person.color,0.4)};`;
   }
-  return { state, label, decision, style, html, title, stateClass };
+  // Surcharge violet : modification urgente en attente de validation vétérinaire
+  if(changeDecision === 'pending'){
+    stateClass = 'change-pending';
+    html = html || (state === 'present' ? `<span style="font-size:7.5px;font-weight:800;">${getShiftType(iso,personId)==='F'?'F':'O'}</span>` : '<span class="cell-mark">●</span>');
+    title = (title ? title+' — ' : '')+'Modification en attente d\'approbation';
+  } else if(changeDecision === 'rejected'){
+    stateClass = 'change-rejected';
+    html = (html||'') + '<span class="cell-mark" style="font-size:8px;">⚠️</span>';
+    title = (title ? title+' — ' : '')+'Modification refusée — contacter un vétérinaire';
+  }
+  return { state, label, decision, changeDecision, style, html, title, stateClass };
 }
 function cellAriaLabel(iso, personId, slot){
   const person = personOf(personId);
@@ -3568,6 +3592,7 @@ function applyPaint(cell, value){
   } else if(dragCtx.paintMode === 'repos'){
     setSlotState(iso, personId, slot, 'absent');
     setSlotLabel(iso, personId, slot, 'Repos planifié');
+    setLeaveDecision(iso, personId, slot, null); // repos ne requiert pas d'approbation
   } else if(dragCtx.paintMode === 'maladie'){
     setSlotState(iso, personId, slot, 'absent');
     setSlotLabel(iso, personId, slot, 'Arrêt maladie');
@@ -3575,8 +3600,13 @@ function applyPaint(cell, value){
     setSlotState(iso, personId, slot, 'empty');
     setSlotLabel(iso, personId, slot, '');
     delete DATA.slots[shiftTypeKey(iso, personId)];
+    setChangeDecision(iso, personId, slot, null); // effacement = plus de demande d'approbation
   } else {
     setSlotState(iso, personId, slot, value);
+  }
+  // Vue mensuelle ASV : toute modification dans les 14 prochains jours → approbation vétérinaire
+  if(dragCtx.paintMode && dragCtx.paintMode !== 'erase' && isASVPerson(personId) && isWithinNextTwoWeeks(iso)){
+    setChangeDecision(iso, personId, slot, 'pending');
   }
   updateHalfDOM(cell);
 }
@@ -4161,6 +4191,8 @@ function signedHHMM(h){
 // bord — sur les deux années éditables (courante + prévisionnelle). Une demande qui
 // chevauche un dimanche apparaît comme deux groupes distincts (limitation acceptée : ça
 // n'affecte que l'affichage, l'approbation/rejet reste correcte groupe par groupe).
+// Repos planifié ne nécessite pas d'approbation vétérinaire → exclu des demandes de congé
+function isReposLabel(label){ const lc=(label||'').toLowerCase().trim(); return lc==='repos'||lc==='repos planifié'||lc==='non travaillé'; }
 function collectAllLeaveGroups(){
   const groups = [];
   const years = [getCurrentYear(), getCurrentYear()+1];
@@ -4174,6 +4206,7 @@ function collectAllLeaveGroups(){
           SLOTS.forEach(slot=>{
             if(getSlotState(iso, person.id, slot) !== 'absent'){ current = null; return; }
             const label = getSlotLabel(iso, person.id, slot);
+            if(isReposLabel(label)){ current = null; return; } // repos sans approbation
             const status = getLeaveDecision(iso, person.id, slot) || 'pending';
             const comment = getLeaveDecisionComment(iso, person.id, slot);
             if(current && current.label === label && current.status === status && current.comment === comment){
@@ -4189,11 +4222,37 @@ function collectAllLeaveGroups(){
   });
   return groups;
 }
+function collectAllChangeRequests(){
+  const results = [];
+  const years = [getCurrentYear(), getCurrentYear()+1];
+  ASV_PEOPLE.forEach(person=>{
+    years.forEach(year=>{
+      for(let month=0; month<12; month++){
+        const nbDays = daysInMonth(year, month);
+        for(let day=1; day<=nbDays; day++){
+          const iso = fmtISO(new Date(year, month, day));
+          SLOTS.forEach(slot=>{
+            const dec = getChangeDecision(iso, person.id, slot);
+            if(!dec) return;
+            const state = getSlotState(iso, person.id, slot);
+            const label = getSlotLabel(iso, person.id, slot);
+            results.push({ personId: person.id, iso, slot, state, label, status: dec });
+          });
+        }
+      }
+    });
+  });
+  return results.sort((a,b)=>a.iso.localeCompare(b.iso));
+}
 function sortLeaveGroups(groups){
   const order = { pending:0, approved:1, rejected:2 };
   return groups.slice().sort((a,b)=> (order[a.status]-order[b.status]) || a.slots[0].iso.localeCompare(b.slots[0].iso));
 }
-function countPendingLeaveRequests(){ return collectAllLeaveGroups().filter(g=> g.status === 'pending').length; }
+function countPendingLeaveRequests(){
+  const leavePending = collectAllLeaveGroups().filter(g=> g.status==='pending').length;
+  const changePending = collectAllChangeRequests().filter(r=> r.status==='pending').length;
+  return leavePending + changePending;
+}
 function decideLeaveGroup(group, decision, comment){
   snapshotBeforeChange();
   group.slots.forEach(({iso,slot})=>{
@@ -5264,9 +5323,44 @@ function renderDashboardHours(){
 function renderLeaveRequestsPage(){
   const container = document.getElementById('dash-sub-requests');
   const groups = sortLeaveGroups(collectAllLeaveGroups());
+  const changeReqs = collectAllChangeRequests();
   const statusLabel = { pending:'En attente', approved:'Approuvée', rejected:'Refusée' };
   const statusClass = { pending:'leave-pending', approved:'leave-approved', rejected:'leave-rejected' };
-  const rows = groups.map((g, idx)=>{
+
+  // ── Section : modifications urgentes (2 semaines) ──
+  const stateLabel = (r)=>{
+    if(r.state==='present'){
+      const sh = getShiftType(r.iso, r.personId);
+      return sh==='F' ? 'Poste Fermeture' : 'Poste Ouverture';
+    }
+    if(r.state==='absent') return r.label || 'Absence';
+    return r.state;
+  };
+  const chgStatusClass = { pending:'change-pending', rejected:'change-rejected' };
+  const chgStatusLabel = { pending:'En attente', rejected:'Refusée' };
+  const changeRows = changeReqs.map((r, ci)=>{
+    const person = personOf(r.personId);
+    const dateStr = `${formatFR(r.iso)} (${SLOT_LABELS[r.slot]})`;
+    const actions = r.status === 'pending' ? `
+      <div class="flex gap-2" style="margin-top:8px;">
+        <button class="btn btn-sm btn-primary" data-chg-approve="${ci}">✓ Approuver</button>
+        <button class="btn btn-sm btn-danger" data-chg-reject="${ci}">✕ Refuser</button>
+      </div>` : '';
+    return `
+      <div class="card" data-chg-group="${ci}" style="margin-bottom:10px;border-left:4px solid var(--color-change-pending);">
+        <div class="flex" style="justify-content:space-between;align-items:flex-start;gap:10px;">
+          <div>
+            <strong style="color:var(--color-change-pending);">🔔 ${person.short}</strong> — ${dateStr}
+            <p class="text-muted" style="font-size:12px;margin-top:2px;">${escapeHTML(stateLabel(r))}</p>
+          </div>
+          <span class="leave-status-badge ${chgStatusClass[r.status]||'leave-pending'}">${chgStatusLabel[r.status]||r.status}</span>
+        </div>
+        ${actions}
+      </div>`;
+  }).join('');
+
+  // ── Section : demandes de congé classiques ──
+  const leaveRows = groups.map((g, idx)=>{
     const person = personOf(g.personId);
     const first = g.slots[0], last = g.slots[g.slots.length-1];
     const range = first.iso === last.iso
@@ -5296,25 +5390,48 @@ function renderLeaveRequestsPage(){
           <span class="leave-status-badge ${statusClass[g.status]}">${statusLabel[g.status]}</span>
         </div>
         ${actions}
-      </div>
-    `;
+      </div>`;
   }).join('');
+
   container.innerHTML = `
-    <p class="section-desc" style="margin-bottom:14px;">Toutes les demandes de congé soumises par les ASV, sur ${getCurrentYear()} et ${getCurrentYear()+1}.</p>
-    ${groups.length ? rows : `<p class="text-muted">Aucune demande de congé pour le moment.</p>`}
+    ${changeReqs.length ? `
+      <p class="section-desc" style="margin-bottom:10px;font-weight:600;color:var(--color-change-pending);">🔔 Modifications urgentes (dans les 2 semaines)</p>
+      ${changeRows}
+      <hr style="margin:16px 0;border:none;border-top:1px solid var(--color-border);">
+    ` : ''}
+    <p class="section-desc" style="margin-bottom:14px;">Demandes de congé ASV — ${getCurrentYear()} et ${getCurrentYear()+1}.</p>
+    ${groups.length ? leaveRows : `<p class="text-muted">Aucune demande de congé pour le moment.</p>`}
   `;
+
+  // Handlers : modifications urgentes
+  container.querySelectorAll('[data-chg-approve]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const r = changeReqs[parseInt(btn.dataset.chgApprove,10)];
+      snapshotBeforeChange();
+      setChangeDecision(r.iso, r.personId, r.slot, null); // approuvé = flag retiré
+      saveData();
+      renderDashboard();
+      showToast('Modification approuvée', '✓');
+    });
+  });
+  container.querySelectorAll('[data-chg-reject]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const r = changeReqs[parseInt(btn.dataset.chgReject,10)];
+      snapshotBeforeChange();
+      setChangeDecision(r.iso, r.personId, r.slot, 'rejected');
+      saveData();
+      renderDashboard();
+      showToast('Modification refusée', '✕');
+    });
+  });
+
+  // Handlers : demandes de congé classiques
   container.querySelectorAll('[data-approve]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const g = groups[parseInt(btn.dataset.approve,10)];
       decideLeaveGroup(g, 'approved', '');
       if(typeof triggerPushNotification === 'function'){
-        triggerPushNotification({
-          type: 'leave_approved',
-          title: 'Demande de congé approuvée',
-          body: `Votre demande du ${formatFR(g.slots[0].iso)} a été approuvée.`,
-          targetUsers: [g.personId],
-          data: { type:'leave_approved' },
-        });
+        triggerPushNotification({ type:'leave_approved', title:'Demande de congé approuvée', body:`Votre demande du ${formatFR(g.slots[0].iso)} a été approuvée.`, targetUsers:[g.personId], data:{type:'leave_approved'} });
       }
       renderDashboard();
       showToast('Demande approuvée', '✓');
@@ -5338,13 +5455,7 @@ function renderLeaveRequestsPage(){
       const g = groups[parseInt(idx,10)];
       decideLeaveGroup(g, 'rejected', comment);
       if(typeof triggerPushNotification === 'function'){
-        triggerPushNotification({
-          type: 'leave_rejected',
-          title: 'Demande de congé refusée',
-          body: `Votre demande du ${formatFR(g.slots[0].iso)} a été refusée — ${comment}`,
-          targetUsers: [g.personId],
-          data: { type:'leave_rejected' },
-        });
+        triggerPushNotification({ type:'leave_rejected', title:'Demande de congé refusée', body:`Votre demande du ${formatFR(g.slots[0].iso)} a été refusée — ${comment}`, targetUsers:[g.personId], data:{type:'leave_rejected'} });
       }
       renderDashboard();
       showToast('Demande refusée', '✕');

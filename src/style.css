@@ -28,6 +28,12 @@
   --color-leave-rejected:#E2E8F0;
   --color-leave-rejected-text:#475569;
   --color-leave-rejected-border:#CBD5E1;
+  --color-change-pending:#6D28D9;
+  --color-change-pending-text:#FFFFFF;
+  --color-change-pending-border:#5B21B6;
+  --color-change-rejected:#FEF3C7;
+  --color-change-rejected-text:#78350F;
+  --color-change-rejected-border:#F59E0B;
   --color-medical:#BAE6FD;
   --color-medical-text:#0C4A6E;
   --color-medical-border:#38BDF8;
@@ -320,6 +326,10 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-cell.state-leave-pending:hover{filter:brightness(0.96);}
 .cal-cell.state-leave-rejected{background:var(--color-leave-rejected);color:var(--color-leave-rejected-text);border-color:var(--color-leave-rejected-border);font-size:7.5px;}
 .cal-cell.state-leave-rejected:hover{filter:brightness(0.96);}
+.cal-cell.state-change-pending{background:var(--color-change-pending);color:var(--color-change-pending-text);border-color:var(--color-change-pending-border);}
+.cal-cell.state-change-pending:hover{filter:brightness(1.1);}
+.cal-cell.state-change-rejected{background:var(--color-change-rejected);color:var(--color-change-rejected-text);border-color:var(--color-change-rejected-border);}
+.cal-cell.state-change-rejected:hover{filter:brightness(0.96);}
 .cal-cell.state-sick{background:var(--color-sick);color:var(--color-sick-text);border-color:var(--color-sick-border);}
 .cal-cell.state-sick:hover{filter:brightness(0.96);}
 .cal-cell.state-off{background:var(--color-off);color:var(--color-off-text);border-color:var(--color-off-border);}
@@ -394,6 +404,8 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-wg-half-absent,.cal-wg-half-leave-approved{background:var(--color-absent);color:var(--color-absent-text);}
 .cal-wg-half-leave-pending{background:var(--color-leave-pending);color:var(--color-leave-pending-text);}
 .cal-wg-half-leave-rejected{background:var(--color-leave-rejected);color:var(--color-leave-rejected-text);font-size:6.5px;}
+.cal-wg-half-change-pending{background:var(--color-change-pending);color:var(--color-change-pending-text);}
+.cal-wg-half-change-rejected{background:var(--color-change-rejected);color:var(--color-change-rejected-text);}
 .cal-wg-half-medical{background:var(--color-medical);color:var(--color-medical-text);}
 .cal-wg-half-sick{background:var(--color-sick);color:var(--color-sick-text);}
 .cal-wg-half-off{background:var(--color-off);color:var(--color-off-text);}
