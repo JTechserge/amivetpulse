@@ -1979,7 +1979,7 @@ function renderWeekViewASV(){
     if(!w) return `<span style="color:var(--color-text-muted);">—</span>`;
     const delta=Math.round((w-getDayStd(d))*4)/4;
     if(delta>=0) return `<span style="color:var(--color-text-muted);">—</span>`;
-    return `<span style="color:#DC2626;font-weight:700;">${formatHHMM(delta)}</span>`;
+    return `<span style="color:#DC2626;font-weight:700;">-${formatHHMM(Math.abs(delta))}</span>`;
   })).join('')}</tr>`;
 
   const absRow=`<tr><td class="week-footer-label">Absent</td>${days.map(d=>footerCell(d,iso=>{
@@ -2348,7 +2348,16 @@ function cellRenderInfo(iso, personId, slot){
     style = `background:${person.present.bg};border-color:${person.present.border};color:${person.present.text};`;
     html = `<span class="cell-mark">✓</span>`;
   } else if(state === 'absent'){
-    if(decision === 'pending'){
+    const lc = label.toLowerCase().trim();
+    if(lc === 'maladie' || lc === 'arrêt maladie' || lc === 'arrêt'){
+      stateClass = 'sick';
+      html = `<span class="cell-mark">🤒</span>${label ? ' '+escapeHTML(label) : ''}`;
+      title = `Arrêt maladie${label ? ' — '+label : ''}`;
+    } else if(lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé'){
+      stateClass = 'off';
+      html = label ? escapeHTML(label) : '<span class="cell-mark">—</span>';
+      title = 'Repos planifié (hors congé)';
+    } else if(decision === 'pending'){
       stateClass = 'leave-pending';
       html = `${label ? escapeHTML(label)+' ' : ''}<span class="cell-mark">⏳</span>`;
       title = `${label ? label+' — ' : ''}En attente de validation`;
@@ -2376,11 +2385,13 @@ function cellRenderInfo(iso, personId, slot){
 }
 function cellAriaLabel(iso, personId, slot){
   const person = personOf(personId);
-  const { state, label, decision } = cellRenderInfo(iso, personId, slot);
+  const { state, label, decision, stateClass } = cellRenderInfo(iso, personId, slot);
   let stateTxt;
   if(state === 'present') stateTxt = 'présent';
   else if(state === 'absent'){
-    if(decision === 'pending') stateTxt = `demande de congé en attente${label?' — '+label:''}`;
+    if(stateClass === 'sick') stateTxt = `arrêt maladie${label?' — '+label:''}`;
+    else if(stateClass === 'off') stateTxt = 'repos planifié';
+    else if(decision === 'pending') stateTxt = `demande de congé en attente${label?' — '+label:''}`;
     else if(decision === 'rejected') stateTxt = 'demande de congé refusée — voir un vétérinaire';
     else if(decision === 'approved') stateTxt = `congé approuvé${label?' — '+label:''}`;
     else stateTxt = `absent${label?' — '+label:''}`;
@@ -2649,6 +2660,21 @@ function getWeekAlerts(personId, sundayISO){
     if(cnt !== 2) staffBadDays++;
   }
   if(staffBadDays > 0) alerts.push(`Effectif ≠ 2 ASV (${staffBadDays}j)`);
+  // CP annuel > 5 semaines (25 jours ouvrés = 50 demi-journées hors samedi/dimanche)
+  const yr = sun.getFullYear();
+  let cpHalf = 0;
+  for(let m = 0; m < 12; m++){
+    const nb = daysInMonth(yr, m);
+    for(let d2 = 1; d2 <= nb; d2++){
+      const wd = new Date(yr, m, d2).getDay();
+      if(wd === 0 || wd === 6) continue;
+      const iso3 = fmtISO(new Date(yr, m, d2));
+      if(getLeaveDecision(iso3, personId, 'M')  === 'approved') cpHalf++;
+      if(getLeaveDecision(iso3, personId, 'AM') === 'approved') cpHalf++;
+    }
+  }
+  const cpDays = cpHalf / 2;
+  if(cpDays > 25) alerts.push(`CP ${Math.round(cpDays * 2) / 2}j > 5 sem.`);
   return alerts;
 }
 
@@ -2925,9 +2951,11 @@ function buildWeekGrid(year, month, people){
         return { person:p, ot:roundTo15min(ot) };
       });
       const nonZero = personOTs.filter(e=>e.ot!==0);
-      // Total heures réelles de la semaine par personne
+      // Total heures réelles de la semaine par personne (utilise le lundi réel de la semaine)
+      const _firstDay = weekDays.find(d => d !== null);
+      const _mondayOfWeek = getWeekMondayDate(new Date(year, month, _firstDay));
       const personWeekH = people.map(p=>{
-        const h = computeWeekTotalHours(p.id, new Date(year, month, weekDays.find(d=>d!==null)));
+        const h = computeWeekTotalHours(p.id, _mondayOfWeek);
         return { person:p, h };
       });
       const weekHLine = personWeekH.map(e=>{
@@ -3036,10 +3064,12 @@ function buildLegendColors(people = PEOPLE){
       ${people.map(p=>`
         <div class="legend-item"><span class="legend-swatch" style="background:${p.present.bg};border:1.5px solid ${p.present.border}"></span>${p.short} — présent (✓ = une demi-journée)</div>
       `).join('')}
-      <div class="legend-item"><span class="legend-swatch" style="background:var(--color-absent);border:1.5px solid var(--color-absent-border)"></span>Absent / congé${hasASV?' approuvé':''}</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:var(--color-medical);border:1.5px solid var(--color-medical-border)"></span>Visite médicale d'entreprise 🏥</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--color-absent);border:1.5px solid var(--color-absent-border)"></span>${hasASV ? 'Congé validé 🔴' : 'Absent'}</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--color-medical);border:1.5px solid var(--color-medical-border)"></span>Visite médicale 🏥</div>
       ${hasASV ? `
-        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-leave-pending);border:1.5px solid var(--color-leave-pending-border)"></span>Demande de congé en attente</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-leave-pending);border:1.5px solid var(--color-leave-pending-border)"></span>Congé en attente 🔵</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-sick);border:1.5px solid var(--color-sick-border)"></span>Arrêt maladie 🤒</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-off);border:1.5px solid var(--color-off-border)"></span>Repos planifié 🟠</div>
         <div class="legend-item"><span class="legend-swatch" style="background:var(--color-leave-rejected);border:1.5px solid var(--color-leave-rejected-border)"></span>Demande refusée</div>
       ` : ''}
       <div class="legend-item"><span class="legend-swatch" style="background:var(--color-holiday);border:1.5px solid var(--color-holiday)"></span>Jour férié</div>
@@ -3624,7 +3654,11 @@ function openAbsenceLabelPopover(cell, forceAbsent){
   box.innerHTML = `
     <h4>${isASV ? 'Demande de congé' : "Motif d'absence"} — ${person.short}, ${SLOT_LABELS[slot]}<br><span class="text-muted" style="font-weight:500;font-size:12px;">${formatFR(iso)}</span></h4>
     ${isASV ? `<p class="text-muted" style="font-size:12px;margin:-4px 0 12px;">Sera soumise aux vétérinaires pour validation.</p>` : ''}
-    <button type="button" id="popover-medical" style="width:100%;margin-bottom:10px;padding:8px;border:2px solid var(--color-medical-border);background:var(--color-medical);color:var(--color-medical-text);border-radius:var(--radius-btn);font-size:13px;font-weight:700;cursor:pointer;">🏥 Visite médicale d'entreprise</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
+      <button type="button" id="popover-medical" style="padding:7px 4px;border:2px solid var(--color-medical-border);background:var(--color-medical);color:var(--color-medical-text);border-radius:var(--radius-btn);font-size:12px;font-weight:700;cursor:pointer;">🏥 Visite méd.</button>
+      <button type="button" id="popover-sick" style="padding:7px 4px;border:2px solid var(--color-sick-border);background:var(--color-sick);color:var(--color-sick-text);border-radius:var(--radius-btn);font-size:12px;font-weight:700;cursor:pointer;">🤒 Arrêt maladie</button>
+      <button type="button" id="popover-off" style="padding:7px 4px;border:2px solid var(--color-off-border);background:var(--color-off);color:var(--color-off-text);border-radius:var(--radius-btn);font-size:12px;font-weight:700;cursor:pointer;">🗓️ Repos planifié</button>
+    </div>
     <div class="popover-quicktags">
       ${quickTags.map(t=>`<button type="button" class="quicktag" data-tag="${escapeHTML(t)}">${t}</button>`).join('')}
     </div>
@@ -3650,17 +3684,31 @@ function openAbsenceLabelPopover(cell, forceAbsent){
     const medTab = document.getElementById('dash-sub-medical');
     if(medTab && !medTab.classList.contains('hidden')) renderDashboardMedical();
   };
+  box.querySelector('#popover-sick').onclick = ()=>{
+    setSlotLabel(iso, personId, slot, 'Maladie');
+    propagateLabelAcrossSunday(personId, [{iso, slot}], 'Maladie');
+    saveData(); if(viewKey) renderCalendarView(viewKey); close();
+  };
+  box.querySelector('#popover-off').onclick = ()=>{
+    setSlotLabel(iso, personId, slot, 'Repos planifié');
+    propagateLabelAcrossSunday(personId, [{iso, slot}], 'Repos planifié');
+    saveData(); if(viewKey) renderCalendarView(viewKey); close();
+  };
   box.querySelector('#popover-cancel').onclick = close;
   box.querySelector('#popover-save').onclick = ()=>{
     const label = input.value.trim();
+    // Alerte si modification de planning à moins de 15 jours (congé soumis tardivement)
+    const daysBeforeDate = Math.ceil((new Date(iso+'T00:00:00') - today) / 86400000);
+    const isLateRequest = isASV && daysBeforeDate >= 0 && daysBeforeDate < 15;
+    if(isLateRequest) showToast(`Modification à ${daysBeforeDate}j — délai réglementaire 15j non respecté`, '⚠️');
     setSlotLabel(iso, personId, slot, label);
     propagateLabelAcrossSunday(personId, [{iso, slot}], label);
     saveData();
     if(isASV && typeof triggerPushNotification === 'function'){
       triggerPushNotification({
         type: 'leave_request',
-        title: 'Nouvelle demande de congé',
-        body: `${person.short} — ${formatFR(iso)} (${SLOT_LABELS[slot]})${label ? ' · '+label : ''}`,
+        title: isLateRequest ? '⚠️ Demande de congé hors délai' : 'Nouvelle demande de congé',
+        body: `${person.short} — ${formatFR(iso)} (${SLOT_LABELS[slot]})${label ? ' · '+label : ''}${isLateRequest ? ' — hors délai 15j' : ''}`,
         targetUsers: ['david','stephane'],
         data: { type:'leave_request' },
       });

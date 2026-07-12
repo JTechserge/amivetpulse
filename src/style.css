@@ -31,6 +31,12 @@
   --color-medical:#BAE6FD;
   --color-medical-text:#0C4A6E;
   --color-medical-border:#38BDF8;
+  --color-sick:#FEF08A;
+  --color-sick-text:#713F12;
+  --color-sick-border:#FACC15;
+  --color-off:#FED7AA;
+  --color-off-text:#7C2D12;
+  --color-off-border:#FB923C;
   --shadow-sm:0 1px 3px rgba(0,0,0,0.08);
   --shadow-md:0 4px 12px rgba(15,23,42,0.10);
   --shadow-lg:0 12px 32px rgba(15,23,42,0.16);
@@ -308,6 +314,10 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-cell.state-leave-pending:hover{filter:brightness(0.96);}
 .cal-cell.state-leave-rejected{background:var(--color-leave-rejected);color:var(--color-leave-rejected-text);border-color:var(--color-leave-rejected-border);font-size:7.5px;}
 .cal-cell.state-leave-rejected:hover{filter:brightness(0.96);}
+.cal-cell.state-sick{background:var(--color-sick);color:var(--color-sick-text);border-color:var(--color-sick-border);}
+.cal-cell.state-sick:hover{filter:brightness(0.96);}
+.cal-cell.state-off{background:var(--color-off);color:var(--color-off-text);border-color:var(--color-off-border);}
+.cal-cell.state-off:hover{filter:brightness(0.96);}
 .cal-cell.sunday-cell{background:var(--color-sunday);cursor:default;}
 .cal-cell.sunday-cell:hover{background:var(--color-sunday);}
 .sunday-ot-badge{font-size:8px;font-weight:800;color:#16a34a;line-height:1;}
@@ -379,6 +389,8 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-wg-half-leave-pending{background:var(--color-leave-pending);color:var(--color-leave-pending-text);}
 .cal-wg-half-leave-rejected{background:var(--color-leave-rejected);color:var(--color-leave-rejected-text);font-size:6.5px;}
 .cal-wg-half-medical{background:var(--color-medical);color:var(--color-medical-text);}
+.cal-wg-half-sick{background:var(--color-sick);color:var(--color-sick-text);}
+.cal-wg-half-off{background:var(--color-off);color:var(--color-off-text);}
 .cal-wg-label-col{border-right:1px solid var(--color-border);background:var(--color-secondary);display:flex;flex-direction:column;overflow:hidden;}
 .cal-wg-label-spacer{min-height:32px;flex-shrink:0;}
 .cal-wg-label-persons{flex:1;display:flex;flex-direction:column;padding:0 2px 3px;gap:2px;}
