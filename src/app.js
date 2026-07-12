@@ -2992,9 +2992,9 @@ function buildWeekGrid(year, month, people){
           const perPersonAlerts = people.map(person => {
             const als = getWeekAlerts(person.id, iso);
             if(als.length === 0) return `<div class="cal-wg-pstrip" data-person="${person.id}" style="min-height:18px;"></div>`;
-            return `<div class="cal-wg-pstrip" data-person="${person.id}" style="padding:2px 3px;min-height:18px;">${als.map(a=>`<div style="font-size:9px;color:#DC2626;font-weight:700;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHTML(a)}">${a}</div>`).join('')}</div>`;
+            return `<div class="cal-wg-pstrip" data-person="${person.id}" style="min-height:18px;display:flex;align-items:center;justify-content:center;"><button class="week-alert-btn" data-alert-person="${person.id}" data-alerts="${escapeHTML(JSON.stringify(als))}" title="Cliquer pour voir le détail">⚠️ ${als.length}</button></div>`;
           }).join('');
-          if(perPersonAlerts) alertContent = `<div class="cal-wg-persons" style="pointer-events:none;">${perPersonAlerts}</div>`;
+          if(perPersonAlerts) alertContent = `<div class="cal-wg-persons">${perPersonAlerts}</div>`;
         }
         return `<div class="${dayCls}" data-date="${iso}">${dayHead}${alertContent}</div>`;
       }
@@ -4199,6 +4199,26 @@ function initCalendarInteractions(){
       document.querySelectorAll('.paint-tool').forEach(b=>b.classList.toggle('active', b.dataset.paint===calMonthPaintMode));
       return;
     }
+  });
+
+  // Badge d'alertes semaine → popup détail
+  document.addEventListener('click', (e)=>{
+    const alertBtn = e.target.closest('.week-alert-btn');
+    if(!alertBtn) return;
+    const pid = alertBtn.dataset.alertPerson;
+    const als = JSON.parse(alertBtn.dataset.alerts || '[]');
+    const person = personOf(pid);
+    const backdrop = document.getElementById('popover-backdrop');
+    const box = document.getElementById('popover-box');
+    box.innerHTML = `
+      <div class="popover-title">⚠️ Alertes semaine — ${escapeHTML(person?.short || pid)}</div>
+      <ul style="margin:8px 0 16px;padding-left:20px;font-size:13px;line-height:1.9;">
+        ${als.map(a=>`<li style="color:#DC2626;font-weight:600;">${escapeHTML(a)}</li>`).join('')}
+      </ul>
+      <div class="popover-actions"><button class="btn" id="popover-cancel">Fermer</button></div>
+    `;
+    backdrop.classList.add('open');
+    box.querySelector('#popover-cancel').onclick = ()=> backdrop.classList.remove('open');
   });
 
   document.addEventListener('click', (e)=>{

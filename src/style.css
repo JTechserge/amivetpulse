@@ -721,6 +721,16 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .paint-tool-erase{border-style:dashed;}
 .paint-tool-erase.active{border-color:#B91C1C;background:#FEF2F2;color:#B91C1C;}
 .paint-tool-erase:hover:not(.active){border-color:#B91C1C;color:#B91C1C;}
+.week-alert-btn{display:inline-flex;align-items:center;gap:3px;padding:2px 9px;border-radius:999px;background:#FEF2F2;color:#DC2626;border:1.5px solid #FCA5A5;font-size:11px;font-weight:700;cursor:pointer;line-height:1.5;}
+.week-alert-btn:hover{background:#FEE2E2;border-color:#EF4444;}
+@media(prefers-color-scheme:dark){
+  .week-alert-btn{background:#3B1515;border-color:#7F1D1D;}
+  .week-alert-btn:hover{background:#4C1A1A;border-color:#DC2626;}
+}
+:root[data-theme="dark"] .week-alert-btn{background:#3B1515;border-color:#7F1D1D;}
+:root[data-theme="dark"] .week-alert-btn:hover{background:#4C1A1A;border-color:#DC2626;}
+:root[data-theme="light"] .week-alert-btn{background:#FEF2F2;border-color:#FCA5A5;}
+:root[data-theme="light"] .week-alert-btn:hover{background:#FEE2E2;border-color:#EF4444;}
 /* Impression via div temporaire (sans popup) */
 #wk-print-tmp{display:none;}
 @media print{
