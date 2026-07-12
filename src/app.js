@@ -1885,15 +1885,11 @@ function renderWeekViewASV(){
   function canEditDay(d){ return baseCanEdit && !isMonthSigned(pid, d.getFullYear(), d.getMonth()); }
   const canEditWeek = days.some(d => canEditDay(d));
   const DAY_SHORT = ['Lu','Ma','Me','Je','Ve','Sa'];
-  function getDayShiftStdEnd(iso2, pid2){
-    const ms2=getTE(iso2,pid2,'ms');
-    const shType2=ms2?(ms2<='08:45'?'O':'F'):getShiftType(iso2,pid2);
-    return shType2==='F'?'19:15':'19:00';
-  }
 
   function buildVisCell(d, session, height){
     const iso=fmtISO(d);
     if(isSunday(d)||holidayName(iso)) return `<td class="week-vis-cell" style="height:${height}px;background:#f8fafc;"></td>`;
+    if(isDayOff(d)) return `<td class="week-vis-cell${session==='lunch'?' week-lunch-cell':''}" style="height:${height}px;background:var(--color-off);opacity:0.55;"><div style="height:100%;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--color-off-text);font-weight:600;">Repos / Congé</div></td>`;
     const sess=WEEK_SESSIONS[session];
     const sv=getTE(iso,pid,sess.s), ev=getTE(iso,pid,sess.e);
     const ce=canEditDay(d);
@@ -1968,7 +1964,7 @@ function renderWeekViewASV(){
 
   function footerCell(d, renderFn, style=''){
     const iso=fmtISO(d);
-    if(isSunday(d)||holidayName(iso)) return `<td class="week-footer-cell" style="background:#f8fafc;${style}"></td>`;
+    if(isSunday(d)||holidayName(iso)) return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;
     return `<td class="week-footer-cell" style="${style}">${renderFn(iso)}</td>`;
   }
 
@@ -1979,30 +1975,43 @@ function renderWeekViewASV(){
     return `<th class="${cls}" data-week-col-iso="${iso}">${DAY_SHORT[i]}<br><strong>${dd}/${mm}</strong>${hN?`<br><span style="font-size:9px;">${escapeHTML(hN)}</span>`:''}`;
   }).join('</th>')}</tr>`;
 
-  const mRow  = `<tr><td class="week-time-label">8h30<br>↕<br>13h00</td>${days.map(d=>buildVisCell(d,'morning',230)).join('')}</tr>`;
   const lRow  = `<tr><td class="week-lunch-label">13h–15h<br>☕</td>${days.map(d=>buildVisCell(d,'lunch',100)).join('')}</tr>`;
   const amRow = `<tr><td class="week-time-label">15h00<br>↕<br>20h00</td>${days.map(d=>buildVisCell(d,'afternoon',240)).join('')}</tr>`;
 
-  // Standard journalier selon le poste (ouverture = 8h30, fermeture = 8h15, mais la référence légale est 8h30)
-  const STD_WEEKDAY   = 8.5;  // 8h30 — référence légale modulation
-  const STD_SAT_CARLA = 7.25; // Carla : 8h30→16h45 avec 1h pause
-  const STD_SAT_OTHER = 7.0;  // 2e ASV samedi : 9h00→16h30 avec 1h pause
+  const STD_SAT_CARLA = 7.25;
+  const STD_SAT_OTHER = 7.0;
   function getDayStd(d){
     if(d.getDay() === 6) return p?.saturdayOnly ? STD_SAT_CARLA : STD_SAT_OTHER;
-    return STD_WEEKDAY;
+    return getDayShiftStdHours(fmtISO(d), pid);
   }
-  // Clé de stockage du type de poste (O/F) par jour/personne
-  function shiftTypeKey(iso2, pid2){ return `${iso2}_${pid2}_shift`; }
-  function getShiftType(iso2, pid2){ return DATA.slots[shiftTypeKey(iso2,pid2)] || 'O'; }
+  function isDayOff(d){
+    const iso2=fmtISO(d);
+    return getSlotState(iso2,pid,'M')==='absent' && getSlotState(iso2,pid,'AM')==='absent';
+  }
 
   const totRow=`<tr><td class="week-footer-label">Heures</td>${days.map(d=>footerCell(d,iso=>{
+    if(isDayOff(d)) return `<span style="font-size:9px;color:var(--color-text-muted);">repos</span>`;
     const w=calcDayTE(iso,pid)+calcLunchTE(iso,pid);
-    if(!w) return '-';
-    const std = getDayStd(d);
-    const delta = Math.round((w - std) * 4) / 4;
-    const deltaHtml = delta !== 0 ? ` <span style="font-size:9px;color:${delta>0?'#16A34A':'#DC2626'};">${delta>0?'+':''}${formatHHMM(Math.abs(delta))}</span>` : '';
+    if(!w) return '<span style="color:var(--color-text-muted);">—</span>';
+    const std=getDayStd(d);
+    const delta=Math.round((w-std)*4)/4;
+    const deltaHtml=delta!==0?` <span style="font-size:9px;color:${delta>0?'#16A34A':'#DC2626'};">${delta>0?'+':''}${formatHHMM(Math.abs(delta))}</span>`:'';
     return `<span class="week-total-h">${formatHHMM(w)}</span>${deltaHtml}`;
   })).join('')}</tr>`;
+  const otRow=`<tr><td class="week-footer-label" style="font-size:9px;color:#16A34A;font-weight:700;">H.supp.</td>${days.map(d=>footerCell(d,iso=>{
+    if(isDayOff(d)) return '';
+    const w=calcDayTE(iso,pid)+calcLunchTE(iso,pid);
+    if(!w) return '<span style="color:var(--color-text-muted);font-size:9px;">—</span>';
+    const ot=Math.max(0,Math.round((w-getDayStd(d))*4)/4);
+    return ot>0?`<span style="color:#16A34A;font-size:10px;font-weight:700;">+${formatHHMM(ot)}</span>`:'<span style="color:var(--color-text-muted);font-size:9px;">—</span>';
+  },'background:#F0FDF4;')).join('')}</tr>`;
+  const defRow=`<tr><td class="week-footer-label" style="font-size:9px;color:#DC2626;font-weight:700;">H.déficit</td>${days.map(d=>footerCell(d,iso=>{
+    if(isDayOff(d)) return '';
+    const w=calcDayTE(iso,pid)+calcLunchTE(iso,pid);
+    if(!w) return '<span style="color:var(--color-text-muted);font-size:9px;">—</span>';
+    const def=Math.max(0,Math.round((getDayStd(d)-w)*4)/4);
+    return def>0?`<span style="color:#DC2626;font-size:10px;font-weight:700;">-${formatHHMM(def)}</span>`:'<span style="color:var(--color-text-muted);font-size:9px;">—</span>';
+  },'background:#FFF5F5;')).join('')}</tr>`;
 
   const shiftRow=`<tr><td class="week-footer-label" style="font-size:10px;color:var(--color-text-muted);">Poste</td>${days.map(d=>{
     if(d.getDay()===0) return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;
@@ -2021,9 +2030,14 @@ function renderWeekViewASV(){
     `<span style="font-weight:700;color:${p?.color||'inherit'}">${escapeHTML(p?.short||'')}</span>`;
   const endDay=days[5];
   const wLabel=`${monday.getDate()} ${MONTH_NAMES[monday.getMonth()].toLowerCase()} – ${endDay.getDate()} ${MONTH_NAMES[endDay.getMonth()].toLowerCase()} ${endDay.getFullYear()}`;
+  const weekTotalH=days.reduce((s,d)=>{
+    if(isSunday(d)||holidayName(fmtISO(d))||isDayOff(d)) return s;
+    return s+calcDayTE(fmtISO(d),pid)+calcLunchTE(fmtISO(d),pid);
+  },0);
+  const weekTotalStr=weekTotalH>0?` <span style="font-size:14px;font-weight:400;color:var(--color-primary);">(${formatHHMM(weekTotalH)})</span>`:'';
 
   container.innerHTML=`
-    <h2 class="section-title">⏱️ Vue hebdomadaire — ${escapeHTML(p?.short||'')}</h2>
+    <h2 class="section-title">⏱️ Vue hebdomadaire — ${escapeHTML(p?.short||'')}${weekTotalStr}</h2>
     <p class="section-desc">Clic + glisse : saisir les horaires (15h–20h). Double-clic avant 19h : marquer un départ anticipé (bloc rouge). Zone verte (après 19h) : heures supplémentaires.</p>
     <div class="week-nav">
       <button class="btn-icon" id="week-prev">←</button>
@@ -2034,7 +2048,7 @@ function renderWeekViewASV(){
       ${asvPicker}
     </div>
     <div class="week-view-wrap card" style="padding:0;">
-      <table class="week-table"><thead>${headerRow}</thead><tbody>${mRow}${lRow}${amRow}${shiftRow}${totRow}</tbody></table>
+      <table class="week-table"><thead>${headerRow}</thead><tbody>${lRow}${amRow}${shiftRow}${totRow}${otRow}${defRow}</tbody></table>
     </div>
     <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
       <div class="card" style="padding:10px 14px;flex:1;min-width:260px;">
@@ -2387,8 +2401,21 @@ function cellRenderInfo(iso, personId, slot){
   let title = label;
   let stateClass = state;
   if(state === 'present'){
-    style = `background:${person.present.bg};border-color:${person.present.border};color:${person.present.text};`;
-    html = `<span class="cell-mark">✓</span>`;
+    if(isASVPerson(personId)){
+      const shType = getShiftType(iso, personId);
+      if(shType === 'F'){
+        stateClass = 'closing';
+        html = `<span style="font-size:7.5px;font-weight:800;">F</span>`;
+        title = 'Fermeture (9h→19h15)';
+      } else {
+        stateClass = 'opening';
+        html = `<span style="font-size:7.5px;font-weight:800;">O</span>`;
+        title = 'Ouverture (8h30→19h)';
+      }
+    } else {
+      style = `background:${person.present.bg};border-color:${person.present.border};color:${person.present.text};`;
+      html = `<span class="cell-mark">✓</span>`;
+    }
   } else if(state === 'absent'){
     const lc = label.toLowerCase().trim();
     if(lc === 'maladie' || lc === 'arrêt maladie' || lc === 'arrêt'){
@@ -2475,9 +2502,11 @@ function buildCalendarToolbar(viewKey){
   const paintBar = hasASV ? `
     <div class="cal-paint-bar" id="cal-paint-bar-${viewKey}">
       <span style="font-size:11px;font-weight:600;color:var(--color-text-muted);">Outil :</span>
-      <button class="paint-tool${calMonthPaintMode==='present'?' active':''}" data-paint="present" title="Marquer comme jour travaillé">🟢 Travaillé</button>
-      <button class="paint-tool${calMonthPaintMode==='repos'?' active':''}" data-paint="repos" title="Marquer comme repos planifié">🟠 Repos</button>
-      <button class="paint-tool${calMonthPaintMode==='conge'?' active':''}" data-paint="conge" title="Soumettre une demande de congé">🔵 Congé</button>
+      <button class="paint-tool${calMonthPaintMode==='opening'?' active':''}" data-paint="opening" title="Ouverture — 8h30→19h00">🟢 Ouverture</button>
+      <button class="paint-tool${calMonthPaintMode==='closing'?' active':''}" data-paint="closing" title="Fermeture — 9h00→19h15">🌿 Fermeture</button>
+      <button class="paint-tool${calMonthPaintMode==='repos'?' active':''}" data-paint="repos" title="Repos planifié (sans validation)">🟠 Repos</button>
+      <button class="paint-tool${calMonthPaintMode==='conge'?' active':''}" data-paint="conge" title="Demande de congé (validation vétérinaires)">🔵 Congé</button>
+      <button class="paint-tool${calMonthPaintMode==='maladie'?' active':''}" data-paint="maladie" title="Arrêt maladie (direct, hors règle 15j)">🤒 Maladie</button>
     </div>` : '';
   return `
     <div class="cal-toolbar">
@@ -2698,19 +2727,32 @@ function getWeekAlerts(personId, sundayISO){
   // Règle 42h
   const weekH = computeWeekTotalHours(personId, mon);
   if(!p.saturdayOnly && weekH >= WEEKLY_MAX_HOURS) alerts.push(`${formatHHMM(weekH)} ≥ 42h`);
-  // Effectif ≠ 2 par jour ouvré (non férié)
+  // Effectif ≠ 2 par jour ouvré + alerte même poste O/F
   const poolNC = ASV_PEOPLE.filter(q => !q.archived && !q.saturdayOnly);
   const poolAll = ASV_PEOPLE.filter(q => !q.archived);
-  let staffBadDays = 0;
+  const DAY_MINI = ['Lu','Ma','Me','Je','Ve','Sa'];
+  const staffIssues = [], sameShiftIssues = [];
   for(let d = 0; d < 6; d++){
     const dt = new Date(mon); dt.setDate(dt.getDate() + d);
     const iso2 = fmtISO(dt);
     if(holidayName(iso2)) continue;
     const pool = dt.getDay() === 6 ? poolAll : poolNC;
-    const cnt = pool.filter(q => getSlotState(iso2, q.id, 'M') === 'present' || getSlotState(iso2, q.id, 'AM') === 'present').length;
-    if(cnt !== 2) staffBadDays++;
+    const present = pool.filter(q => getSlotState(iso2, q.id, 'M') === 'present' || getSlotState(iso2, q.id, 'AM') === 'present');
+    if(present.length !== 2){
+      const who = present.length ? present.map(q=>q.short).join('+') : '0';
+      staffIssues.push(`${DAY_MINI[d]}:${present.length}ASV${present.length>0&&present.length<2?' ('+who+')':''}`);
+    }
+    // Même poste les jours de semaine (pas samedi)
+    if(present.length === 2 && dt.getDay() !== 6){
+      const shifts = present.map(q=>{ const ms=getTE(iso2,q.id,'ms'); return ms?(ms<='08:45'?'O':'F'):getShiftType(iso2,q.id); });
+      if(shifts[0] === shifts[1]){
+        const shLbl = shifts[0]==='O'?'2×Ouv':'2×Fer';
+        sameShiftIssues.push(`${DAY_MINI[d]}:${shLbl} (${present.map(q=>q.short).join('+')})`);
+      }
+    }
   }
-  if(staffBadDays > 0) alerts.push(`Effectif ≠ 2 ASV (${staffBadDays}j)`);
+  if(staffIssues.length > 0) alerts.push(`Effectif: ${staffIssues.join(' ')}`);
+  if(sameShiftIssues.length > 0) alerts.push(`Même poste: ${sameShiftIssues.join(' ')}`);
   // CP annuel > 5 semaines (25 jours ouvrés = 50 demi-journées hors samedi/dimanche)
   const yr = sun.getFullYear();
   let cpHalf = 0;
@@ -2913,9 +2955,13 @@ function buildWeekGrid(year, month, people){
   </div>`;
 
   const legendHtml = `<div class="cal-wg-person-legend">
-    ${people.map(p=>`<span class="cal-wg-person-tag" style="background:${p.present.bg};color:${p.present.text};border-color:${p.present.border};">${p.short}</span>`).join('')}
+    ${isASV
+      ? `<span class="cal-wg-status-tag" style="background:var(--color-opening);color:var(--color-opening-text);border-color:var(--color-opening-border);">O — Ouverture</span>
+         <span class="cal-wg-status-tag" style="background:var(--color-closing);color:var(--color-closing-text);border-color:var(--color-closing-border);">F — Fermeture</span>`
+      : people.map(p=>`<span class="cal-wg-person-tag" style="background:${p.present.bg};color:${p.present.text};border-color:${p.present.border};">${p.short}</span>`).join('')
+    }
     <span class="cal-wg-status-tag cal-wg-status-absent">Congé</span>
-    ${isASV?`<span class="cal-wg-status-tag cal-wg-status-pending">En attente</span>`:''}
+    ${isASV?`<span class="cal-wg-status-tag cal-wg-status-pending">En attente</span><span class="cal-wg-status-tag" style="background:var(--color-off);color:var(--color-off-text);border-color:var(--color-off-border);">Repos</span><span class="cal-wg-status-tag" style="background:var(--color-sick);color:var(--color-sick-text);border-color:var(--color-sick-border);">🤒 Maladie</span>`:''}
   </div>`;
 
   const weekBlocksHtml = weeks.map((weekDays, weekIdx)=>{
@@ -3165,8 +3211,8 @@ function buildSignaturePanelHtml(viewKey){
             : '';
           const isOwn = currentUser?.person_id === p.id && currentUser?.role === 'asv';
           const isAdminOrVet = currentUser?.role === 'admin' || currentUser?.role === 'vet';
-          const signBtn = isOwn && !detail
-            ? `<button type="button" class="btn" data-sign-person="${p.id}" style="font-size:12.5px;padding:6px 12px;">Signer ma feuille de présence</button>`
+          const asvPendingNote = isOwn && !detail
+            ? `<span class="text-muted" style="font-size:12px;font-style:italic;">La signature s'effectue via le lien envoyé par email par le vétérinaire.</span>`
             : '';
           const adminBtn = isAdminOrVet && !detail
             ? `<button type="button" class="btn" data-admin-request-sign="${p.id}" style="font-size:12.5px;padding:6px 12px;">📧 Demander la signature</button>`
@@ -3174,7 +3220,7 @@ function buildSignaturePanelHtml(viewKey){
           return `<div class="signature-row">
             <span style="color:${p.color};font-weight:700;">${escapeHTML(p.short)}</span>
             ${signedNote}
-            ${signBtn}${adminBtn}
+            ${asvPendingNote}${adminBtn}
           </div>`;
         }).join('')}
       </div>
@@ -3646,9 +3692,9 @@ function startDrag(cell){
   const { date:iso, person:personId, slot } = cell.dataset;
   const isASVDrag = currentView === 'asv' && isASVPerson(personId);
   let paintValue;
-  if(isASVDrag && calMonthPaintMode === 'present'){
+  if(isASVDrag && (calMonthPaintMode === 'opening' || calMonthPaintMode === 'closing')){
     paintValue = 'present';
-  } else if(isASVDrag && (calMonthPaintMode === 'repos' || calMonthPaintMode === 'conge')){
+  } else if(isASVDrag && (calMonthPaintMode === 'repos' || calMonthPaintMode === 'conge' || calMonthPaintMode === 'maladie')){
     paintValue = 'absent';
   } else {
     paintValue = cycleState(getSlotState(iso, personId, slot));
@@ -3669,9 +3715,18 @@ function startDrag(cell){
 function applyPaint(cell, value){
   const { date:iso, person:personId, slot } = cell.dataset;
   dragCtx.touched.add(`${iso}|${personId}|${slot}`);
-  if(dragCtx.paintMode === 'repos'){
+  if(dragCtx.paintMode === 'opening'){
+    setSlotState(iso, personId, slot, 'present');
+    DATA.slots[shiftTypeKey(iso, personId)] = 'O';
+  } else if(dragCtx.paintMode === 'closing'){
+    setSlotState(iso, personId, slot, 'present');
+    DATA.slots[shiftTypeKey(iso, personId)] = 'F';
+  } else if(dragCtx.paintMode === 'repos'){
     setSlotState(iso, personId, slot, 'absent');
     setSlotLabel(iso, personId, slot, 'Repos planifié');
+  } else if(dragCtx.paintMode === 'maladie'){
+    setSlotState(iso, personId, slot, 'absent');
+    setSlotLabel(iso, personId, slot, 'Arrêt maladie');
   } else {
     setSlotState(iso, personId, slot, value);
   }
@@ -3694,12 +3749,17 @@ function endDrag(){
     if(dragCtx.touched.size > 0){
       saveData();
       if(dragCtx.viewKey) renderCalendarView(dragCtx.viewKey);
-      // Mode congé ou repos ASV : soumettre aux vétérinaires pour validation
-      if((dragCtx.paintMode === 'conge' || dragCtx.paintMode === 'repos') && dragCtx.touched.size > 0){
+      // Congé uniquement : soumettre aux vétérinaires pour validation
+      if(dragCtx.paintMode === 'conge'){
         const slotsArr = Array.from(dragCtx.touched).map(k=>{ const [iso2,pid2,slot2]=k.split('|'); return {iso:iso2,slot:slot2}; });
         const pid2 = dragCtx.personId;
         const vk = dragCtx.viewKey;
         setTimeout(()=> openAbsenceRangePopover(slotsArr, pid2, vk), 50);
+      }
+      // Maladie : notification info aux vétérinaires (sans approbation)
+      if(dragCtx.paintMode === 'maladie'){
+        const person = personOf(dragCtx.personId);
+        showToast(`Arrêt maladie de ${person?.short||dragCtx.personId} enregistré — les vétérinaires seront notifiés`, '🤒');
       }
     }
   }
@@ -4425,6 +4485,18 @@ const CLINIC_AM_H = 4.25;  // 15h00→19h15 (zone standard, sans les H.supp.)
 function teKey(iso,pid,f){ return `${iso}_${pid}_te_${f}`; }
 function getTE(iso,pid,f){ return DATA.slots[teKey(iso,pid,f)]||''; }
 function setTE(iso,pid,f,v){ if(v) DATA.slots[teKey(iso,pid,f)]=v; else delete DATA.slots[teKey(iso,pid,f)]; }
+function shiftTypeKey(iso,pid){ return `${iso}_${pid}_shift`; }
+function getShiftType(iso,pid){ return DATA.slots[shiftTypeKey(iso,pid)] || 'O'; }
+function getDayShiftStdEnd(iso,pid){
+  const ms=getTE(iso,pid,'ms');
+  const shType=ms?(ms<='08:45'?'O':'F'):getShiftType(iso,pid);
+  return shType==='F'?'19:15':'19:00';
+}
+function getDayShiftStdHours(iso,pid){
+  const ms=getTE(iso,pid,'ms');
+  const shType=ms?(ms<='08:45'?'O':'F'):getShiftType(iso,pid);
+  return shType==='F'?8.25:8.5;
+}
 function timeToMins(t){ if(!t)return 0; const[h,m]=t.split(':').map(Number); return h*60+(m||0); }
 function minsToH(m){ return m / 60; }
 function calcSessionH(s,e){ if(!s||!e)return 0; const d=timeToMins(e)-timeToMins(s); return d>0?minsToH(d):0; }
@@ -4475,8 +4547,8 @@ function timePctToMins(pct, pStartStr, pEndStr){
   return snapTo15(timeToMins(pStartStr) + pct * (timeToMins(pEndStr)-timeToMins(pStartStr)));
 }
 let weekDragCtx = null; // { iso, pid, session, startMin, endMin, cell }
-// Outil de peinture mensuelle ASV : 'present' | 'repos' | 'conge'
-let calMonthPaintMode = 'present';
+// Outil de peinture mensuelle ASV : 'opening' | 'closing' | 'repos' | 'conge' | 'maladie'
+let calMonthPaintMode = 'opening';
 // État de navigation de la vue semaine
 const weekNavState = { mondayISO: null, personId: null };
 
