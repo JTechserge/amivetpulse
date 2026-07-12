@@ -762,20 +762,22 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .week-tool-btn:hover{border-color:var(--color-primary);color:var(--color-primary);}
 .week-tool-btn.active{background:var(--color-primary);border-color:var(--color-primary);color:#fff;font-weight:700;}
 
-/* ── Vue semaine : cellule après-midi (départ anticipé) ─────── */
+/* ── Vue semaine : cellule départ anticipé (cliquer pour modifier) ─ */
 .week-am-cell{transition:outline 0.1s;}
+.week-am-cell[data-am-iso]{cursor:pointer;}
 .week-am-cell[data-am-iso]:hover{outline:2px solid var(--color-primary);border-radius:3px;}
+.week-deficit-cell{padding:4px 2px;text-align:center;vertical-align:middle;border-bottom:1px solid var(--color-border);}
 
-/* ── Vue semaine : zone H.supp. ─────────────────────────────── */
+/* ── Vue semaine : zone H.supp. (grande taille pour drag facile) ─── */
 .week-ot-cell{position:relative;padding:2px;text-align:center;vertical-align:bottom;}
-.week-ot-total{display:block;font-size:9px;font-weight:700;color:#16A34A;margin-bottom:2px;}
-.week-ot-slots{display:flex;flex-direction:column;gap:1px;align-items:stretch;}
-.week-ot-slot{height:10px;border:1px solid var(--color-border);border-radius:2px;background:var(--color-secondary);position:relative;min-width:30px;transition:background 0.1s;}
+.week-ot-total{display:block;font-size:10px;font-weight:700;color:#16A34A;margin-bottom:2px;}
+.week-ot-slots{display:flex;flex-direction:column;gap:2px;align-items:stretch;}
+.week-ot-slot{height:24px;border:1px solid var(--color-border);border-radius:3px;background:var(--color-secondary);position:relative;min-width:30px;transition:background 0.1s;}
 .week-ot-slot.filled{background:#BBF7D0;border-color:#16A34A;}
 .week-ot-slot.interactive{cursor:crosshair;}
 .week-ot-slot.interactive:hover{background:#D1FAE5;border-color:#22C55E;}
 .week-ot-slot.drag-preview{background:#86EFAC;border-color:#16A34A;}
-.week-ot-lbl{position:absolute;left:1px;top:-1px;font-size:7px;color:var(--color-text-muted);line-height:1;pointer-events:none;}
+.week-ot-lbl{position:absolute;left:3px;top:3px;font-size:9px;font-weight:600;color:var(--color-text-muted);line-height:1;pointer-events:none;}
 
 /* Dark mode OT slots */
 @media(prefers-color-scheme:dark){
@@ -786,6 +788,10 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 :root[data-theme="dark"] .week-ot-slot.filled{background:#14532D;border-color:#16A34A;}
 :root[data-theme="dark"] .week-ot-slot.interactive:hover{background:#166534;border-color:#22C55E;}
 :root[data-theme="dark"] .week-ot-slot.drag-preview{background:#15803D;border-color:#16A34A;}
+
+/* ── Total semaine — bandeau sous le tableau ────────────────────── */
+.week-total-banner{display:flex;align-items:center;gap:16px;padding:14px 20px;margin-top:10px;border-radius:10px;background:var(--color-secondary);border:1px solid var(--color-border);}
+.week-total-banner span:first-child{font-size:12px;font-weight:700;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.05em;flex:1;}
 
 .week-ot-badge{font-size:10.5px;font-weight:700;}
 .week-ot-input{width:54px;padding:3px 5px;border:1px solid var(--color-border);border-radius:5px;font-size:12px;font-family:inherit;text-align:center;}

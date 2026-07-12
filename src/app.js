@@ -1765,7 +1765,7 @@ function openWeekPrintWindow(pid, monday, days, p, wLabel){
     const absent  = mS==='absent'&&amS==='absent';
     const shType = getShiftType(iso, pid);
     const early = getEarlyDep(iso, pid);
-    const otH = getDayOtH(iso, pid);
+    const otH = getDayAllOtH(iso, pid);
     const nom = present ? getDayNominal(iso, pid) : 0;
     const def = present ? getDayDeficitH(iso, pid) : 0;
     const total = present ? Math.round((nom + otH - def) * 100) / 100 : 0;
@@ -1787,7 +1787,7 @@ function openWeekPrintWindow(pid, monday, days, p, wLabel){
     const iso=fmtISO(d);
     const isPresent=getSlotState(iso,pid,'M')==='present'||getSlotState(iso,pid,'AM')==='present';
     if(!isPresent) return s;
-    return s+getDayNominal(iso,pid)+getDayOtH(iso,pid)-getDayDeficitH(iso,pid);
+    return s+getDayNominal(iso,pid)+getDayAllOtH(iso,pid)-getDayDeficitH(iso,pid);
   },0);
   const note = days.map(d=>getDayNote(fmtISO(d),pid)).filter(Boolean).join(' · ');
   const printInner = `
@@ -1897,67 +1897,58 @@ function renderWeekViewASV(){
   // ── En-tête colonnes ──────────────────────────────────────
   const headerRow=`<tr><th class="week-time-label" style="width:52px;font-size:9px;text-align:center;"></th>${days.map((d,i)=>{const iso=fmtISO(d),hN=holidayName(iso);const cls=`week-th${iso===fmtISO(today)?' is-today':hN?' is-holiday':''}`;const dd=String(d.getDate()).padStart(2,'0'),mm=String(d.getMonth()+1).padStart(2,'0');return `<th class="${cls}" data-week-col-iso="${iso}">${DAY_SHORT[i]}<br><strong>${dd}/${mm}</strong>${hN?`<br><span style="font-size:9px;">${escapeHTML(hN)}</span>`:''}`;}).join('</th>')}</tr>`;
 
-  // ── Ligne pause déjeuner (simplifiée) ────────────────────
-  const lRow=`<tr><td class="week-lunch-label">13h–15h<br>☕</td>${days.map(d=>{const iso=fmtISO(d);if(isSunday(d)||holidayName(iso))return `<td class="week-vis-cell week-lunch-cell" style="height:60px;background:#f8fafc;"></td>`;if(isDayOff(d))return `<td class="week-vis-cell week-lunch-cell" style="height:60px;background:var(--color-off);opacity:0.55;"></td>`;if(isDayPresent(d))return `<td class="week-vis-cell week-lunch-cell" style="height:60px;"><div style="height:100%;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--color-text-muted);">Pause ☕</div></td>`;return `<td class="week-vis-cell week-lunch-cell" style="height:60px;"></td>`;}).join('')}</tr>`;
+  // ── Helper : grisage jours non travaillés ─────────────────
+  function cellGrey(d){ return !isSunday(d)&&!holidayName(fmtISO(d))&&!isDayPresent(d)?'background:#F1F5F9;':''; }
 
-  // ── Ligne après-midi avec indicateur départ anticipé ─────
-  const AM_H=180,AM_START=15*60,AM_END=20*60,AM_DUR=AM_END-AM_START;
-  function buildAmCell(d){
+  // ── 1. Ligne Poste (O/F toggle) ───────────────────────────
+  const shiftRow=`<tr><td class="week-footer-label" style="font-size:10px;color:var(--color-text-muted);">Poste</td>${days.map(d=>{if(d.getDay()===0)return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;const iso=fmtISO(d);if(holidayName(iso))return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;const cg=cellGrey(d);if(d.getDay()===6||!isDayPresent(d))return `<td class="week-footer-cell" style="${cg}"><span style="color:var(--color-text-muted);font-size:9px;">—</span></td>`;const ce=canEditDay(d);const shType=getShiftType(iso,pid);const isF=shType==='F';if(!ce)return `<td class="week-footer-cell"><span style="font-size:10px;color:var(--color-text-muted);">${shType}</span></td>`;return `<td class="week-footer-cell" style="padding:2px;"><button class="week-shift-btn" data-shift-iso="${iso}" data-shift-pid="${pid}" title="${isF?'Fermeture (9h→19h15)':'Ouverture (8h30→19h)'}" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:4px;border:1px solid ${isF?'#6366F1':'#16A34A'};background:${isF?'#EEF2FF':'#F0FDF4'};color:${isF?'#4F46E5':'#15803D'};cursor:pointer;">${shType}</button></td>`;}).join('')}</tr>`;
+
+  // ── 2. Ligne Départ anticipé / Heures déficitaires ─────────
+  const defRow=`<tr><td class="week-footer-label" style="font-size:9px;color:#DC2626;font-weight:700;line-height:1.3;">Départ<br>anticipé</td>${days.map(d=>{const iso=fmtISO(d);if(isSunday(d)||holidayName(iso))return `<td class="week-deficit-cell" style="background:#f8fafc;"></td>`;if(!isDayPresent(d))return `<td class="week-deficit-cell" style="${cellGrey(d)}"></td>`;const defH=getDayDeficitH(iso,pid);const early=getEarlyDep(iso,pid);const ce=canEditDay(d)&&weekTool==='earlyDep';const cAttr=ce?` class="week-am-cell" data-am-iso="${iso}" data-am-pid="${pid}" style="cursor:pointer;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;" title="Cliquer pour modifier"`:' style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;"';if(!defH)return `<td class="week-deficit-cell"><div${cAttr}><span style="color:var(--color-text-muted);font-size:9px;">${ce?'＋ ajouter':'—'}</span></div></td>`;const defMins=Math.round(defH*60);const defStr=`-${Math.floor(defMins/60)}h${defMins%60>0?String(defMins%60).padStart(2,'0'):''}`;return `<td class="week-deficit-cell"><div${cAttr}><span style="font-size:16px;font-weight:800;color:#DC2626;">${defStr}</span><span style="font-size:9px;color:var(--color-text-muted);">${early}</span></div></td>`;}).join('')}</tr>`;
+
+  // ── 3. Zone H.supp. 13h→15h (drag) ───────────────────────
+  const LUNCH_SLOTS=8,LUNCH_START_MINS=13*60;
+  function buildLunchOtCell(d){
     const iso=fmtISO(d);
-    if(isSunday(d)||holidayName(iso)) return `<td class="week-vis-cell" style="height:${AM_H}px;background:#f8fafc;"></td>`;
-    if(isDayOff(d)) return `<td class="week-vis-cell" style="height:${AM_H}px;background:var(--color-off);opacity:0.55;"><div style="height:100%;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--color-off-text);font-weight:600;">Repos<br>Congé</div></td>`;
-    if(!isDayPresent(d)) return `<td class="week-vis-cell" style="height:${AM_H}px;"></td>`;
-    const shType=getShiftType(iso,pid);
-    const stdEndMins=shType==='F'?19*60+15:19*60;
-    const early=getEarlyDep(iso,pid);
-    const earlyMins=early?timeToMins(early):0;
-    const workedEnd=early&&earlyMins<stdEndMins?earlyMins:stdEndMins;
-    const workedPx=Math.round((workedEnd-AM_START)/AM_DUR*AM_H);
-    const stdY=Math.round((stdEndMins-AM_START)/AM_DUR*AM_H);
-    let content=`<div style="position:absolute;top:0;left:2px;right:2px;height:${workedPx}px;background:${shType==='F'?'var(--color-closing)':'var(--color-opening)'};border-radius:3px 3px 0 0;"></div>`;
-    content+=`<div style="position:absolute;top:${stdY}px;left:0;right:0;border-top:1px dashed rgba(100,116,139,0.3);pointer-events:none;"></div>`;
-    if(early&&earlyMins<stdEndMins){
-      const defTop=Math.round((earlyMins-AM_START)/AM_DUR*AM_H);
-      const defH=Math.round((stdEndMins-earlyMins)/AM_DUR*AM_H);
-      const defMins=stdEndMins-earlyMins;
-      const defLabel=`-${Math.floor(defMins/60)}h${defMins%60>0?String(defMins%60).padStart(2,'0'):''}`;
-      content+=`<div style="position:absolute;top:${defTop}px;left:2px;right:2px;height:${defH}px;background:#FEE2E2;border-top:2px solid #DC2626;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#DC2626;">${defH>=12?defLabel:''}</div>`;
-      content+=`<div style="position:absolute;top:${Math.max(defTop-13,0)}px;left:3px;font-size:7.5px;font-weight:700;color:#DC2626;white-space:nowrap;">🕐 ${early}</div>`;
-    }
-    const ce=canEditDay(d)&&weekTool==='earlyDep';
-    return `<td class="week-vis-cell" style="height:${AM_H}px;"><div class="week-am-cell" style="position:relative;height:${AM_H}px;overflow:hidden;"${ce?` data-am-iso="${iso}" data-am-pid="${pid}" style="cursor:pointer;" title="Cliquer pour définir un départ anticipé"`:''} >${content}</div></td>`;
+    const cg=cellGrey(d);
+    if(isSunday(d)||holidayName(iso)) return `<td class="week-ot-cell" style="background:#f8fafc;"></td>`;
+    if(!isDayPresent(d)) return `<td class="week-ot-cell" style="${cg}"><div class="week-ot-slots">${Array.from({length:LUNCH_SLOTS},()=>'<div class="week-ot-slot"></div>').join('')}</div></td>`;
+    const otMins=getLunchOtMins(iso,pid);
+    const filledSlots=Math.ceil(otMins/15);
+    const ce=canEditDay(d)&&weekTool==='overtime';
+    const slots=Array.from({length:LUNCH_SLOTS},(_,i)=>{const slotStart=LUNCH_START_MINS+i*15;const h2=Math.floor(slotStart/60),m2=slotStart%60;const lbl=m2===0?`${h2}h`:'';const filled=i<filledSlots;const dAttr=ce?` data-ot-iso="${iso}" data-ot-pid="${pid}" data-ot-slot="${i}" data-ot-zone="lunch"`:'';return `<div class="week-ot-slot${filled?' filled':''}${ce?' interactive':''}"${dAttr} title="${String(h2).padStart(2,'0')}:${String(m2).padStart(2,'0')}">${lbl?`<span class="week-ot-lbl">${lbl}</span>`:''}</div>`;}).join('');
+    const lOtH=getDayLunchOtH(iso,pid);
+    return `<td class="week-ot-cell">${lOtH>0?`<span class="week-ot-total">+${formatHHMM(lOtH)}</span>`:''}<div class="week-ot-slots">${slots}</div></td>`;
   }
-  const amRow=`<tr><td class="week-time-label">15h00<br>↕<br>20h00</td>${days.map(buildAmCell).join('')}</tr>`;
+  const lunchOtZoneRow=`<tr><td class="week-footer-label" style="font-size:9px;color:#16A34A;font-weight:700;line-height:1.4;">H.supp.<br><span style="font-size:8px;font-weight:400;color:var(--color-text-muted);">13h→15h</span></td>${days.map(buildLunchOtCell).join('')}</tr>`;
 
-  // ── Ligne poste O/F ───────────────────────────────────────
-  const shiftRow=`<tr><td class="week-footer-label" style="font-size:10px;color:var(--color-text-muted);">Poste</td>${days.map(d=>{if(d.getDay()===0)return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;const iso=fmtISO(d);if(holidayName(iso))return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;if(d.getDay()===6)return `<td class="week-footer-cell"></td>`;const ce=canEditDay(d);const shType=getShiftType(iso,pid);const isF=shType==='F';if(!ce)return `<td class="week-footer-cell"><span style="font-size:10px;color:var(--color-text-muted);">${shType}</span></td>`;return `<td class="week-footer-cell" style="padding:2px;"><button class="week-shift-btn" data-shift-iso="${iso}" data-shift-pid="${pid}" title="${isF?'Fermeture (9h→19h15)':'Ouverture (8h30→19h)'}" style="font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;border:1px solid ${isF?'#6366F1':'#16A34A'};background:${isF?'#EEF2FF':'#F0FDF4'};color:${isF?'#4F46E5':'#15803D'};cursor:pointer;">${shType}</button></td>`;}).join('')}</tr>`;
-
-  // ── Zone heures supplémentaires (drag 19h→21h) ───────────
+  // ── 4. Zone H.supp. 19h→21h (drag) ───────────────────────
   const OT_SLOTS=8,OT_START_MINS=19*60;
   function buildOtCell(d){
     const iso=fmtISO(d);
-    const emptySlots=`<div class="week-ot-slots">${Array.from({length:OT_SLOTS},()=>'<div class="week-ot-slot"></div>').join('')}</div>`;
+    const cg=cellGrey(d);
     if(isSunday(d)||holidayName(iso)) return `<td class="week-ot-cell" style="background:#f8fafc;"></td>`;
-    if(isDayOff(d)||!isDayPresent(d)) return `<td class="week-ot-cell" style="opacity:0.35;">${emptySlots}</td>`;
+    if(!isDayPresent(d)) return `<td class="week-ot-cell" style="${cg}"><div class="week-ot-slots">${Array.from({length:OT_SLOTS},()=>'<div class="week-ot-slot"></div>').join('')}</div></td>`;
     const otMins=getWeekOtMins(iso,pid);
     const filledSlots=Math.ceil(otMins/15);
     const ce=canEditDay(d)&&weekTool==='overtime';
-    const slots=Array.from({length:OT_SLOTS},(_,i)=>{const slotStart=OT_START_MINS+i*15;const h2=Math.floor(slotStart/60),m2=slotStart%60;const lbl=m2===0?`${h2}h`:'';const filled=i<filledSlots;const dAttr=ce?` data-ot-iso="${iso}" data-ot-pid="${pid}" data-ot-slot="${i}"`:'';return `<div class="week-ot-slot${filled?' filled':''}${ce?' interactive':''}"${dAttr} title="${String(h2).padStart(2,'0')}:${String(m2).padStart(2,'0')}">${lbl?`<span class="week-ot-lbl">${lbl}</span>`:''}</div>`;}).join('');
+    const slots=Array.from({length:OT_SLOTS},(_,i)=>{const slotStart=OT_START_MINS+i*15;const h2=Math.floor(slotStart/60),m2=slotStart%60;const lbl=m2===0?`${h2}h`:'';const filled=i<filledSlots;const dAttr=ce?` data-ot-iso="${iso}" data-ot-pid="${pid}" data-ot-slot="${i}" data-ot-zone="evening"`:'';return `<div class="week-ot-slot${filled?' filled':''}${ce?' interactive':''}"${dAttr} title="${String(h2).padStart(2,'0')}:${String(m2).padStart(2,'0')}">${lbl?`<span class="week-ot-lbl">${lbl}</span>`:''}</div>`;}).join('');
     const otH=getDayOtH(iso,pid);
     return `<td class="week-ot-cell">${otH>0?`<span class="week-ot-total">+${formatHHMM(otH)}</span>`:''}<div class="week-ot-slots">${slots}</div></td>`;
   }
   const otZoneRow=`<tr><td class="week-footer-label" style="font-size:9px;color:#16A34A;font-weight:700;line-height:1.4;">H.supp.<br><span style="font-size:8px;font-weight:400;color:var(--color-text-muted);">19h→21h</span></td>${days.map(buildOtCell).join('')}</tr>`;
 
-  // ── Ligne heures totales ──────────────────────────────────
-  const totRow=`<tr><td class="week-footer-label">Heures</td>${days.map(d=>{const iso=fmtISO(d);if(isSunday(d)||holidayName(iso))return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;if(isDayOff(d))return `<td class="week-footer-cell"><span style="font-size:9px;color:var(--color-text-muted);">repos</span></td>`;if(!isDayPresent(d))return `<td class="week-footer-cell"><span style="color:var(--color-text-muted);">—</span></td>`;const nom=getDayNominal(iso,pid);const otH2=getDayOtH(iso,pid);const defH=getDayDeficitH(iso,pid);const total=Math.round((nom+otH2-defH)*100)/100;const delta=Math.round((otH2-defH)*100)/100;const deltaHtml=delta!==0?` <span style="font-size:9px;color:${delta>0?'#16A34A':'#DC2626'};">${delta>0?'+':''}${formatHHMM(Math.abs(delta))}</span>`:'';return `<td class="week-footer-cell"><span class="week-total-h">${formatHHMM(total)}</span>${deltaHtml}</td>`;}).join('')}</tr>`;
+  // ── 5. Ligne heures totales ───────────────────────────────
+  const totRow=`<tr><td class="week-footer-label">Heures</td>${days.map(d=>{const iso=fmtISO(d);if(isSunday(d)||holidayName(iso))return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;if(!isDayPresent(d))return `<td class="week-footer-cell" style="${cellGrey(d)}"><span style="color:var(--color-text-muted);">—</span></td>`;const nom=getDayNominal(iso,pid);const otH2=getDayAllOtH(iso,pid);const defH=getDayDeficitH(iso,pid);const total=Math.round((nom+otH2-defH)*100)/100;const delta=Math.round((otH2-defH)*100)/100;const deltaHtml=delta!==0?` <span style="font-size:9px;color:${delta>0?'#16A34A':'#DC2626'};">${delta>0?'+':''}${formatHHMM(Math.abs(delta))}</span>`:'';return `<td class="week-footer-cell"><span class="week-total-h">${formatHHMM(total)}</span>${deltaHtml}</td>`;}).join('')}</tr>`;
 
   // ── Rendu ─────────────────────────────────────────────────
   const asvPicker=isVetUser?`<select class="week-asv-pick" id="week-asv-pick">${ASV_PEOPLE.map(a=>`<option value="${a.id}" ${a.id===pid?'selected':''}>${escapeHTML(a.short)}</option>`).join('')}</select>`:`<span style="font-weight:700;color:${p?.color||'inherit'}">${escapeHTML(p?.short||'')}</span>`;
   const endDay=days[5];
   const wLabel=`${monday.getDate()} ${MONTH_NAMES[monday.getMonth()].toLowerCase()} – ${endDay.getDate()} ${MONTH_NAMES[endDay.getMonth()].toLowerCase()} ${endDay.getFullYear()}`;
-  const weekTotalH=days.reduce((s,d)=>{if(isSunday(d)||holidayName(fmtISO(d))||isDayOff(d)||!isDayPresent(d))return s;const iso=fmtISO(d);return s+getDayNominal(iso,pid)+getDayOtH(iso,pid)-getDayDeficitH(iso,pid);},0);
-  const weekTotalStr=weekTotalH>0?` <span style="font-size:14px;font-weight:400;color:var(--color-primary);">(${formatHHMM(weekTotalH)})</span>`:'';
-  const toolbarHtml=canEditWeek?`<div class="week-tool-bar"><span>Outil :</span><button class="week-tool-btn${weekTool==='earlyDep'?' active':''}" data-week-tool="earlyDep" title="Cliquer sur l'après-midi pour définir un départ anticipé (avant 19h)">🕐 Départ anticipé</button><button class="week-tool-btn${weekTool==='overtime'?' active':''}" data-week-tool="overtime" title="Glisser dans la zone H.supp. pour ajouter des heures supplémentaires">➕ H.supp.</button></div>`:'';
+  const weekTotalH=days.reduce((s,d)=>{if(isSunday(d)||holidayName(fmtISO(d))||!isDayPresent(d))return s;const iso=fmtISO(d);return s+getDayNominal(iso,pid)+getDayAllOtH(iso,pid)-getDayDeficitH(iso,pid);},0);
+  const weekTotalFmt=weekTotalH>0?formatHHMM(weekTotalH):'—';
+  const weekTotalStr=weekTotalH>0?` <span style="font-size:14px;font-weight:400;color:var(--color-primary);">(${weekTotalFmt})</span>`:'';
+  const toolbarHtml=canEditWeek?`<div class="week-tool-bar"><span>Outil :</span><button class="week-tool-btn${weekTool==='earlyDep'?' active':''}" data-week-tool="earlyDep" title="Cliquer sur la ligne Départ anticipé pour définir un départ avant 19h">🕐 Départ anticipé</button><button class="week-tool-btn${weekTool==='overtime'?' active':''}" data-week-tool="overtime" title="Glisser dans les zones H.supp. pour ajouter des heures supplémentaires">➕ H.supp.</button></div>`:'';
 
   container.innerHTML=`
     <h2 class="section-title">⏱️ Vue hebdomadaire — ${escapeHTML(p?.short||'')}${weekTotalStr}</h2>
@@ -1971,7 +1962,12 @@ function renderWeekViewASV(){
       ${asvPicker}
     </div>
     <div class="week-view-wrap card" style="padding:0;">
-      <table class="week-table"><thead>${headerRow}</thead><tbody>${lRow}${amRow}${shiftRow}${otZoneRow}${totRow}</tbody></table>
+      <table class="week-table"><thead>${headerRow}</thead><tbody>${shiftRow}${defRow}${lunchOtZoneRow}${otZoneRow}${totRow}</tbody></table>
+    </div>
+    <div class="week-total-banner">
+      <span>Total semaine</span>
+      <strong style="font-size:22px;color:var(--color-primary);">${weekTotalFmt}</strong>
+      <span style="font-size:11px;color:var(--color-text-muted);">${wLabel}</span>
     </div>
     <div style="margin-top:10px;display:flex;justify-content:flex-end;">
       <button class="btn btn-sm" id="week-print-btn">🖨️ Imprimer</button>
@@ -1983,7 +1979,7 @@ function renderWeekViewASV(){
   if(canEditWeek){
     container.querySelector('#week-clear-btn').onclick=()=>{
       const label=`${monday.getDate()} ${MONTH_NAMES[monday.getMonth()].toLowerCase()} – ${days[5].getDate()} ${MONTH_NAMES[days[5].getMonth()].toLowerCase()}`;
-      openConfirmModal({ title:`Vider la semaine du ${label} ?`, message:`Tous les ajustements de ${escapeHTML(p?.short||'')} (départs anticipés, H.supp.) seront effacés.`, confirmLabel:'Vider', onConfirm:()=>{ snapshotBeforeChange(); days.forEach(d=>{ if(isSunday(d)||!canEditDay(d))return; const iso=fmtISO(d); setEarlyDep(iso,pid,''); setWeekOtMins(iso,pid,0); }); saveData(); showToast(`Semaine vidée (${escapeHTML(p?.short||'')})`,'🗑️'); renderWeekViewASV(); } });
+      openConfirmModal({ title:`Vider la semaine du ${label} ?`, message:`Tous les ajustements de ${escapeHTML(p?.short||'')} (départs anticipés, H.supp.) seront effacés.`, confirmLabel:'Vider', onConfirm:()=>{ snapshotBeforeChange(); days.forEach(d=>{ if(isSunday(d)||!canEditDay(d))return; const iso=fmtISO(d); setEarlyDep(iso,pid,''); setWeekOtMins(iso,pid,0); setLunchOtMins(iso,pid,0); }); saveData(); showToast(`Semaine vidée (${escapeHTML(p?.short||'')})`,'🗑️'); renderWeekViewASV(); } });
     };
   }
   if(isVetUser) container.querySelector('#week-asv-pick').onchange=(e)=>{ weekNavState.personId=e.target.value; renderWeekViewASV(); };
@@ -2373,7 +2369,7 @@ function computeWeekTotalHours(pid, mondayDate){
     const iso = fmtISO(dt);
     const isPresent = getSlotState(iso,pid,'M')==='present' || getSlotState(iso,pid,'AM')==='present';
     if(!isPresent) continue;
-    h += getDayNominal(iso,pid) + getDayOtH(iso,pid) - getDayDeficitH(iso,pid) + getOvertimeHours(iso,pid);
+    h += getDayNominal(iso,pid) + getDayAllOtH(iso,pid) - getDayDeficitH(iso,pid) + getOvertimeHours(iso,pid);
   }
   return Math.round(h * 100) / 100;
 }
@@ -2580,8 +2576,8 @@ function buildOvertimeRowCells(year, month, days, people){
     const isPresent=(iso,p)=> getSlotState(iso,p.id,'M')==='present'||getSlotState(iso,p.id,'AM')==='present';
     const personOTs = people.map(p=>{
       let ot = 0;
-      extraDates.forEach(d=>{ const iso=fmtISO(d); if(!isSunday(d)&&isPresent(iso,p)) ot+=getDayOtH(iso,p.id)-getDayDeficitH(iso,p.id)+getOvertimeHours(iso,p.id); });
-      weekDays.forEach(day=>{ const date=new Date(year,month,day); const iso=fmtISO(date); if(!isSunday(date)&&isPresent(iso,p)) ot+=getDayOtH(iso,p.id)-getDayDeficitH(iso,p.id)+getOvertimeHours(iso,p.id); });
+      extraDates.forEach(d=>{ const iso=fmtISO(d); if(!isSunday(d)&&isPresent(iso,p)) ot+=getDayAllOtH(iso,p.id)-getDayDeficitH(iso,p.id)+getOvertimeHours(iso,p.id); });
+      weekDays.forEach(day=>{ const date=new Date(year,month,day); const iso=fmtISO(date); if(!isSunday(date)&&isPresent(iso,p)) ot+=getDayAllOtH(iso,p.id)-getDayDeficitH(iso,p.id)+getOvertimeHours(iso,p.id); });
       return { person:p, ot: roundTo15min(ot) };
     });
 
@@ -2718,8 +2714,8 @@ function buildWeekGrid(year, month, people){
       const isPresentWG=(iso,p)=> getSlotState(iso,p.id,'M')==='present'||getSlotState(iso,p.id,'AM')==='present';
       const personOTs = people.map(p=>{
         let ot = 0;
-        extraDates.forEach(d=>{ const iso=fmtISO(d); if(!isSunday(d)&&isPresentWG(iso,p)) ot+=getDayOtH(iso,p.id)-getDayDeficitH(iso,p.id)+getOvertimeHours(iso,p.id); });
-        weekDayNums.forEach(dn=>{ const d=new Date(year,month,dn); const iso=fmtISO(d); if(!isSunday(d)&&isPresentWG(iso,p)) ot+=getDayOtH(iso,p.id)-getDayDeficitH(iso,p.id)+getOvertimeHours(iso,p.id); });
+        extraDates.forEach(d=>{ const iso=fmtISO(d); if(!isSunday(d)&&isPresentWG(iso,p)) ot+=getDayAllOtH(iso,p.id)-getDayDeficitH(iso,p.id)+getOvertimeHours(iso,p.id); });
+        weekDayNums.forEach(dn=>{ const d=new Date(year,month,dn); const iso=fmtISO(d); if(!isSunday(d)&&isPresentWG(iso,p)) ot+=getDayAllOtH(iso,p.id)-getDayDeficitH(iso,p.id)+getOvertimeHours(iso,p.id); });
         return { person:p, ot:roundTo15min(ot) };
       });
       const nonZero = personOTs.filter(e=>e.ot!==0);
@@ -3916,16 +3912,15 @@ function initCalendarInteractions(){
   });
 
   // Drag sur les slots H.supp.
-  const otDragCtx = { active:false, iso:null, pid:null, startSlot:0, curSlot:0 };
+  const otDragCtx = { active:false, iso:null, pid:null, zone:'evening', startSlot:0, curSlot:0, _preview:0 };
   function otApplyDrag(slot){
     if(!otDragCtx.active) return;
     otDragCtx.curSlot = slot;
-    const filled = Math.max(otDragCtx.startSlot, slot) + 1;
-    document.querySelectorAll(`.week-ot-slot[data-ot-iso="${otDragCtx.iso}"]`).forEach(el=>{
-      const s = parseInt(el.dataset.otSlot, 10);
-      el.classList.toggle('drag-preview', s <= Math.max(otDragCtx.startSlot, slot));
+    const maxSlot = Math.max(otDragCtx.startSlot, slot);
+    document.querySelectorAll(`.week-ot-slot[data-ot-iso="${otDragCtx.iso}"][data-ot-zone="${otDragCtx.zone}"]`).forEach(el=>{
+      el.classList.toggle('drag-preview', parseInt(el.dataset.otSlot,10) <= maxSlot);
     });
-    otDragCtx._preview = filled;
+    otDragCtx._preview = maxSlot + 1;
   }
   document.addEventListener('mousedown', (e)=>{
     const slot = e.target.closest('.week-ot-slot.interactive');
@@ -3934,6 +3929,7 @@ function initCalendarInteractions(){
     otDragCtx.active = true;
     otDragCtx.iso = slot.dataset.otIso;
     otDragCtx.pid = slot.dataset.otPid;
+    otDragCtx.zone = slot.dataset.otZone || 'evening';
     otDragCtx.startSlot = parseInt(slot.dataset.otSlot, 10);
     otDragCtx.curSlot = otDragCtx.startSlot;
     otDragCtx._preview = otDragCtx.startSlot + 1;
@@ -3942,14 +3938,16 @@ function initCalendarInteractions(){
   document.addEventListener('mousemove', (e)=>{
     if(!otDragCtx.active) return;
     const slot = e.target.closest('.week-ot-slot.interactive');
-    if(slot && slot.dataset.otIso === otDragCtx.iso) otApplyDrag(parseInt(slot.dataset.otSlot, 10));
+    if(slot && slot.dataset.otIso === otDragCtx.iso && slot.dataset.otZone === otDragCtx.zone)
+      otApplyDrag(parseInt(slot.dataset.otSlot, 10));
   });
   document.addEventListener('mouseup', ()=>{
     if(!otDragCtx.active) return;
     otDragCtx.active = false;
     const newMins = (otDragCtx._preview || 0) * 15;
     snapshotBeforeChange();
-    setWeekOtMins(otDragCtx.iso, otDragCtx.pid, newMins);
+    if(otDragCtx.zone === 'lunch') setLunchOtMins(otDragCtx.iso, otDragCtx.pid, newMins);
+    else setWeekOtMins(otDragCtx.iso, otDragCtx.pid, newMins);
     saveData();
     renderWeekViewASV();
   });
@@ -4072,7 +4070,7 @@ function computeYearStats(year){
         if(saturday && presentAny) stats[p.id].saturdaysByMonth[month]++;
         if(isASVPerson(p.id)){
           const isPresent3=getSlotState(iso,p.id,'M')==='present'||getSlotState(iso,p.id,'AM')==='present';
-          if(isPresent3) stats[p.id].overtimeHoursByMonth[month]+=getDayOtH(iso,p.id)-getDayDeficitH(iso,p.id)+getOvertimeHours(iso,p.id);
+          if(isPresent3) stats[p.id].overtimeHoursByMonth[month]+=getDayAllOtH(iso,p.id)-getDayDeficitH(iso,p.id)+getOvertimeHours(iso,p.id);
         } else {
           stats[p.id].overtimeHoursByMonth[month]+=getOvertimeHours(iso,p.id);
         }
@@ -4277,6 +4275,11 @@ function weekOtKey(iso,pid){ return `${iso}_${pid}_ot_mins`; }
 function getWeekOtMins(iso,pid){ return parseInt(DATA.slots[weekOtKey(iso,pid)],10)||0; }
 function setWeekOtMins(iso,pid,v){ if(v>0) DATA.slots[weekOtKey(iso,pid)]=v; else delete DATA.slots[weekOtKey(iso,pid)]; }
 function getDayOtH(iso,pid){ return getWeekOtMins(iso,pid)/60; }
+function lunchOtKey(iso,pid){ return `${iso}_${pid}_lunch_ot_mins`; }
+function getLunchOtMins(iso,pid){ return parseInt(DATA.slots[lunchOtKey(iso,pid)],10)||0; }
+function setLunchOtMins(iso,pid,v){ if(v>0) DATA.slots[lunchOtKey(iso,pid)]=v; else delete DATA.slots[lunchOtKey(iso,pid)]; }
+function getDayLunchOtH(iso,pid){ return getLunchOtMins(iso,pid)/60; }
+function getDayAllOtH(iso,pid){ return getDayOtH(iso,pid)+getDayLunchOtH(iso,pid); }
 function roundTo15min(h){ return Math.round(h * 4) / 4; }
 function dayNoteKey(iso,pid){ return `${iso}_${pid}_day_note`; }
 function getDayNote(iso,pid){ return DATA.slots[dayNoteKey(iso,pid)]||''; }
@@ -4312,7 +4315,7 @@ function computeASVWorkedHours(personId, year, month = null){
     for(let day = 1; day <= nb; day++){
       const iso = fmtISO(new Date(year, m, day));
       const isPresent = getSlotState(iso, personId, 'M')==='present' || getSlotState(iso, personId, 'AM')==='present';
-      if(isPresent) total += getDayNominal(iso, personId) + getDayOtH(iso, personId) - getDayDeficitH(iso, personId);
+      if(isPresent) total += getDayNominal(iso, personId) + getDayAllOtH(iso, personId) - getDayDeficitH(iso, personId);
       total += getOvertimeHours(iso, personId);
     }
   }
@@ -4330,7 +4333,7 @@ function computeASVWorkedHoursNew(personId, year, month = null){
       if(dt.getDay() === 0) continue; // dimanche
       const iso = fmtISO(dt);
       const isPresent = getSlotState(iso, personId, 'M')==='present' || getSlotState(iso, personId, 'AM')==='present';
-      if(isPresent) total += getDayNominal(iso, personId) + getDayOtH(iso, personId) - getDayDeficitH(iso, personId);
+      if(isPresent) total += getDayNominal(iso, personId) + getDayAllOtH(iso, personId) - getDayDeficitH(iso, personId);
       total += getOvertimeHours(iso, personId);
     }
   }
@@ -4801,7 +4804,7 @@ function buildDashWeeklyMonthCard(year, month){
       const isPresent=getSlotState(iso,pid,'M')==='present'||getSlotState(iso,pid,'AM')==='present';
       if(!isPresent) continue;
       const nom=getDayNominal(iso,pid);
-      const delta=getDayOtH(iso,pid)-getDayDeficitH(iso,pid)+getOvertimeHours(iso,pid);
+      const delta=getDayAllOtH(iso,pid)-getDayDeficitH(iso,pid)+getOvertimeHours(iso,pid);
       h+=nom+delta;
       ot+=delta;
     }
@@ -4946,7 +4949,7 @@ function buildASVWeeklyCapCard(){
       if(isSunday(dt)) continue;
       const iso = fmtISO(dt);
       const isDayPresent2=getSlotState(iso,p.id,'M')==='present'||getSlotState(iso,p.id,'AM')==='present';
-      if(isDayPresent2) h+=getDayNominal(iso,p.id)+getDayOtH(iso,p.id)-getDayDeficitH(iso,p.id)+getOvertimeHours(iso,p.id);
+      if(isDayPresent2) h+=getDayNominal(iso,p.id)+getDayAllOtH(iso,p.id)-getDayDeficitH(iso,p.id)+getOvertimeHours(iso,p.id);
     }
     h = Math.round(h * 100) / 100;
     const cap  = WEEKLY_MAX_HOURS;
