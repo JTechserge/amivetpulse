@@ -4659,176 +4659,237 @@ function buildDashWeeklyMonthCard(year, month){
     <p class="text-muted" style="font-size:11px;margin-top:8px;">Écart = heures travaillées − quota hebdomadaire. Équivalent en jours = écart ÷ ${formatNum(7)} h/jour (temps plein).</p>
   </div>`;
 }
-function buildSaturdayEquityCard(year){
-  // Compte les samedis travaillés par ASV (hors Carla qui travaille tous les samedis)
-  const asv = ASV_PEOPLE.filter(p => !p.archived && !p.saturdayOnly);
-  if(!asv.length) return '';
-  const counts = Object.fromEntries(asv.map(p=>[p.id, 0]));
-  const nb = daysInMonth(year, 11); // parcourir toute l'année
-  for(let m=0;m<12;m++){
-    const nbM = daysInMonth(year, m);
-    for(let d=1;d<=nbM;d++){
-      const dt = new Date(year, m, d);
-      if(dt.getDay()!==6) continue; // pas samedi
-      const iso = fmtISO(dt);
-      asv.forEach(p=>{
-        const s = getSlotState(iso,p.id,'M') === 'present' || getSlotState(iso,p.id,'AM') === 'present';
-        if(s) counts[p.id]++;
-      });
+// ── Carte 1 : Modulation annuelle ──────────────────────────────
+function buildASVModulationCard(year){
+  const cy = getCurrentYear();
+  const cm = today.getMonth();
+  const modulated = ASV_PEOPLE.filter(p => !p.archived && !p.saturdayOnly);
+  const carlaList  = ASV_PEOPLE.filter(p => !p.archived && p.saturdayOnly);
+
+  const rows = modulated.map(p => {
+    const q      = getASVQuota(p.id);
+    const worked = computeASVWorkedHours(p.id, year, null);
+    const target = q.annual;
+    const pct    = target ? Math.min(100, Math.round(worked / target * 100)) : 0;
+    const barC   = pct > 100 ? '#DC2626' : pct >= 90 ? '#F59E0B' : p.color;
+    const icon   = pct > 100 ? '🔴' : pct >= 90 ? '🟡' : '🟢';
+    const tfLabel = p.timeFraction >= 1 ? 'plein temps' : `${Math.round(p.timeFraction * 100)}% temps partiel`;
+    let estim = '';
+    if(year === cy && cm > 0 && worked > 0 && target){
+      const proj = Math.round(worked / cm * 12);
+      const diff = proj - target;
+      const dc   = Math.abs(diff) < 20 ? '#16A34A' : diff > 0 ? '#F59E0B' : '#EA580C';
+      estim = `<div style="display:flex;justify-content:flex-end;margin-top:3px;"><span style="font-size:11px;color:${dc};">proj. fin d'année : ${formatNum(proj)}h (${diff >= 0 ? '+' : ''}${formatNum(diff)}h vs cible)</span></div>`;
     }
-  }
-  const vals = asv.map(p=>counts[p.id]);
-  const avg = vals.length ? Math.round(vals.reduce((a,b)=>a+b,0) / vals.length) : 0;
-  const maxV = Math.max(...vals, 1);
-  const rows = asv.map(p=>{
-    const v = counts[p.id];
-    const diff = v - avg;
-    const diffStr = diff === 0 ? 'équilibre' : `${diff>0?'+':''}${diff} vs moy.`;
-    const diffColor = diff > 1 ? '#DC2626' : diff < -1 ? '#EA580C' : '#16A34A';
-    const barW = Math.round(v/maxV*100);
-    return `<tr>
-      <td style="padding:5px 10px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${p.color};margin-right:6px;vertical-align:middle;"></span>${escapeHTML(p.short)}</td>
-      <td style="padding:5px 10px;text-align:right;font-weight:700;">${v}</td>
-      <td style="padding:5px 10px;width:120px;"><div style="background:var(--color-border);border-radius:99px;height:6px;"><div style="width:${barW}%;background:${p.color};height:6px;border-radius:99px;"></div></div></td>
-      <td style="padding:5px 10px;font-size:12px;color:${diffColor};">${diffStr}</td>
-    </tr>`;
+    return `<div style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+        <span style="width:8px;height:8px;border-radius:2px;background:${p.color};display:inline-block;flex-shrink:0;"></span>
+        <span style="font-weight:700;font-size:14px;">${escapeHTML(p.short)}</span>
+        <span style="font-size:11px;color:var(--color-text-muted);">${tfLabel}</span>
+        <span style="margin-left:auto;font-size:13px;">${icon} <strong>${formatNum(worked)}h</strong><span style="color:var(--color-text-muted);"> / ${formatNum(target)}h</span></span>
+        <span style="font-size:14px;font-weight:700;color:${barC};min-width:38px;text-align:right;">${pct}%</span>
+      </div>
+      <div style="background:var(--color-border);border-radius:99px;height:8px;overflow:hidden;">
+        <div style="width:${pct}%;background:${barC};height:100%;border-radius:99px;"></div>
+      </div>
+      ${estim}
+    </div>`;
   }).join('');
-  return `<div class="card" style="margin-bottom:20px;">
-    <h3 style="font-size:16px;margin-bottom:4px;">Équité samedis ${year}</h3>
-    <p class="text-muted" style="font-size:12px;margin-bottom:10px;">Répartition des samedis travaillés — objectif : équilibre entre toutes les ASV hors Carla. Moy. : ${avg} samedis.</p>
-    <div class="recap-table-scroll"><table class="recap-table" style="min-width:320px;">
-      <thead><tr><th style="text-align:left;">ASV</th><th style="text-align:right;">Samedis</th><th>Répartition</th><th>Écart</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>
+
+  const carlaRows = carlaList.map(p => {
+    const worked = computeASVWorkedHours(p.id, year, null);
+    let satCount = 0;
+    for(let m = 0; m < 12; m++){
+      const nbM = daysInMonth(year, m);
+      for(let d = 1; d <= nbM; d++){
+        const dt = new Date(year, m, d); if(dt.getDay() !== 6) continue;
+        const iso = fmtISO(dt);
+        if(getSlotState(iso, p.id, 'M') === 'present' || getSlotState(iso, p.id, 'AM') === 'present') satCount++;
+      }
+    }
+    return `<div style="display:flex;align-items:center;gap:10px;padding-top:14px;margin-top:4px;border-top:1px solid var(--color-border);">
+      <span style="width:8px;height:8px;border-radius:2px;background:${p.color};display:inline-block;flex-shrink:0;"></span>
+      <span style="font-weight:700;font-size:14px;">${escapeHTML(p.short)}</span>
+      <span style="font-size:11px;color:var(--color-text-muted);">— samedi uniquement</span>
+      <span style="margin-left:auto;font-size:13px;"><strong>${satCount} samedis</strong><span style="color:var(--color-text-muted);"> · ${formatNum(worked)}h</span></span>
+      <span style="font-size:11px;background:#EFF6FF;color:#1D4ED8;border-radius:4px;padding:2px 8px;white-space:nowrap;flex-shrink:0;">Hors modulation</span>
+    </div>`;
+  }).join('');
+
+  return `<div class="card" style="margin-bottom:18px;">
+    <div style="margin-bottom:16px;">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:2px;">📅 Modulation annuelle — ${year}</h3>
+      <p style="font-size:12px;color:var(--color-text-muted);margin:0;">Cible : <strong>1 607h</strong> (plein temps) · 5 semaines CP comprises · Plafond : <strong>42h / semaine</strong></p>
+    </div>
+    ${rows}${carlaRows}
   </div>`;
 }
 
-function buildModulationSummaryCard(year){
-  const asv = ASV_PEOPLE.filter(p=>!p.archived);
-  const cy = getCurrentYear();
-  function progressBar(w, target, color){
-    const pct = target ? Math.min(100, Math.round(w/target*100)) : 0;
-    const c = pct > 100 ? '#DC2626' : pct >= 90 ? '#F59E0B' : color;
-    return `<div style="background:var(--color-border);border-radius:99px;height:6px;margin-top:3px;"><div style="width:${pct}%;background:${c};height:6px;border-radius:99px;"></div></div>`;
-  }
-  const rows = asv.map(p=>{
-    const q = getASVQuota(p.id);
-    const worked = computeASVWorkedHours(p.id, year, null);
-    if(p.saturdayOnly){
-      // Carla : afficher les samedis travaillés × 7h25
-      const satCount = (() => {
-        let n=0;
-        for(let m=0;m<12;m++){
-          const nbM=daysInMonth(year,m);
-          for(let d=1;d<=nbM;d++){
-            const dt=new Date(year,m,d); if(dt.getDay()!==6) continue;
-            const iso=fmtISO(dt);
-            if(getSlotState(iso,p.id,'M')==='present'||getSlotState(iso,p.id,'AM')==='present') n++;
-          }
-        }
-        return n;
-      })();
-      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--color-border);">
-        <span style="width:10px;height:10px;border-radius:2px;background:${p.color};flex-shrink:0;display:inline-block;"></span>
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:600;font-size:13px;">${escapeHTML(p.short)} <span style="font-weight:400;font-size:11px;color:var(--color-text-muted);">— samedi uniquement, hors modulation</span></div>
-          <div style="font-size:12px;color:var(--color-text-muted);">${satCount} samedis travaillés · ${formatHHMM(worked)}h au total</div>
-        </div>
-        <span style="font-size:11px;background:#EFF6FF;color:#1D4ED8;border-radius:4px;padding:2px 6px;flex-shrink:0;">Hors modulation</span>
-      </div>`;
+// ── Carte 2 : Semaine en cours — plafond 42h ───────────────────
+function buildASVWeeklyCapCard(){
+  const mon  = weekNavState.mondayISO ? new Date(weekNavState.mondayISO+'T00:00:00') : getWeekMondayDate(today);
+  const endW = new Date(mon); endW.setDate(endW.getDate() + 5);
+  const fmt  = d => `${d.getDate()}/${d.getMonth()+1}`;
+  const asv  = ASV_PEOPLE.filter(p => !p.archived);
+  let anyAlert = false;
+
+  const rows = asv.map(p => {
+    let h = 0;
+    for(let d = 0; d < 6; d++){
+      const dt = new Date(mon); dt.setDate(dt.getDate() + d);
+      if(isSunday(dt)) continue;
+      const iso = fmtISO(dt);
+      if(hasTE(iso, p.id)){
+        h += calcDayTE(iso, p.id) + calcLunchTE(iso, p.id);
+      } else {
+        if(getSlotState(iso, p.id, 'M')  === 'present') h += HALFDAY_HOURS;
+        if(getSlotState(iso, p.id, 'AM') === 'present') h += HALFDAY_HOURS;
+      }
+      h += getOvertimeHours(iso, p.id);
     }
-    const tf = p.timeFraction ?? 1.0;
-    const label = tf >= 1.0 ? 'Plein temps modulé' : `${Math.round(tf*100)}% modulé`;
-    const remaining = q.annual !== null ? Math.max(0, q.annual - worked) : 0;
-    const pct = q.annual ? Math.min(100, Math.round(worked/q.annual*100)) : 0;
-    const statusColor = pct > 100 ? '#DC2626' : pct >= 90 ? '#F59E0B' : '#16A34A';
-    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--color-border);">
-      <span style="width:10px;height:10px;border-radius:2px;background:${p.color};flex-shrink:0;display:inline-block;"></span>
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:600;font-size:13px;">${escapeHTML(p.short)} <span style="font-weight:400;font-size:11px;color:var(--color-text-muted);">— ${label}</span></div>
-        <div style="font-size:12px;margin-top:1px;">${formatHHMM(worked)}h / ${formatHHMM(q.annual)}h cible · <span style="color:${statusColor};font-weight:600;">${pct}%</span>${year===cy&&remaining>0?` · reste ${formatHHMM(remaining)}h`:''}</div>
-        ${progressBar(worked, q.annual, p.color)}
+    h = Math.round(h * 100) / 100;
+    const cap  = WEEKLY_MAX_HOURS;
+    const over = !p.saturdayOnly && h >= cap;
+    const near = !p.saturdayOnly && h >= cap * 0.85 && !over;
+    if(over) anyAlert = true;
+    const barC = over ? '#DC2626' : near ? '#F59E0B' : p.color;
+    const pct  = p.saturdayOnly
+      ? Math.min(100, Math.round(h / ASV_STD_SAT_CARLA * 100))
+      : Math.min(100, Math.round(h / cap * 100));
+    const hStr = h > 0 ? formatHHMM(h) : '—';
+    const suffix = p.saturdayOnly
+      ? `<span style="font-size:11px;color:var(--color-text-muted);"> (samedi)</span>`
+      : `<span style="font-size:11px;color:var(--color-text-muted);"> / ${cap}h</span>${over ? ' ⚠️' : ''}`;
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:11px;">
+      <span style="width:8px;height:8px;border-radius:2px;background:${p.color};display:inline-block;flex-shrink:0;margin-top:1px;"></span>
+      <span style="font-size:13px;font-weight:600;min-width:75px;">${escapeHTML(p.short)}</span>
+      <div style="flex:1;background:var(--color-border);border-radius:99px;height:8px;overflow:hidden;">
+        <div style="width:${pct}%;background:${barC};height:100%;border-radius:99px;"></div>
       </div>
+      <span style="font-size:13px;font-weight:${over?'700':'400'};color:${over?'#DC2626':near?'#F59E0B':'inherit'};min-width:100px;text-align:right;">${hStr}${suffix}</span>
     </div>`;
   }).join('');
-  return `<div class="card" style="margin-bottom:20px;">
-    <h3 style="font-size:16px;margin-bottom:2px;">Modulation ${year}</h3>
-    <p class="text-muted" style="font-size:12px;margin-bottom:12px;">Cible annuelle 1 607h (plein temps) · Plafond hebdo <strong>42h</strong> · 5 semaines CP obligatoires</p>
+
+  return `<div class="card" style="margin-bottom:18px;${anyAlert?'border-left:3px solid #DC2626;':''}">
+    <div style="margin-bottom:14px;">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:2px;">⏱ Semaine du ${fmt(mon)} au ${fmt(endW)}</h3>
+      <p style="font-size:12px;color:var(--color-text-muted);margin:0;">Plafond légal : <strong>42h</strong> / semaine (art. L3122-4 CT)</p>
+    </div>
+    ${anyAlert ? `<div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;padding:8px 12px;margin-bottom:14px;color:#DC2626;font-size:13px;font-weight:600;">⚠️ Plafond de 42h atteint cette semaine</div>` : ''}
     ${rows}
+  </div>`;
+}
+
+// ── Carte 3 : Équité des samedis ───────────────────────────────
+function buildASVSaturdayEquityCard(year){
+  const asv = ASV_PEOPLE.filter(p => !p.archived && !p.saturdayOnly);
+  if(!asv.length) return '';
+  const counts = Object.fromEntries(asv.map(p => [p.id, 0]));
+  for(let m = 0; m < 12; m++){
+    const nbM = daysInMonth(year, m);
+    for(let d = 1; d <= nbM; d++){
+      const dt = new Date(year, m, d); if(dt.getDay() !== 6) continue;
+      const iso = fmtISO(dt);
+      asv.forEach(p => {
+        if(getSlotState(iso, p.id, 'M') === 'present' || getSlotState(iso, p.id, 'AM') === 'present') counts[p.id]++;
+      });
+    }
+  }
+  const vals = asv.map(p => counts[p.id]);
+  const avg  = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10 : 0;
+  const maxV = Math.max(...vals, 1);
+  const rows = asv.map(p => {
+    const v      = counts[p.id];
+    const diff   = Math.round((v - avg) * 10) / 10;
+    const diffStr = Math.abs(diff) < 0.6 ? 'équilibre ✅' : `${diff > 0 ? '+' : ''}${diff} vs moy.${Math.abs(diff) > 2 ? ' ⚠️' : ''}`;
+    const diffC  = Math.abs(diff) <= 1 ? '#16A34A' : '#EA580C';
+    const barW   = Math.round(v / maxV * 100);
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:11px;">
+      <span style="width:8px;height:8px;border-radius:2px;background:${p.color};display:inline-block;flex-shrink:0;"></span>
+      <span style="font-size:13px;font-weight:600;min-width:75px;">${escapeHTML(p.short)}</span>
+      <div style="flex:1;background:var(--color-border);border-radius:99px;height:8px;overflow:hidden;">
+        <div style="width:${barW}%;background:${p.color};height:100%;border-radius:99px;"></div>
+      </div>
+      <span style="font-size:14px;font-weight:700;min-width:30px;text-align:right;">${v}</span>
+      <span style="font-size:12px;color:${diffC};min-width:120px;">${diffStr}</span>
+    </div>`;
+  }).join('');
+  return `<div class="card" style="margin-bottom:18px;">
+    <div style="margin-bottom:14px;">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:2px;">🗓 Équité des samedis — ${year}</h3>
+      <p style="font-size:12px;color:var(--color-text-muted);margin:0;">Répartition des samedis entre Marie, Johanna et Julie · Moy. : <strong>${avg} samedis</strong></p>
+    </div>
+    ${rows}
+  </div>`;
+}
+
+// ── Carte 4 : Heures mensuelles — tableau compact ──────────────
+function buildASVMonthlyTable(year){
+  const cy = getCurrentYear();
+  const cm = today.getMonth();
+  const modulated = ASV_PEOPLE.filter(p => !p.archived && !p.saturdayOnly);
+  if(!modulated.length) return '';
+  const headers = modulated.map(p =>
+    `<th style="text-align:right;padding:6px 10px;">${escapeHTML(p.short)}<br><span style="font-weight:400;font-size:10px;color:var(--color-text-muted);">quota ${formatNum(getASVQuota(p.id).monthly)}h/m</span></th>`
+  ).join('');
+  let rows = '';
+  for(let m = 0; m < 12; m++){
+    const isFuture = year === cy && m > cm;
+    const isCur    = year === cy && m === cm;
+    const cols = modulated.map(p => {
+      if(isFuture) return `<td style="padding:5px 10px;text-align:right;color:var(--color-text-muted);">—</td>`;
+      const q   = getASVQuota(p.id);
+      const w   = computeASVWorkedHours(p.id, year, m);
+      const pct = q.monthly > 0 ? w / q.monthly : 0;
+      const icon = pct > 1.05 ? '🔴' : pct >= 0.9 ? '🟢' : w > 0 ? '🟡' : '';
+      return `<td style="padding:5px 10px;text-align:right;font-size:13px;">${icon} <strong>${formatNum(w)}</strong><span style="color:var(--color-text-muted);font-size:11px;">h</span></td>`;
+    }).join('');
+    rows += `<tr style="${isCur ? 'background:#f0fdf4;font-weight:700;' : ''}">
+      <td style="padding:5px 10px;font-size:13px;color:${isCur ? 'var(--color-primary)' : 'inherit'};">${MONTH_NAMES[m]}${isCur ? ' ←' : ''}</td>
+      ${cols}
+    </tr>`;
+  }
+  const totalCols = modulated.map(p => {
+    const q   = getASVQuota(p.id);
+    const w   = computeASVWorkedHours(p.id, year, null);
+    const pct = q.annual > 0 ? Math.round(w / q.annual * 100) : 0;
+    const c   = pct > 100 ? '#DC2626' : pct >= 90 ? '#F59E0B' : '#16A34A';
+    return `<td style="padding:8px 10px;text-align:right;font-weight:700;border-top:2px solid var(--color-border);"><span style="color:${c};">${formatNum(w)}h</span><span style="font-size:11px;color:var(--color-text-muted);"> / ${formatNum(q.annual)}h (${pct}%)</span></td>`;
+  }).join('');
+  return `<div class="card" style="margin-bottom:18px;">
+    <div style="margin-bottom:10px;">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:2px;">📊 Heures mensuelles — ${year}</h3>
+      <p style="font-size:12px;color:var(--color-text-muted);margin:0;">🟢 Quota atteint · 🟡 &lt; 90% du quota · 🔴 Dépassement</p>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="recap-table" style="min-width:320px;width:100%;">
+        <thead><tr><th style="text-align:left;">Mois</th>${headers}</tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td style="font-weight:800;padding:8px 10px;">Total ${year}</td>${totalCols}</tr></tfoot>
+      </table>
+    </div>
   </div>`;
 }
 
 function renderDashboardHours(){
   const container = document.getElementById('dash-sub-hours');
   const year = dashState.year;
-  const cy = getCurrentYear();
-  const cm = today.getMonth();
-  function alertBadge(w,q){ const r=q>0?w/q:0; return r>1?'<span style="color:#DC2626;font-weight:700;">🔴</span>':r>=0.9?'<span style="color:#F59E0B;font-weight:700;">🟡</span>':'<span style="color:#16A34A;">🟢</span>'; }
-  function bar(w,q){ const pct=q>0?Math.min(100,Math.round(w/q*100)):0; const c=pct>100?'#DC2626':pct>=90?'#F59E0B':'var(--color-primary)'; return `<div style="width:100%;background:var(--color-border);border-radius:99px;height:5px;overflow:hidden;margin-top:3px;"><div style="width:${pct}%;background:${c};height:100%;border-radius:99px;"></div></div>`; }
-
-  // Pas de "Gérer les ASV" ici — géré depuis ⚙️ → Gérer les collaborateurs
-
-  // Cartes ASV
-  const personCards = `<div class="dash-grid" style="margin-top:18px;--dash-cols:${Math.max(ASV_PEOPLE.length,1)};">${ASV_PEOPLE.map(p=>buildPersonCard(year,p.id)).join('')}</div>`;
-
-  // Graphique + récap mensuel ASV
-  const chartCard = ASV_PEOPLE.length ? `
-    <div class="card" style="margin-bottom:24px;">
-      <h3 style="font-size:16px;margin-bottom:4px;">Comparaison mensuelle ASV</h3>
-      <p class="text-muted" style="font-size:12.5px;margin-bottom:10px;">Jours travaillés par mois, ${year}</p>
-      <div class="chart-legend">${ASV_PEOPLE.map(p=>`<span><span class="legend-swatch" style="background:${p.color};width:11px;height:11px;display:inline-block;border-radius:3px;"></span>${p.short}</span>`).join('')}</div>
-      <div class="chart-wrap">${buildBarChartSVGASV(year)}</div>
-    </div>
-    <div class="card" style="margin-bottom:24px;">
-      <h3 style="font-size:16px;margin-bottom:10px;">Récapitulatif mensuel ASV ${year}</h3>
-      ${buildRecapTableASV(year)}
-    </div>` : '';
-
-  // Vue annuelle — 12 mois
-  let annualRows='';
-  for(let m=0;m<12;m++){
-    const isFuture=year===cy&&m>cm;
-    const cols=ASV_PEOPLE.map(p=>{
-      const q=getASVQuota(p.id), w=computeASVWorkedHours(p.id,year,m);
-      if(p.saturdayOnly) return `<td style="padding:6px 10px;text-align:right;${isFuture?'color:var(--color-text-muted);':''}">${isFuture?'—':`${formatNum(w)}h`}</td>`;
-      return `<td style="padding:6px 10px;text-align:right;${isFuture?'color:var(--color-text-muted);':''}">${isFuture?'—':`${alertBadge(w,q.monthly)} ${formatNum(w)}h<span class="text-muted" style="font-size:11px;"> / ${formatNum(q.monthly)}h</span>${bar(w,q.monthly)}`}</td>`;
-    }).join('');
-    const isCur=year===cy&&m===cm;
-    annualRows+=`<tr style="${isCur?'background:#f0fdf4;':''}"><td style="padding:6px 10px;font-size:13px;font-weight:${isCur?'700':'400'};">${MONTH_NAMES[m]}${isCur?' ←':''}</td>${cols}</tr>`;
-  }
-  const annualCols=ASV_PEOPLE.map(p=>{
-    const q=getASVQuota(p.id), w=computeASVWorkedHours(p.id,year,null);
-    if(p.saturdayOnly) return `<td style="padding:8px 10px;text-align:right;font-weight:700;color:var(--color-text-muted);font-style:italic;">${formatNum(w)}h<span style="font-size:11px;"> (hors modulation)</span></td>`;
-    return `<td style="padding:8px 10px;text-align:right;font-weight:700;">${alertBadge(w,q.annual)} ${formatNum(w)}h<span class="text-muted" style="font-size:11px;"> / ${formatNum(q.annual)}h</span>${bar(w,q.annual)}</td>`;
-  }).join('');
-
-  if(!weekNavState.mondayISO) weekNavState.mondayISO=fmtISO(getWeekMondayDate(today));
+  const cy   = getCurrentYear();
+  if(!weekNavState.mondayISO) weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
   container.innerHTML = `
     <div class="year-toggle" id="dash-hours-year-toggle" style="margin-bottom:16px;">
       <button data-year="${cy}" class="${year===cy?'active':''}">${cy}</button>
       <button data-year="${cy+1}" class="${year===cy+1?'active':''}">${cy+1}</button>
     </div>
-    ${buildModulationSummaryCard(year)}
-    ${buildSaturdayEquityCard(year)}
-    ${personCards}
-    ${chartCard}
-    ${buildDashWeeklyMonthCard(year, year===cy?cm:0)}
-    <div class="card">
-      <h3 style="font-size:16px;margin-bottom:2px;">Vue annuelle ${year}</h3>
-      <p class="text-muted" style="font-size:12px;margin-bottom:12px;">Heures travaillées vs quota mensuel. 🟢 OK &nbsp;🟡 ≥ 90% &nbsp;🔴 dépassé</p>
-      <div class="recap-table-scroll">
-      <table class="recap-table" style="min-width:400px;">
-        <thead><tr><th style="text-align:left;">Mois</th>${ASV_PEOPLE.map(p=>`<th style="text-align:right;">${escapeHTML(p.short)}${p.saturdayOnly?' 🗓️':` (${Math.round(getASVTimeFraction(p.id)*100)}%)`}</th>`).join('')}</tr></thead>
-        <tbody>${annualRows}</tbody>
-        <tfoot><tr><td style="font-weight:800;padding:8px 10px;">Total annuel</td>${annualCols}</tr></tfoot>
-      </table>
-      </div>
-    </div>
+    ${buildASVModulationCard(year)}
+    ${year === cy ? buildASVWeeklyCapCard() : ''}
+    ${buildASVSaturdayEquityCard(year)}
+    ${buildASVMonthlyTable(year)}
     <div id="dash-asv-cp"></div>
   `;
-  container.querySelector('#dash-hours-year-toggle').addEventListener('click', (e)=>{
-    const btn=e.target.closest('button'); if(!btn) return;
-    dashState.year=parseInt(btn.dataset.year,10); renderDashboardHours();
+  container.querySelector('#dash-hours-year-toggle').addEventListener('click', e => {
+    const btn = e.target.closest('button'); if(!btn) return;
+    dashState.year = parseInt(btn.dataset.year, 10); renderDashboardHours();
   });
   renderGroupConges('asv', 'dash-asv-cp');
 }
@@ -5037,7 +5098,7 @@ function renderGroupConges(group, containerId){
         <td style="padding:10px 12px;text-align:center;">${taken}j</td>
         <td style="padding:10px 12px;text-align:center;">${carriedOver > 0 ? carriedOver+'j' : '—'}</td>
         <td style="padding:10px 12px;text-align:center;">${extra !== 0 ? (extra>0?'+':'')+extra+'j' : '—'}</td>
-        <td style="padding:10px 12px;text-align:center;font-weight:700;color:${balC};">${balance}j</td>
+        ${group !== 'vets' ? `<td style="padding:10px 12px;text-align:center;font-weight:700;color:${balC};">${balance}j</td>` : ''}
         <td style="padding:10px 12px;min-width:120px;">
           <div style="background:var(--color-border);border-radius:99px;height:6px;overflow:hidden;">
             <div style="width:${pct}%;background:${pct>100?'#DC2626':'var(--color-primary)'};height:100%;border-radius:99px;"></div>
@@ -5068,7 +5129,7 @@ function renderGroupConges(group, containerId){
             <th style="text-align:center;">Posés</th>
             <th style="text-align:center;">Report N-1</th>
             <th style="text-align:center;">Ajust.</th>
-            <th style="text-align:center;">Solde</th>
+            ${group !== 'vets' ? `<th style="text-align:center;">Solde</th>` : ''}
             <th>Progression</th>
             ${isAdmin?'<th></th>':''}
           </tr></thead>
