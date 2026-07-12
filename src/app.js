@@ -1758,32 +1758,87 @@ function openMonthPrintWindow(pids, year, month){
   const printDate = new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
   const monthLabel = `${MONTH_NAMES[month]} ${year}`;
   const nb = daysInMonth(year, month);
+  // URL absolue du logo pour garantir le chargement lors de l'impression
+  const logoSrc = new URL('/logo.png', location.href).href;
+
   const printStyle = `
     <style>
-      @page{size:A4 portrait;margin:10mm 12mm;}
-      #wk-print-tmp *{box-sizing:border-box;font-family:Arial,sans-serif;}
-      #wk-print-tmp .sheet{page-break-after:always;break-after:page;padding:0;}
-      #wk-print-tmp .sheet:last-child{page-break-after:auto;break-after:auto;}
-      #wk-print-tmp .ph1{font-size:13px;margin-bottom:1px;font-weight:700;line-height:1.2;}
-      #wk-print-tmp .ph2{font-size:10px;font-weight:normal;color:#555;margin:0 0 6px;}
-      #wk-print-tmp table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:9px;}
-      #wk-print-tmp th{background:#F3F4F6;padding:3px 6px;text-align:left;font-size:8.5px;border-bottom:1.5px solid #D1D5DB;}
-      #wk-print-tmp td{padding:2px 6px;border-bottom:1px solid #E5E7EB;line-height:1.3;}
-      #wk-print-tmp tr.sat-row td{background:#FFFBEB;}
-      #wk-print-tmp .total-row td{background:#F0FDF4;font-weight:700;border-top:1.5px solid #D1D5DB;font-size:9px;}
-      #wk-print-tmp .sig-box{border:1px solid #9CA3AF;border-radius:4px;padding:8px 12px;margin-top:8px;}
-      #wk-print-tmp .sig-row{display:flex;gap:20px;margin-top:6px;}
-      #wk-print-tmp .sig-col{flex:1;}
-      #wk-print-tmp .sig-lbl{font-size:8px;color:#6B7280;margin-bottom:2px;}
-      #wk-print-tmp .sig-line{border-bottom:1px solid #6B7280;height:26px;}
-      #wk-print-tmp .sig-date{font-size:8px;color:#6B7280;margin-top:6px;}
-      #wk-print-tmp .pfooter{font-size:8px;color:#9CA3AF;margin-top:6px;text-align:right;}
+      @page { size: A4 portrait; margin: 15mm 18mm; }
+      #wk-print-tmp * { box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
+      /* Chaque fiche = exactement une page, sans exception */
+      #wk-print-tmp .sheet { page-break-after: always; break-after: page; }
+      /* ── En-tête fiche ── */
+      #wk-print-tmp .sheet-header {
+        display: flex; align-items: center; gap: 14px;
+        padding-bottom: 8px; margin-bottom: 10px;
+        border-bottom: 2.5px solid #111;
+      }
+      #wk-print-tmp .sheet-header img { height: 36px; width: auto; }
+      #wk-print-tmp .sheet-title { flex: 1; }
+      #wk-print-tmp .sheet-title-main {
+        font-size: 14px; font-weight: 700; letter-spacing: .01em; line-height: 1.2;
+      }
+      #wk-print-tmp .sheet-title-sub {
+        font-size: 10px; color: #444; margin-top: 1px;
+      }
+      #wk-print-tmp .sheet-badge {
+        font-size: 9px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .08em; color: #444; text-align: right; line-height: 1.4;
+      }
+      /* ── Tableau ── */
+      #wk-print-tmp table {
+        width: 100%; border-collapse: collapse; font-size: 9.5px;
+        margin-bottom: 10px;
+      }
+      #wk-print-tmp thead tr {
+        background: #111; color: #fff;
+      }
+      #wk-print-tmp th {
+        padding: 5px 8px; font-size: 8.5px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .06em; text-align: left;
+      }
+      #wk-print-tmp tbody tr:nth-child(even) td { background: #F4F4F4; }
+      #wk-print-tmp tbody tr:nth-child(odd)  td { background: #fff; }
+      #wk-print-tmp tr.sat-row td { background: #E8E8E8; font-style: italic; }
+      #wk-print-tmp tr.ferie-row td { color: #555; font-style: italic; }
+      #wk-print-tmp td {
+        padding: 3px 8px; border-bottom: 1px solid #DADADA; line-height: 1.4;
+      }
+      #wk-print-tmp td.c { text-align: center; }
+      #wk-print-tmp td.num { text-align: center; font-variant-numeric: tabular-nums; }
+      #wk-print-tmp .ot-val  { font-weight: 700; }
+      #wk-print-tmp .def-val { font-weight: 700; }
+      #wk-print-tmp .total-row td {
+        background: #111 !important; color: #fff; font-weight: 700;
+        font-size: 9.5px; border-bottom: none; padding: 5px 8px;
+      }
+      /* ── Bloc signature ── */
+      #wk-print-tmp .sig-box {
+        border: 1px solid #999; border-radius: 3px;
+        padding: 10px 14px; margin-top: 10px;
+      }
+      #wk-print-tmp .sig-label {
+        font-size: 9px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .06em; margin-bottom: 8px; color: #222;
+      }
+      #wk-print-tmp .sig-row { display: flex; gap: 30px; }
+      #wk-print-tmp .sig-col { flex: 1; }
+      #wk-print-tmp .sig-col-lbl { font-size: 8px; color: #555; margin-bottom: 2px; }
+      #wk-print-tmp .sig-line { border-bottom: 1px solid #888; height: 28px; }
+      #wk-print-tmp .sig-date { font-size: 8px; color: #555; margin-top: 8px; }
+      /* ── Pied de page ── */
+      #wk-print-tmp .pfooter {
+        font-size: 8px; color: #888; margin-top: 8px;
+        text-align: right; border-top: 1px solid #DDD; padding-top: 4px;
+      }
     </style>`;
+
   let allSheets = '';
-  pids.forEach((pid, pi)=>{
+  pids.forEach((pid)=>{
     const p = personOf(pid);
     let rows = '';
     let monthTotalH=0, monthTotalOt=0, monthTotalDef=0;
+    let rowIdx = 0;
     for(let day=1; day<=nb; day++){
       const dt = new Date(year, month, day);
       if(dt.getDay()===0) continue;
@@ -1801,48 +1856,86 @@ function openMonthPrintWindow(pids, year, month){
       const nom=present?getDayNominal(iso,pid):0;
       const total=present?Math.round((nom+otH-defH)*100)/100:0;
       if(present){ monthTotalH+=total; monthTotalOt+=otH; monthTotalDef+=defH; }
+      // Statut — sans couleur, uniquement typographie
       let stateCell;
-      if(hName) stateCell=`<em style="color:#D97706;">${escapeHTML(hName)}</em>`;
+      if(hName) stateCell=`<em>${escapeHTML(hName)}</em>`;
       else if(absent){
         const lbl=(getSlotLabel(iso,pid,'M')||getSlotLabel(iso,pid,'AM')||'').toLowerCase();
-        if(lbl.includes('congé')||lbl.includes('conge')) stateCell='<span style="color:#2563EB;">Congé</span>';
-        else if(lbl.includes('maladie')) stateCell='<span style="color:#7C3AED;">Maladie</span>';
-        else stateCell='<span style="color:#DC2626;">Repos / Congé</span>';
+        if(lbl.includes('congé')||lbl.includes('conge')) stateCell='<em>Congé</em>';
+        else if(lbl.includes('maladie')) stateCell='<em>Maladie</em>';
+        else stateCell='<em>Repos / Congé</em>';
       } else if(present){
         stateCell=`Poste ${shType==='F'?'Fermeture':'Ouverture'}${early?` — départ ${early}`:''}`;
       } else { stateCell='—'; }
-      const hCell=present?formatHHMM(total):'—';
-      const otCell=otH>0?`<span style="color:#16A34A;font-weight:600;">+${formatHHMM(otH)}</span>`:'—';
-      const defCell=defH>0?`<span style="color:#DC2626;font-weight:600;">-${formatHHMM(defH)}</span>`:'—';
-      rows+=`<tr${isSat?' class="sat-row"':''}><td style="font-weight:600;white-space:nowrap;">${DOW_FR[dow]}&nbsp;${day}</td><td>${stateCell}</td><td style="text-align:center;">${hCell}</td><td style="text-align:center;">${otCell}</td><td style="text-align:center;">${defCell}</td></tr>`;
+      const hCell = present ? formatHHMM(total) : '—';
+      // Heures supp. et déf. : gras + symbole, pas de couleur
+      const otCell  = otH  > 0 ? `<span class="ot-val">+${formatHHMM(otH)}</span>`  : '—';
+      const defCell = defH > 0 ? `<span class="def-val">−${formatHHMM(defH)}</span>` : '—';
+      const rowCls  = hName ? 'ferie-row' : isSat ? 'sat-row' : '';
+      rows += `<tr${rowCls?` class="${rowCls}"`:''}>
+        <td style="font-weight:600;white-space:nowrap;">${DOW_FR[dow]}&nbsp;${day}</td>
+        <td>${stateCell}</td>
+        <td class="num">${hCell}</td>
+        <td class="num">${otCell}</td>
+        <td class="num">${defCell}</td>
+      </tr>`;
+      rowIdx++;
     }
-    const mTH=Math.round(monthTotalH*100)/100;
-    const mTOt=Math.round(monthTotalOt*100)/100;
-    const mTDef=Math.round(monthTotalDef*100)/100;
-    allSheets+=`<div class="sheet">
-      <div class="ph1">Planning mensuel — ${escapeHTML(p?.short||pid)}</div>
-      <div class="ph2">${monthLabel}</div>
-      <table>
-        <thead><tr><th style="width:52px;">Jour</th><th>Statut / Poste</th><th style="text-align:center;width:58px;">Heures</th><th style="text-align:center;width:58px;">H.supp.</th><th style="text-align:center;width:58px;">H.déf.</th></tr></thead>
-        <tbody>${rows}<tr class="total-row"><td colspan="2">Total mensuel</td><td style="text-align:center;">${formatHHMM(mTH)}</td><td style="text-align:center;color:#16A34A;">${mTOt>0?'+'+formatHHMM(mTOt):'—'}</td><td style="text-align:center;color:#DC2626;">${mTDef>0?'-'+formatHHMM(mTDef):'—'}</td></tr></tbody>
-      </table>
-      <div class="sig-box"><strong style="font-size:9px;">Lu et approuvé</strong>
-        <div class="sig-row">
-          <div class="sig-col"><div class="sig-lbl">Signature ASV</div><div class="sig-line"></div></div>
-          <div class="sig-col"><div class="sig-lbl">Signature vétérinaire</div><div class="sig-line"></div></div>
+    const mTH  = Math.round(monthTotalH*100)/100;
+    const mTOt = Math.round(monthTotalOt*100)/100;
+    const mTDef= Math.round(monthTotalDef*100)/100;
+    allSheets += `<div class="sheet">
+      <div class="sheet-header">
+        <img src="${logoSrc}" alt="Amivet">
+        <div class="sheet-title">
+          <div class="sheet-title-main">${escapeHTML(p?.name||p?.short||pid)}</div>
+          <div class="sheet-title-sub">Planning mensuel &mdash; ${monthLabel}</div>
         </div>
-        <div class="sig-date">Date de remise : _________________________</div>
+        <div class="sheet-badge">Clinique Amivet<br>Planning ASV</div>
       </div>
-      <p class="pfooter">Imprimé le ${printDate} — Amivet PULSE</p>
+      <table>
+        <thead><tr>
+          <th style="width:50px;">Jour</th>
+          <th>Statut / Poste</th>
+          <th style="text-align:center;width:62px;">Heures</th>
+          <th style="text-align:center;width:62px;">H.supp.</th>
+          <th style="text-align:center;width:62px;">H.déf.</th>
+        </tr></thead>
+        <tbody>
+          ${rows}
+          <tr class="total-row">
+            <td colspan="2">Total mensuel</td>
+            <td class="num">${formatHHMM(mTH)}</td>
+            <td class="num">${mTOt>0?'+'+formatHHMM(mTOt):'—'}</td>
+            <td class="num">${mTDef>0?'−'+formatHHMM(mTDef):'—'}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="sig-box">
+        <div class="sig-label">Lu et approuv&eacute;</div>
+        <div class="sig-row">
+          <div class="sig-col">
+            <div class="sig-col-lbl">Signature de l'ASV</div>
+            <div class="sig-line"></div>
+          </div>
+          <div class="sig-col">
+            <div class="sig-col-lbl">Signature du v&eacute;t&eacute;rinaire</div>
+            <div class="sig-line"></div>
+          </div>
+        </div>
+        <div class="sig-date">Date de remise : ___________________________</div>
+      </div>
+      <p class="pfooter">Imprim&eacute; le ${printDate} &mdash; Amivet PULSE</p>
     </div>`;
   });
-  const printDiv=document.createElement('div');
-  printDiv.id='wk-print-tmp';
-  printDiv.innerHTML=printStyle+allSheets;
+
+  const printDiv = document.createElement('div');
+  printDiv.id = 'wk-print-tmp';
+  printDiv.innerHTML = printStyle + allSheets;
   document.body.appendChild(printDiv);
   document.body.classList.add('is-printing');
   window.print();
-  const cleanup=()=>{ document.body.classList.remove('is-printing'); if(printDiv.parentNode) printDiv.parentNode.removeChild(printDiv); };
+  const cleanup = ()=>{ document.body.classList.remove('is-printing'); if(printDiv.parentNode) printDiv.parentNode.removeChild(printDiv); };
   window.addEventListener('afterprint', cleanup, {once:true});
   setTimeout(cleanup, 12000);
 }
