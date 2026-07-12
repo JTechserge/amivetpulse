@@ -2507,6 +2507,7 @@ function buildCalendarToolbar(viewKey){
       <button class="paint-tool${calMonthPaintMode==='repos'?' active':''}" data-paint="repos" title="Repos planifié (sans validation)">🟠 Repos</button>
       <button class="paint-tool${calMonthPaintMode==='conge'?' active':''}" data-paint="conge" title="Demande de congé (validation vétérinaires)">🔵 Congé</button>
       <button class="paint-tool${calMonthPaintMode==='maladie'?' active':''}" data-paint="maladie" title="Arrêt maladie (direct, hors règle 15j)">🤒 Maladie</button>
+      <button class="paint-tool paint-tool-erase${calMonthPaintMode==='erase'?' active':''}" data-paint="erase" title="Gomme — efface la case">🧹 Gomme</button>
     </div>` : '';
   return `
     <div class="cal-toolbar">
@@ -3158,19 +3159,23 @@ function buildLegendColors(people = PEOPLE){
   const hasASV = people.some(p=> isASVPerson(p.id));
   return `
     <div class="legend-row">
-      ${people.map(p=>`
-        <div class="legend-item"><span class="legend-swatch" style="background:${p.present.bg};border:1.5px solid ${p.present.border}"></span>${p.short} — présent (✓ = une demi-journée)</div>
-      `).join('')}
-      <div class="legend-item"><span class="legend-swatch" style="background:var(--color-absent);border:1.5px solid var(--color-absent-border)"></span>${hasASV ? 'Congé validé 🔴' : 'Absent'}</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:var(--color-medical);border:1.5px solid var(--color-medical-border)"></span>Visite médicale 🏥</div>
       ${hasASV ? `
-        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-leave-pending);border:1.5px solid var(--color-leave-pending-border)"></span>Congé en attente 🔵</div>
-        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-sick);border:1.5px solid var(--color-sick-border)"></span>Arrêt maladie 🤒</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-opening);border:1.5px solid var(--color-opening-border)"></span><strong>O</strong> — Ouverture (8h30→19h)</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-closing);border:1.5px solid var(--color-closing-border)"></span><strong>F</strong> — Fermeture (9h→19h15)</div>
         <div class="legend-item"><span class="legend-swatch" style="background:var(--color-off);border:1.5px solid var(--color-off-border)"></span>Repos planifié 🟠</div>
-        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-leave-rejected);border:1.5px solid var(--color-leave-rejected-border)"></span>Demande refusée</div>
-      ` : ''}
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-sick);border:1.5px solid var(--color-sick-border)"></span>Arrêt maladie 🤒</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-absent);border:1.5px solid var(--color-absent-border)"></span>Congé validé ✅</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-leave-pending);border:1.5px solid var(--color-leave-pending-border)"></span>Congé en attente ⏳</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-leave-rejected);border:1.5px solid var(--color-leave-rejected-border)"></span>Congé refusé ⚠️</div>
+      ` : `
+        ${people.map(p=>`
+          <div class="legend-item"><span class="legend-swatch" style="background:${p.present.bg};border:1.5px solid ${p.present.border}"></span>${p.short} — présent</div>
+        `).join('')}
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-absent);border:1.5px solid var(--color-absent-border)"></span>Absent</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-medical);border:1.5px solid var(--color-medical-border)"></span>Visite médicale 🏥</div>
+      `}
       <div class="legend-item"><span class="legend-swatch" style="background:var(--color-holiday);border:1.5px solid var(--color-holiday)"></span>Jour férié</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:var(--color-sunday);border:1.5px solid var(--color-border)"></span>${hasASV ? 'Dimanche — Motif d\'alerte' : 'Dimanche (fermé)'}</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--color-sunday);border:1.5px solid var(--color-border)"></span>${hasASV ? 'Dimanche — Alertes semaine' : 'Dimanche (fermé)'}</div>
     </div>
   `;
 }
@@ -3180,10 +3185,16 @@ function buildLegend(people = PEOPLE){
     <div class="legend">
       ${buildLegendColors(people)}
       <div class="legend-row">
-        <span class="legend-help-item">🖱️ <strong>Clic</strong> sur une case : fait défiler Vide → Présent → ${hasASV?'Demande de congé':'Absent'}</span>
-        <span class="legend-help-item">↔️ <strong>Glisser</strong> le clic sur plusieurs cases : les remplit toutes d'un coup</span>
-        <span class="legend-help-item">👆 <strong>Clic droit</strong> (ou appui long) sur une case : ouvre la saisie d'un motif ${hasASV?'de la demande':'d\'absence'}</span>
-        ${hasASV ? `<span class="legend-help-item">📋 Chaque absence saisie est automatiquement <strong>soumise aux vétérinaires</strong> pour validation (onglet Tableau de bord → Demandes de congé)</span>` : ''}
+        ${hasASV ? `
+          <span class="legend-help-item">🎨 Choisir un <strong>outil</strong> dans la barre ci-dessus puis <strong>cliquer/glisser</strong> les cases</span>
+          <span class="legend-help-item">🧹 <strong>Gomme</strong> : efface une case (retour à l'état vide)</span>
+          <span class="legend-help-item">🔵 <strong>Congé</strong> : ouvre une demande soumise aux vétérinaires</span>
+          <span class="legend-help-item">👆 <strong>Clic droit</strong> (ou appui long) : saisie directe du motif</span>
+        ` : `
+          <span class="legend-help-item">🖱️ <strong>Clic</strong> sur une case : fait défiler Vide → Présent → Absent</span>
+          <span class="legend-help-item">↔️ <strong>Glisser</strong> le clic sur plusieurs cases : les remplit toutes d'un coup</span>
+          <span class="legend-help-item">👆 <strong>Clic droit</strong> (ou appui long) sur une case : ouvre la saisie d'un motif d'absence</span>
+        `}
       </div>
     </div>
   `;
@@ -3696,6 +3707,8 @@ function startDrag(cell){
     paintValue = 'present';
   } else if(isASVDrag && (calMonthPaintMode === 'repos' || calMonthPaintMode === 'conge' || calMonthPaintMode === 'maladie')){
     paintValue = 'absent';
+  } else if(isASVDrag && calMonthPaintMode === 'erase'){
+    paintValue = 'empty';
   } else {
     paintValue = cycleState(getSlotState(iso, personId, slot));
   }
@@ -3727,6 +3740,10 @@ function applyPaint(cell, value){
   } else if(dragCtx.paintMode === 'maladie'){
     setSlotState(iso, personId, slot, 'absent');
     setSlotLabel(iso, personId, slot, 'Arrêt maladie');
+  } else if(dragCtx.paintMode === 'erase'){
+    setSlotState(iso, personId, slot, 'empty');
+    setSlotLabel(iso, personId, slot, '');
+    delete DATA.slots[shiftTypeKey(iso, personId)];
   } else {
     setSlotState(iso, personId, slot, value);
   }

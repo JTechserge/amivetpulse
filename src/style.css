@@ -718,6 +718,9 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
   border-color:var(--color-primary);background:var(--color-primary);color:#fff;
 }
 .paint-tool:hover:not(.active){border-color:var(--color-primary);color:var(--color-primary);}
+.paint-tool-erase{border-style:dashed;}
+.paint-tool-erase.active{border-color:#B91C1C;background:#FEF2F2;color:#B91C1C;}
+.paint-tool-erase:hover:not(.active){border-color:#B91C1C;color:#B91C1C;}
 /* Impression via div temporaire (sans popup) */
 #wk-print-tmp{display:none;}
 @media print{
