@@ -1889,7 +1889,6 @@ function renderWeekViewASV(){
   function canEditDay(d){ return baseCanEdit && !isMonthSigned(pid, d.getFullYear(), d.getMonth()); }
   const canEditWeek = days.some(d => canEditDay(d));
   const DAY_SHORT = ['Lu','Ma','Me','Je','Ve','Sa'];
-  const weekTool = weekNavState.weekTool || 'earlyDep';
 
   function isDayOff(d){ const iso2=fmtISO(d); return getSlotState(iso2,pid,'M')==='absent'&&getSlotState(iso2,pid,'AM')==='absent'; }
   function isDayPresent(d){ const iso2=fmtISO(d); return getSlotState(iso2,pid,'M')==='present'||getSlotState(iso2,pid,'AM')==='present'; }
@@ -1903,10 +1902,10 @@ function renderWeekViewASV(){
   // ── 1. Ligne Poste (O/F toggle) ───────────────────────────
   const shiftRow=`<tr><td class="week-footer-label" style="font-size:10px;color:var(--color-text-muted);">Poste</td>${days.map(d=>{if(d.getDay()===0)return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;const iso=fmtISO(d);if(holidayName(iso))return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;const cg=cellGrey(d);if(d.getDay()===6||!isDayPresent(d))return `<td class="week-footer-cell" style="${cg}"><span style="color:var(--color-text-muted);font-size:9px;">—</span></td>`;const ce=canEditDay(d);const shType=getShiftType(iso,pid);const isF=shType==='F';if(!ce)return `<td class="week-footer-cell"><span style="font-size:10px;color:var(--color-text-muted);">${shType}</span></td>`;return `<td class="week-footer-cell" style="padding:2px;"><button class="week-shift-btn" data-shift-iso="${iso}" data-shift-pid="${pid}" title="${isF?'Fermeture (9h→19h15)':'Ouverture (8h30→19h)'}" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:4px;border:1px solid ${isF?'#6366F1':'#16A34A'};background:${isF?'#EEF2FF':'#F0FDF4'};color:${isF?'#4F46E5':'#15803D'};cursor:pointer;">${shType}</button></td>`;}).join('')}</tr>`;
 
-  // ── 2. Ligne Départ anticipé / Heures déficitaires ─────────
-  const defRow=`<tr><td class="week-footer-label" style="font-size:9px;color:#DC2626;font-weight:700;line-height:1.3;">Départ<br>anticipé</td>${days.map(d=>{const iso=fmtISO(d);if(isSunday(d)||holidayName(iso))return `<td class="week-deficit-cell" style="background:#f8fafc;"></td>`;if(!isDayPresent(d))return `<td class="week-deficit-cell" style="${cellGrey(d)}"></td>`;const defH=getDayDeficitH(iso,pid);const early=getEarlyDep(iso,pid);const ce=canEditDay(d)&&weekTool==='earlyDep';const cAttr=ce?` class="week-am-cell" data-am-iso="${iso}" data-am-pid="${pid}" style="cursor:pointer;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;" title="Cliquer pour modifier"`:' style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;"';if(!defH)return `<td class="week-deficit-cell"><div${cAttr}><span style="color:var(--color-text-muted);font-size:9px;">${ce?'＋ ajouter':'—'}</span></div></td>`;const defMins=Math.round(defH*60);const defStr=`-${Math.floor(defMins/60)}h${defMins%60>0?String(defMins%60).padStart(2,'0'):''}`;return `<td class="week-deficit-cell"><div${cAttr}><span style="font-size:16px;font-weight:800;color:#DC2626;">${defStr}</span><span style="font-size:9px;color:var(--color-text-muted);">${early}</span></div></td>`;}).join('')}</tr>`;
+  // ── 2. Ligne Départ anticipé (toujours cliquable si édition possible) ─
+  const defRow=`<tr><td class="week-footer-label" style="font-size:9px;color:#DC2626;font-weight:700;line-height:1.3;">Départ<br>anticipé</td>${days.map(d=>{const iso=fmtISO(d);if(isSunday(d)||holidayName(iso))return `<td class="week-deficit-cell" style="background:#f8fafc;"></td>`;if(!isDayPresent(d))return `<td class="week-deficit-cell" style="${cellGrey(d)}"></td>`;const defH=getDayDeficitH(iso,pid);const early=getEarlyDep(iso,pid);const ce=canEditDay(d);const cAttr=ce?` class="week-am-cell" data-am-iso="${iso}" data-am-pid="${pid}" style="cursor:pointer;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;" title="Cliquer pour définir un départ anticipé"`:' style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;"';if(!defH)return `<td class="week-deficit-cell"><div${cAttr}><span style="color:var(--color-text-muted);font-size:9px;">${ce?'＋ ajouter':'—'}</span></div></td>`;const defMins=Math.round(defH*60);const defStr=`-${Math.floor(defMins/60)}h${defMins%60>0?String(defMins%60).padStart(2,'0'):''}`;return `<td class="week-deficit-cell"><div${cAttr}><span style="font-size:16px;font-weight:800;color:#DC2626;">${defStr}</span><span style="font-size:9px;color:var(--color-text-muted);">${early}</span></div></td>`;}).join('')}</tr>`;
 
-  // ── 3. Zone H.supp. 13h→15h (drag) ───────────────────────
+  // ── 3. Zone H.supp. 13h→15h (toujours draggable si édition possible) ─
   const LUNCH_SLOTS=8,LUNCH_START_MINS=13*60;
   function buildLunchOtCell(d){
     const iso=fmtISO(d);
@@ -1915,14 +1914,14 @@ function renderWeekViewASV(){
     if(!isDayPresent(d)) return `<td class="week-ot-cell" style="${cg}"></td>`;
     const otMins=getLunchOtMins(iso,pid);
     const filledSlots=Math.ceil(otMins/15);
-    const ce=canEditDay(d)&&weekTool==='overtime';
+    const ce=canEditDay(d);
     const slots=Array.from({length:LUNCH_SLOTS},(_,i)=>{const slotStart=LUNCH_START_MINS+i*15;const h2=Math.floor(slotStart/60),m2=slotStart%60;const lbl=m2===0?`${h2}h`:'';const filled=i<filledSlots;const dAttr=ce?` data-ot-iso="${iso}" data-ot-pid="${pid}" data-ot-slot="${i}" data-ot-zone="lunch"`:'';return `<div class="week-ot-slot${filled?' filled':''}${ce?' interactive':''}"${dAttr} title="${String(h2).padStart(2,'0')}:${String(m2).padStart(2,'0')}">${lbl?`<span class="week-ot-lbl">${lbl}</span>`:''}</div>`;}).join('');
     const lOtH=getDayLunchOtH(iso,pid);
     return `<td class="week-ot-cell">${lOtH>0?`<span class="week-ot-total">+${formatHHMM(lOtH)}</span>`:''}<div class="week-ot-slots">${slots}</div></td>`;
   }
   const lunchOtZoneRow=`<tr><td class="week-footer-label" style="font-size:9px;color:#16A34A;font-weight:700;line-height:1.4;">H.supp.<br><span style="font-size:8px;font-weight:400;color:var(--color-text-muted);">13h→15h</span></td>${days.map(buildLunchOtCell).join('')}</tr>`;
 
-  // ── 4. Zone H.supp. 19h→21h (drag) ───────────────────────
+  // ── 4. Zone H.supp. 19h→21h (toujours draggable si édition possible) ─
   const OT_SLOTS=8,OT_START_MINS=19*60;
   function buildOtCell(d){
     const iso=fmtISO(d);
@@ -1931,7 +1930,7 @@ function renderWeekViewASV(){
     if(!isDayPresent(d)) return `<td class="week-ot-cell" style="${cg}"></td>`;
     const otMins=getWeekOtMins(iso,pid);
     const filledSlots=Math.ceil(otMins/15);
-    const ce=canEditDay(d)&&weekTool==='overtime';
+    const ce=canEditDay(d);
     const slots=Array.from({length:OT_SLOTS},(_,i)=>{const slotStart=OT_START_MINS+i*15;const h2=Math.floor(slotStart/60),m2=slotStart%60;const lbl=m2===0?`${h2}h`:'';const filled=i<filledSlots;const dAttr=ce?` data-ot-iso="${iso}" data-ot-pid="${pid}" data-ot-slot="${i}" data-ot-zone="evening"`:'';return `<div class="week-ot-slot${filled?' filled':''}${ce?' interactive':''}"${dAttr} title="${String(h2).padStart(2,'0')}:${String(m2).padStart(2,'0')}">${lbl?`<span class="week-ot-lbl">${lbl}</span>`:''}</div>`;}).join('');
     const otH=getDayOtH(iso,pid);
     return `<td class="week-ot-cell">${otH>0?`<span class="week-ot-total">+${formatHHMM(otH)}</span>`:''}<div class="week-ot-slots">${slots}</div></td>`;
@@ -1948,11 +1947,9 @@ function renderWeekViewASV(){
   const weekTotalH=days.reduce((s,d)=>{if(isSunday(d)||holidayName(fmtISO(d))||!isDayPresent(d))return s;const iso=fmtISO(d);return s+getDayNominal(iso,pid)+getDayAllOtH(iso,pid)-getDayDeficitH(iso,pid);},0);
   const weekTotalFmt=weekTotalH>0?formatHHMM(weekTotalH):'—';
   const weekTotalStr=weekTotalH>0?` <span style="font-size:14px;font-weight:400;color:var(--color-primary);">(${weekTotalFmt})</span>`:'';
-  const toolbarHtml=canEditWeek?`<div class="week-tool-bar"><span>Outil :</span><button class="week-tool-btn${weekTool==='earlyDep'?' active':''}" data-week-tool="earlyDep" title="Cliquer sur la ligne Départ anticipé pour définir un départ avant 19h">🕐 Départ anticipé</button><button class="week-tool-btn${weekTool==='overtime'?' active':''}" data-week-tool="overtime" title="Glisser dans les zones H.supp. pour ajouter des heures supplémentaires">➕ H.supp.</button></div>`:'';
 
   container.innerHTML=`
     <h2 class="section-title">⏱️ Vue hebdomadaire — ${escapeHTML(p?.short||'')}${weekTotalStr}</h2>
-    ${toolbarHtml}
     <div class="week-nav">
       <button class="btn-icon" id="week-prev">←</button>
       <span class="week-nav-label">${wLabel}</span>
