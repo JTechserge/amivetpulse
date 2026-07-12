@@ -1754,82 +1754,105 @@ function weekPersonId(){
 // Génère une fenêtre d'impression du planning hebdomadaire d'une ASV avec cadre de signature
 // Impression mensuelle — une fiche par ASV sélectionnée, tout le mois
 function openMonthPrintWindow(pids, year, month){
+  // Extraire le logo déjà chargé dans le DOM via canvas (évite tout problème de chargement URL)
+  function getLogoDataUrl(){
+    const img = document.querySelector('img.brand-logo') || document.querySelector('img.login-logo');
+    if(!img || !img.complete || !img.naturalWidth) return '';
+    try {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext('2d').drawImage(img, 0, 0);
+      return c.toDataURL('image/png');
+    } catch(e){ return img.src; }
+  }
+  const logoSrc = getLogoDataUrl();
   const DOW_FR = ['Di','Lu','Ma','Me','Je','Ve','Sa'];
   const printDate = new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
   const monthLabel = `${MONTH_NAMES[month]} ${year}`;
   const nb = daysInMonth(year, month);
-  // URL absolue du logo pour garantir le chargement lors de l'impression
-  const logoSrc = new URL('/logo.png', location.href).href;
 
+  // @page margin:0 → les marges du dialog navigateur n'écrasent rien
+  // Toutes les marges sont gérées via padding dans .sheet
   const printStyle = `
     <style>
-      @page { size: A4 portrait; margin: 15mm 18mm; }
-      #wk-print-tmp * { box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
-      /* Chaque fiche = exactement une page, sans exception */
-      #wk-print-tmp .sheet { page-break-after: always; break-after: page; }
-      /* ── En-tête fiche ── */
-      #wk-print-tmp .sheet-header {
-        display: flex; align-items: center; gap: 14px;
-        padding-bottom: 8px; margin-bottom: 10px;
-        border-bottom: 2.5px solid #111;
+      @page { size: A4 portrait; margin: 0; }
+      * { box-sizing: border-box; margin: 0; padding: 0;
+          font-family: Arial, Helvetica, sans-serif;
+          -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      /* ── Fiche : une page par ASV, toujours ── */
+      .sheet {
+        width: 210mm; min-height: 297mm;
+        padding: 14mm 18mm 12mm;
+        page-break-after: always; break-after: page;
       }
-      #wk-print-tmp .sheet-header img { height: 36px; width: auto; }
-      #wk-print-tmp .sheet-title { flex: 1; }
-      #wk-print-tmp .sheet-title-main {
-        font-size: 14px; font-weight: 700; letter-spacing: .01em; line-height: 1.2;
+      /* ── En-tête ── */
+      .hdr {
+        display: flex; align-items: flex-start; justify-content: space-between;
+        padding-bottom: 9px; margin-bottom: 12px;
+        border-bottom: 3px solid #111;
       }
-      #wk-print-tmp .sheet-title-sub {
-        font-size: 10px; color: #444; margin-top: 1px;
-      }
-      #wk-print-tmp .sheet-badge {
-        font-size: 9px; font-weight: 700; text-transform: uppercase;
-        letter-spacing: .08em; color: #444; text-align: right; line-height: 1.4;
-      }
+      .hdr-left { display: flex; align-items: center; gap: 12px; }
+      .hdr-logo { height: 38px; width: auto; display: block; }
+      .hdr-clinic { font-size: 8.5px; color: #555; text-transform: uppercase;
+                    letter-spacing: .07em; line-height: 1.5; }
+      .hdr-clinic strong { display: block; font-size: 11px; color: #111;
+                           letter-spacing: .02em; font-weight: 700; }
+      .hdr-right { text-align: right; }
+      .hdr-asv { font-size: 16px; font-weight: 700; color: #111; line-height: 1.1; }
+      .hdr-period { font-size: 10px; color: #555; margin-top: 2px; }
       /* ── Tableau ── */
-      #wk-print-tmp table {
-        width: 100%; border-collapse: collapse; font-size: 9.5px;
-        margin-bottom: 10px;
+      table { width: 100%; border-collapse: collapse; margin-bottom: 12px;
+              border: 1.5px solid #111; }
+      thead tr { background: #111; }
+      th {
+        padding: 6px 8px; color: #fff; font-size: 8px;
+        text-transform: uppercase; letter-spacing: .07em;
+        font-weight: 700; text-align: left; border-right: 1px solid #333;
       }
-      #wk-print-tmp thead tr {
-        background: #111; color: #fff;
+      th:last-child { border-right: none; }
+      td {
+        padding: 4px 8px; font-size: 9.5px; line-height: 1.35;
+        border-bottom: 1px solid #E0E0E0; border-right: 1px solid #E0E0E0;
+        vertical-align: middle;
       }
-      #wk-print-tmp th {
-        padding: 5px 8px; font-size: 8.5px; font-weight: 700;
-        text-transform: uppercase; letter-spacing: .06em; text-align: left;
+      td:last-child { border-right: none; }
+      tbody tr:nth-child(even) td { background: #F6F6F6; }
+      tbody tr:nth-child(odd)  td { background: #fff; }
+      tr.sat td  { background: #EBEBEB !important; font-style: italic; }
+      tr.hol td  { background: #F2F2F2 !important; font-style: italic; color: #444; }
+      tr.abs td  { color: #555; }
+      .day-col   { font-weight: 700; white-space: nowrap; width: 46px; }
+      .num       { text-align: center; font-variant-numeric: tabular-nums;
+                   width: 58px; white-space: nowrap; }
+      .ot-val    { font-weight: 700; }
+      .def-val   { font-weight: 700; }
+      .dash      { color: #BBB; }
+      /* Ligne total ── fond sombre comme l'entête */
+      tr.tot td  {
+        background: #111 !important; color: #fff;
+        font-weight: 700; font-size: 9.5px;
+        border-bottom: none; border-right: 1px solid #333;
+        padding: 6px 8px;
       }
-      #wk-print-tmp tbody tr:nth-child(even) td { background: #F4F4F4; }
-      #wk-print-tmp tbody tr:nth-child(odd)  td { background: #fff; }
-      #wk-print-tmp tr.sat-row td { background: #E8E8E8; font-style: italic; }
-      #wk-print-tmp tr.ferie-row td { color: #555; font-style: italic; }
-      #wk-print-tmp td {
-        padding: 3px 8px; border-bottom: 1px solid #DADADA; line-height: 1.4;
-      }
-      #wk-print-tmp td.c { text-align: center; }
-      #wk-print-tmp td.num { text-align: center; font-variant-numeric: tabular-nums; }
-      #wk-print-tmp .ot-val  { font-weight: 700; }
-      #wk-print-tmp .def-val { font-weight: 700; }
-      #wk-print-tmp .total-row td {
-        background: #111 !important; color: #fff; font-weight: 700;
-        font-size: 9.5px; border-bottom: none; padding: 5px 8px;
-      }
+      tr.tot td:last-child { border-right: none; }
       /* ── Bloc signature ── */
-      #wk-print-tmp .sig-box {
+      .sig {
         border: 1px solid #999; border-radius: 3px;
-        padding: 10px 14px; margin-top: 10px;
+        padding: 10px 14px; margin-bottom: 10px;
       }
-      #wk-print-tmp .sig-label {
-        font-size: 9px; font-weight: 700; text-transform: uppercase;
-        letter-spacing: .06em; margin-bottom: 8px; color: #222;
+      .sig-ttl {
+        font-size: 8px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .07em; color: #333; margin-bottom: 10px;
       }
-      #wk-print-tmp .sig-row { display: flex; gap: 30px; }
-      #wk-print-tmp .sig-col { flex: 1; }
-      #wk-print-tmp .sig-col-lbl { font-size: 8px; color: #555; margin-bottom: 2px; }
-      #wk-print-tmp .sig-line { border-bottom: 1px solid #888; height: 28px; }
-      #wk-print-tmp .sig-date { font-size: 8px; color: #555; margin-top: 8px; }
-      /* ── Pied de page ── */
-      #wk-print-tmp .pfooter {
-        font-size: 8px; color: #888; margin-top: 8px;
-        text-align: right; border-top: 1px solid #DDD; padding-top: 4px;
+      .sig-cols { display: flex; gap: 32px; }
+      .sig-col  { flex: 1; }
+      .sig-lbl  { font-size: 8px; color: #666; margin-bottom: 3px; }
+      .sig-line { border-bottom: 1px solid #888; height: 30px; }
+      .sig-date { font-size: 8px; color: #666; margin-top: 10px; }
+      /* ── Pied ── */
+      .footer {
+        font-size: 8px; color: #AAA; text-align: right;
+        border-top: 1px solid #DDD; padding-top: 5px;
       }
     </style>`;
 
@@ -1837,8 +1860,7 @@ function openMonthPrintWindow(pids, year, month){
   pids.forEach((pid)=>{
     const p = personOf(pid);
     let rows = '';
-    let monthTotalH=0, monthTotalOt=0, monthTotalDef=0;
-    let rowIdx = 0;
+    let mTotalH=0, mTotalOt=0, mTotalDef=0;
     for(let day=1; day<=nb; day++){
       const dt = new Date(year, month, day);
       if(dt.getDay()===0) continue;
@@ -1851,81 +1873,80 @@ function openMonthPrintWindow(pids, year, month){
       const absent=mS==='absent'&&amS==='absent';
       const shType=getShiftType(iso,pid);
       const early=getEarlyDep(iso,pid);
-      const otH=present?getDayAllOtH(iso,pid):0;
-      const defH=present?getDayDeficitH(iso,pid):0;
-      const nom=present?getDayNominal(iso,pid):0;
-      const total=present?Math.round((nom+otH-defH)*100)/100:0;
-      if(present){ monthTotalH+=total; monthTotalOt+=otH; monthTotalDef+=defH; }
-      // Statut — sans couleur, uniquement typographie
-      let stateCell;
-      if(hName) stateCell=`<em>${escapeHTML(hName)}</em>`;
+      const otH  = present ? getDayAllOtH(iso,pid)  : 0;
+      const defH = present ? getDayDeficitH(iso,pid) : 0;
+      const nom  = present ? getDayNominal(iso,pid)  : 0;
+      const total= present ? Math.round((nom+otH-defH)*100)/100 : 0;
+      if(present){ mTotalH+=total; mTotalOt+=otH; mTotalDef+=defH; }
+      let stateCell, rowCls='';
+      if(hName){ stateCell=`<em>${escapeHTML(hName)}</em>`; rowCls='hol'; }
       else if(absent){
         const lbl=(getSlotLabel(iso,pid,'M')||getSlotLabel(iso,pid,'AM')||'').toLowerCase();
-        if(lbl.includes('congé')||lbl.includes('conge')) stateCell='<em>Congé</em>';
-        else if(lbl.includes('maladie')) stateCell='<em>Maladie</em>';
-        else stateCell='<em>Repos / Congé</em>';
+        stateCell=lbl.includes('congé')||lbl.includes('conge')?'<em>Congé</em>':lbl.includes('maladie')?'<em>Maladie</em>':'<em>Repos / Congé</em>';
+        rowCls='abs';
       } else if(present){
-        stateCell=`Poste ${shType==='F'?'Fermeture':'Ouverture'}${early?` — départ ${early}`:''}`;
-      } else { stateCell='—'; }
-      const hCell = present ? formatHHMM(total) : '—';
-      // Heures supp. et déf. : gras + symbole, pas de couleur
-      const otCell  = otH  > 0 ? `<span class="ot-val">+${formatHHMM(otH)}</span>`  : '—';
-      const defCell = defH > 0 ? `<span class="def-val">−${formatHHMM(defH)}</span>` : '—';
-      const rowCls  = hName ? 'ferie-row' : isSat ? 'sat-row' : '';
+        stateCell=`Poste ${shType==='F'?'Fermeture':'Ouverture'}${early?` &mdash; départ ${early}`:''}`;
+      } else { stateCell='<span class="dash">—</span>'; }
+      if(isSat) rowCls='sat';
+      const hCell  = present ? formatHHMM(total) : '<span class="dash">—</span>';
+      const otCell = otH  > 0 ? `<span class="ot-val">+${formatHHMM(otH)}</span>`  : '<span class="dash">—</span>';
+      const dfCell = defH > 0 ? `<span class="def-val">−${formatHHMM(defH)}</span>` : '<span class="dash">—</span>';
       rows += `<tr${rowCls?` class="${rowCls}"`:''}>
-        <td style="font-weight:600;white-space:nowrap;">${DOW_FR[dow]}&nbsp;${day}</td>
+        <td class="day-col">${DOW_FR[dow]}&nbsp;${day}</td>
         <td>${stateCell}</td>
         <td class="num">${hCell}</td>
         <td class="num">${otCell}</td>
-        <td class="num">${defCell}</td>
+        <td class="num">${dfCell}</td>
       </tr>`;
-      rowIdx++;
     }
-    const mTH  = Math.round(monthTotalH*100)/100;
-    const mTOt = Math.round(monthTotalOt*100)/100;
-    const mTDef= Math.round(monthTotalDef*100)/100;
+    const fTH  = Math.round(mTotalH*100)/100;
+    const fTOt = Math.round(mTotalOt*100)/100;
+    const fTDef= Math.round(mTotalDef*100)/100;
+    const logoHtml = logoSrc ? `<img class="hdr-logo" src="${logoSrc}" alt="Amivet">` : '';
     allSheets += `<div class="sheet">
-      <div class="sheet-header">
-        <img src="${logoSrc}" alt="Amivet">
-        <div class="sheet-title">
-          <div class="sheet-title-main">${escapeHTML(p?.name||p?.short||pid)}</div>
-          <div class="sheet-title-sub">Planning mensuel &mdash; ${monthLabel}</div>
+      <div class="hdr">
+        <div class="hdr-left">
+          ${logoHtml}
+          <div class="hdr-clinic"><strong>Clinique Amivet</strong>Planning mensuel · ASV</div>
         </div>
-        <div class="sheet-badge">Clinique Amivet<br>Planning ASV</div>
+        <div class="hdr-right">
+          <div class="hdr-asv">${escapeHTML(p?.name||p?.short||pid)}</div>
+          <div class="hdr-period">${monthLabel}</div>
+        </div>
       </div>
       <table>
         <thead><tr>
-          <th style="width:50px;">Jour</th>
+          <th style="width:46px;">Jour</th>
           <th>Statut / Poste</th>
-          <th style="text-align:center;width:62px;">Heures</th>
-          <th style="text-align:center;width:62px;">H.supp.</th>
-          <th style="text-align:center;width:62px;">H.déf.</th>
+          <th style="text-align:center;width:58px;">Heures</th>
+          <th style="text-align:center;width:58px;">H.supp.</th>
+          <th style="text-align:center;width:58px;">H.d&eacute;f.</th>
         </tr></thead>
         <tbody>
           ${rows}
-          <tr class="total-row">
+          <tr class="tot">
             <td colspan="2">Total mensuel</td>
-            <td class="num">${formatHHMM(mTH)}</td>
-            <td class="num">${mTOt>0?'+'+formatHHMM(mTOt):'—'}</td>
-            <td class="num">${mTDef>0?'−'+formatHHMM(mTDef):'—'}</td>
+            <td class="num">${formatHHMM(fTH)}</td>
+            <td class="num">${fTOt>0?'+'+formatHHMM(fTOt):'—'}</td>
+            <td class="num">${fTDef>0?'−'+formatHHMM(fTDef):'—'}</td>
           </tr>
         </tbody>
       </table>
-      <div class="sig-box">
-        <div class="sig-label">Lu et approuv&eacute;</div>
-        <div class="sig-row">
+      <div class="sig">
+        <div class="sig-ttl">Lu et approuv&eacute;</div>
+        <div class="sig-cols">
           <div class="sig-col">
-            <div class="sig-col-lbl">Signature de l'ASV</div>
+            <div class="sig-lbl">Signature de l&rsquo;ASV</div>
             <div class="sig-line"></div>
           </div>
           <div class="sig-col">
-            <div class="sig-col-lbl">Signature du v&eacute;t&eacute;rinaire</div>
+            <div class="sig-lbl">Signature du v&eacute;t&eacute;rinaire</div>
             <div class="sig-line"></div>
           </div>
         </div>
-        <div class="sig-date">Date de remise : ___________________________</div>
+        <div class="sig-date">Date de remise : ________________________________</div>
       </div>
-      <p class="pfooter">Imprim&eacute; le ${printDate} &mdash; Amivet PULSE</p>
+      <div class="footer">Imprim&eacute; le ${printDate} &mdash; Amivet PULSE</div>
     </div>`;
   });
 
