@@ -1752,70 +1752,93 @@ function weekPersonId(){
   return weekNavState.personId || ASV_PEOPLE[0]?.id;
 }
 // Génère une fenêtre d'impression du planning hebdomadaire d'une ASV avec cadre de signature
-function openWeekPrintWindow(pid, monday, days, p, wLabel){
-  const DAY_SHORT = ['Lu','Ma','Me','Je','Ve','Sa'];
-  const printDate = new Date().toLocaleDateString('fr-FR', {day:'2-digit',month:'long',year:'numeric'});
-  let rows = '';
-  days.forEach((d, i) => {
-    const iso = fmtISO(d);
-    if(isSunday(d)) return;
-    const hName = holidayName(iso) || '';
-    const mS = getSlotState(iso, pid, 'M'), amS = getSlotState(iso, pid, 'AM');
-    const present = mS==='present'||amS==='present';
-    const absent  = mS==='absent'&&amS==='absent';
-    const shType = getShiftType(iso, pid);
-    const early = getEarlyDep(iso, pid);
-    const otH = getDayAllOtH(iso, pid);
-    const nom = present ? getDayNominal(iso, pid) : 0;
-    const def = present ? getDayDeficitH(iso, pid) : 0;
-    const total = present ? Math.round((nom + otH - def) * 100) / 100 : 0;
-    const delta = present ? Math.round((otH - def) * 100) / 100 : null;
-    const otCell = delta===null?'':delta>0?`<span style="color:#16A34A;">+${formatHHMM(delta)}</span>`:delta<0?`<span style="color:#DC2626;">${formatHHMM(Math.abs(delta))}</span>`:'=';
-    const stateCell = hName ? `<em style="color:#D97706;">${hName}</em>`
-      : absent ? '<span style="color:#DC2626;">Repos / Congé</span>'
-      : present ? `Poste ${shType==='F'?'Fermeture':'Ouverture'}${early?' — départ anticipé '+early:''}`
-      : '—';
-    rows += `<tr style="border-bottom:1px solid #E5E7EB;">
-      <td style="padding:8px 10px;font-weight:600;">${DAY_SHORT[i]}&nbsp;${d.getDate()}/${d.getMonth()+1}</td>
-      <td style="padding:8px 10px;">${stateCell}</td>
-      <td style="padding:8px 10px;text-align:center;">${present?formatHHMM(total):'—'}</td>
-      <td style="padding:8px 10px;text-align:center;">${otCell}</td>
-    </tr>`;
-  });
-  const weekTotal = days.reduce((s,d)=>{
-    if(isSunday(d)) return s;
-    const iso=fmtISO(d);
-    const isPresent=getSlotState(iso,pid,'M')==='present'||getSlotState(iso,pid,'AM')==='present';
-    if(!isPresent) return s;
-    return s+getDayNominal(iso,pid)+getDayAllOtH(iso,pid)-getDayDeficitH(iso,pid);
-  },0);
-  const note = days.map(d=>getDayNote(fmtISO(d),pid)).filter(Boolean).join(' · ');
-  const printInner = `
+// Impression mensuelle — une fiche par ASV sélectionnée, tout le mois
+function openMonthPrintWindow(pids, year, month){
+  const DOW_FR = ['Di','Lu','Ma','Me','Je','Ve','Sa'];
+  const printDate = new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
+  const monthLabel = `${MONTH_NAMES[month]} ${year}`;
+  const nb = daysInMonth(year, month);
+  const printStyle = `
     <style>
       #wk-print-tmp *{box-sizing:border-box;font-family:Arial,sans-serif;}
-      #wk-print-tmp .ph1{font-size:16px;margin-bottom:2px;font-weight:700;}
-      #wk-print-tmp .ph2{font-size:13px;font-weight:normal;color:#555;margin:0 0 18px;}
-      #wk-print-tmp table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px;}
-      #wk-print-tmp th{background:#F3F4F6;padding:8px 10px;text-align:left;font-size:12px;border-bottom:2px solid #D1D5DB;}
-      #wk-print-tmp td{padding:8px 10px;border-bottom:1px solid #E5E7EB;}
-      #wk-print-tmp .total-row td{background:#F9FAFB;font-weight:700;}
-      #wk-print-tmp .sig-box{border:1px solid #9CA3AF;border-radius:6px;padding:18px 24px;margin-top:28px;}
-      #wk-print-tmp .sig-line{border-bottom:1px solid #6B7280;height:48px;margin-top:8px;}
-      #wk-print-tmp .pfooter{font-size:10px;color:#9CA3AF;margin-top:30px;text-align:right;}
-    </style>
-    <div style="padding:30px;color:#111;font-size:13px;">
-      <div class="ph1">Planning hebdomadaire — ${escapeHTML(p?.short||pid)}</div>
-      <div class="ph2">${wLabel}</div>
+      #wk-print-tmp .ph1{font-size:17px;margin-bottom:2px;font-weight:700;}
+      #wk-print-tmp .ph2{font-size:13px;font-weight:normal;color:#555;margin:0 0 16px;}
+      #wk-print-tmp table{width:100%;border-collapse:collapse;margin-bottom:18px;font-size:12px;}
+      #wk-print-tmp th{background:#F3F4F6;padding:7px 10px;text-align:left;font-size:11px;border-bottom:2px solid #D1D5DB;}
+      #wk-print-tmp td{padding:5px 10px;border-bottom:1px solid #E5E7EB;}
+      #wk-print-tmp tr.sat-row td{background:#FFFBEB;}
+      #wk-print-tmp .total-row td{background:#F0FDF4;font-weight:700;border-top:2px solid #D1D5DB;}
+      #wk-print-tmp .sig-box{border:1px solid #9CA3AF;border-radius:6px;padding:16px 22px;margin-top:24px;}
+      #wk-print-tmp .sig-line{border-bottom:1px solid #6B7280;height:44px;margin-top:8px;}
+      #wk-print-tmp .pfooter{font-size:10px;color:#9CA3AF;margin-top:24px;text-align:right;}
+      @media print{#wk-print-tmp .page-break{page-break-before:always;}}
+    </style>`;
+  let allSheets = '';
+  pids.forEach((pid, pi)=>{
+    const p = personOf(pid);
+    let rows = '';
+    let monthTotalH=0, monthTotalOt=0, monthTotalDef=0;
+    for(let day=1; day<=nb; day++){
+      const dt = new Date(year, month, day);
+      if(dt.getDay()===0) continue;
+      const iso = fmtISO(dt);
+      const hName = holidayName(iso)||'';
+      const dow = dt.getDay();
+      const isSat = dow===6;
+      const mS=getSlotState(iso,pid,'M'), amS=getSlotState(iso,pid,'AM');
+      const present=mS==='present'||amS==='present';
+      const absent=mS==='absent'&&amS==='absent';
+      const shType=getShiftType(iso,pid);
+      const early=getEarlyDep(iso,pid);
+      const otH=present?getDayAllOtH(iso,pid):0;
+      const defH=present?getDayDeficitH(iso,pid):0;
+      const nom=present?getDayNominal(iso,pid):0;
+      const total=present?Math.round((nom+otH-defH)*100)/100:0;
+      if(present){ monthTotalH+=total; monthTotalOt+=otH; monthTotalDef+=defH; }
+      let stateCell;
+      if(hName) stateCell=`<em style="color:#D97706;">${escapeHTML(hName)}</em>`;
+      else if(absent){
+        const lbl=(getSlotLabel(iso,pid,'M')||getSlotLabel(iso,pid,'AM')||'').toLowerCase();
+        if(lbl.includes('congé')||lbl.includes('conge')) stateCell='<span style="color:#2563EB;">Congé</span>';
+        else if(lbl.includes('maladie')) stateCell='<span style="color:#7C3AED;">Maladie</span>';
+        else stateCell='<span style="color:#DC2626;">Repos / Congé</span>';
+      } else if(present){
+        stateCell=`Poste ${shType==='F'?'Fermeture':'Ouverture'}${early?` — départ ${early}`:''}`;
+      } else { stateCell='—'; }
+      const hCell=present?formatHHMM(total):'—';
+      const otCell=otH>0?`<span style="color:#16A34A;font-weight:600;">+${formatHHMM(otH)}</span>`:'—';
+      const defCell=defH>0?`<span style="color:#DC2626;font-weight:600;">-${formatHHMM(defH)}</span>`:'—';
+      rows+=`<tr${isSat?' class="sat-row"':''}>
+        <td style="font-weight:600;white-space:nowrap;">${DOW_FR[dow]}&nbsp;${day}</td>
+        <td>${stateCell}</td>
+        <td style="text-align:center;">${hCell}</td>
+        <td style="text-align:center;">${otCell}</td>
+        <td style="text-align:center;">${defCell}</td>
+      </tr>`;
+    }
+    const mTH=Math.round(monthTotalH*100)/100;
+    const mTOt=Math.round(monthTotalOt*100)/100;
+    const mTDef=Math.round(monthTotalDef*100)/100;
+    allSheets+=`${pi>0?'<div class="page-break"></div>':''}
+    <div style="padding:28px 32px;color:#111;font-size:13px;">
+      <div class="ph1">Planning mensuel — ${escapeHTML(p?.short||pid)}</div>
+      <div class="ph2">${monthLabel}</div>
       <table>
-        <thead><tr><th>Jour</th><th>Statut / Poste</th><th style="text-align:center;">Heures</th><th style="text-align:center;">Écart</th></tr></thead>
+        <thead><tr>
+          <th style="width:60px;">Jour</th>
+          <th>Statut / Poste</th>
+          <th style="text-align:center;width:70px;">Heures</th>
+          <th style="text-align:center;width:70px;">H.supp.</th>
+          <th style="text-align:center;width:70px;">H.déf.</th>
+        </tr></thead>
         <tbody>${rows}
         <tr class="total-row">
-          <td colspan="2">Total semaine</td>
-          <td style="text-align:center;">${weekTotal?formatHHMM(weekTotal):'—'}</td>
-          <td></td>
+          <td colspan="2" style="font-weight:700;">Total mensuel</td>
+          <td style="text-align:center;">${formatHHMM(mTH)}</td>
+          <td style="text-align:center;color:#16A34A;">${mTOt>0?'+'+formatHHMM(mTOt):'—'}</td>
+          <td style="text-align:center;color:#DC2626;">${mTDef>0?'-'+formatHHMM(mTDef):'—'}</td>
         </tr></tbody>
       </table>
-      ${note?`<p style="font-size:12px;color:#6B7280;">Note : ${escapeHTML(note)}</p>`:''}
       <div class="sig-box">
         <strong>Lu et approuvé</strong>
         <div style="display:flex;gap:40px;margin-top:12px;">
@@ -1826,15 +1849,59 @@ function openWeekPrintWindow(pid, monday, days, p, wLabel){
       </div>
       <p class="pfooter">Imprimé le ${printDate} — Amivet PULSE</p>
     </div>`;
-  const printDiv = document.createElement('div');
-  printDiv.id = 'wk-print-tmp';
-  printDiv.innerHTML = printInner;
+  });
+  const printDiv=document.createElement('div');
+  printDiv.id='wk-print-tmp';
+  printDiv.innerHTML=printStyle+allSheets;
   document.body.appendChild(printDiv);
   document.body.classList.add('is-printing');
   window.print();
-  const cleanupPrint = ()=>{ document.body.classList.remove('is-printing'); if(printDiv.parentNode) printDiv.parentNode.removeChild(printDiv); };
-  window.addEventListener('afterprint', cleanupPrint, {once:true});
-  setTimeout(cleanupPrint, 8000);
+  const cleanup=()=>{ document.body.classList.remove('is-printing'); if(printDiv.parentNode) printDiv.parentNode.removeChild(printDiv); };
+  window.addEventListener('afterprint', cleanup, {once:true});
+  setTimeout(cleanup, 12000);
+}
+
+// Popup de sélection ASV avant impression mensuelle
+function openMonthPrintPopup(viewKey){
+  const cfg=CAL_VIEWS[viewKey];
+  const year=cfg.year, month=cfg.navState.month;
+  const monthLabel=`${MONTH_NAMES[month]} ${year}`;
+  const people=ASV_PEOPLE.filter(p=>!p.archived);
+  const backdrop=document.getElementById('popover-backdrop');
+  const box=document.getElementById('popover-box');
+  box.innerHTML=`
+    <div class="popover-title">🖨️ Imprimer — ${escapeHTML(monthLabel)}</div>
+    <div style="margin-bottom:16px;">
+      <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:10px;font-weight:600;">Sélectionner les fiches à imprimer :</div>
+      <label style="display:flex;align-items:center;gap:8px;padding:7px 0;font-size:13px;cursor:pointer;border-bottom:1px solid var(--color-border);margin-bottom:6px;">
+        <input type="checkbox" id="print-all-asv" style="width:15px;height:15px;cursor:pointer;">
+        <strong>Toutes les ASV</strong>
+      </label>
+      ${people.map(p=>`
+        <label style="display:flex;align-items:center;gap:8px;padding:5px 0 5px 8px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" class="print-asv-cb" data-pid="${p.id}" style="width:14px;height:14px;cursor:pointer;">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${p.color};flex-shrink:0;"></span>
+          ${escapeHTML(p.short)}
+        </label>`).join('')}
+    </div>
+    <div class="popover-actions">
+      <button class="btn" id="popover-cancel">Annuler</button>
+      <button class="btn btn-primary" id="print-launch-btn">🖨️ Imprimer</button>
+    </div>`;
+  backdrop.classList.add('open');
+  const close=()=>backdrop.classList.remove('open');
+  box.querySelector('#popover-cancel').onclick=close;
+  backdrop.onclick=(e)=>{ if(e.target===backdrop) close(); };
+  const allCb=box.querySelector('#print-all-asv');
+  const indivCbs=[...box.querySelectorAll('.print-asv-cb')];
+  allCb.onchange=()=>{ indivCbs.forEach(cb=>cb.checked=allCb.checked); };
+  indivCbs.forEach(cb=>{ cb.onchange=()=>{ allCb.checked=indivCbs.every(c=>c.checked); allCb.indeterminate=!allCb.checked&&indivCbs.some(c=>c.checked); }; });
+  box.querySelector('#print-launch-btn').onclick=()=>{
+    const selected=indivCbs.filter(cb=>cb.checked).map(cb=>cb.dataset.pid);
+    if(!selected.length){ showToast('Sélectionnez au moins une ASV','⚠️'); return; }
+    close();
+    openMonthPrintWindow(selected, year, month);
+  };
 }
 
 function openEarlyDepPicker(iso, pid){
@@ -1966,8 +2033,6 @@ function renderWeekViewASV(){
       <strong style="font-size:22px;color:var(--color-primary);">${weekTotalFmt}</strong>
       <span style="font-size:11px;color:var(--color-text-muted);">${wLabel}</span>
     </div>
-    <div style="margin-top:10px;display:flex;justify-content:flex-end;">
-      <button class="btn btn-sm" id="week-print-btn">🖨️ Imprimer</button>
     </div>`;
 
   container.querySelector('#week-prev').onclick=()=>{ const d=new Date(weekNavState.mondayISO+'T00:00:00'); d.setDate(d.getDate()-7); weekNavState.mondayISO=fmtISO(d); renderWeekViewASV(); };
@@ -1981,7 +2046,6 @@ function renderWeekViewASV(){
   }
   if(isVetUser) container.querySelector('#week-asv-pick').onchange=(e)=>{ weekNavState.personId=e.target.value; renderWeekViewASV(); };
   container.querySelectorAll('.week-shift-btn').forEach(btn=>{ btn.addEventListener('click',()=>{ const iso2=btn.dataset.shiftIso,pid2=btn.dataset.shiftPid; DATA.slots[shiftTypeKey(iso2,pid2)]=getShiftType(iso2,pid2)==='O'?'F':'O'; saveData(false); renderWeekViewASV(); }); });
-  container.querySelector('#week-print-btn').addEventListener('click',()=>{ openWeekPrintWindow(pid, monday, days, p, wLabel); });
 }
 
 
@@ -2213,7 +2277,7 @@ function buildCalendarToolbar(viewKey){
       <div class="cal-toolbar-actions">
         <button class="btn-icon undo-btn" id="cal-undo-${viewKey}" aria-label="Annuler la dernière action" title="Annuler la dernière action (Cmd/Ctrl+Z)" ${UNDO_STACK.length===0?'disabled':''}>↩️</button>
         <button class="btn btn-sm btn-danger" id="cal-clear-month-${viewKey}" aria-label="Vider le mois affiché">🗑️ Vider le mois</button>
-        ${cfg.printable ? `<button class="btn-icon" id="cal-print-${viewKey}" title="Imprimer ce calendrier" aria-label="Imprimer ce calendrier">🖨️</button>` : ''}
+        ${cfg.printable ? `<button class="btn btn-sm" id="cal-print-${viewKey}" title="Imprimer les fiches mensuelles ASV">🖨️ Imprimer</button>` : ''}
       </div>
     </div>
     ${paintBar}
@@ -3961,7 +4025,7 @@ function initCalendarInteractions(){
       return;
     }
     if(e.target.id === `cal-undo-${viewKey}`) return undoLastAction();
-    if(e.target.id === `cal-print-${viewKey}`) return window.print();
+    if(e.target.id === `cal-print-${viewKey}`) return openMonthPrintPopup(viewKey);
 
     const commentBtn = e.target.closest('[data-action="comment"]');
     if(commentBtn){ openDayCommentPopover(commentBtn.dataset.date, viewKey); return; }
