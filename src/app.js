@@ -794,22 +794,25 @@ function openEditUserModal(userId, users, onBack){
     }
   };
 
-  // Réinitialisation du profil (admin uniquement) — vide les slots de planning
+  // Réinitialisation du profil (admin uniquement) — supprime le compte Supabase (email + auth)
+  // mais conserve la ligne planning et toutes les données saisies.
+  // Résultat : la personne revient à l'état "Sans compte" avec bouton "Inviter".
   box.querySelector('#edit-reset-profile')?.addEventListener('click', ()=>{
     openConfirmModal({
-      title:`Réinitialiser le profil de ${escapeHTML(user.display_name||user.email||'ce collaborateur')} ?`,
-      message:`Toutes les données de planning saisies pour ce profil seront effacées (présences, absences, H.supp., départs anticipés, commentaires). Le compte et les accès restent intacts.\n\nCette action est irréversible.`,
-      confirmLabel:'Réinitialiser le planning',
+      title:`Réinitialiser le compte de ${escapeHTML(user.display_name||user.email||'ce collaborateur')} ?`,
+      message:`Le compte Supabase (email, mot de passe, accès à l'app) sera supprimé.\n\nLes données de planning et la ligne dans le calendrier restent intactes.\n\nVous pourrez ensuite inviter un nouvel email sur ce profil.\n\nCette action est irréversible.`,
+      confirmLabel:'Supprimer le compte',
       danger: true,
-      onConfirm: ()=>{
-        if(!personId){ showToast('Aucun profil planning lié à ce compte', '⚠️'); return; }
-        snapshotBeforeChange();
-        Object.keys(DATA.slots).filter(k=> k.startsWith(`${personId}_`) || k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
-          .forEach(k=> delete DATA.slots[k]);
-        saveData();
-        showToast(`Planning de ${escapeHTML(user.display_name||user.email||'ce profil')} réinitialisé`, '🗑️');
-        renderCalendarView(currentCalViewKey||'asv-current');
-        onBack();
+      onConfirm: async ()=>{
+        try{
+          const res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
+            method:'POST', headers:supabaseHeaders({'Content-Type':'application/json'}),
+            body:JSON.stringify({ action:'delete', user_id:userId }),
+          });
+          if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
+          showToast(`Compte de ${escapeHTML(user.display_name||user.email||'ce profil')} supprimé — planning conservé`, '✅');
+          onBack();
+        }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
       },
     });
   });
