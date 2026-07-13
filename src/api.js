@@ -3,19 +3,21 @@
    Fonctions data-in / data-out : retournent les données brutes.
    Les mutations d'état (DATA, SIGNATURES, renderCurrentView) restent dans app.js.
    ================================================================ */
-import { SUPABASE_URL } from './config.js';
+import { SUPABASE_URL, SUPABASE_FUNCTIONS_URL } from './config.js';
 import { supabaseHeaders } from './auth.js';
 
 // ----------------------------------------------------------------
 // Planning data (planning_data table — singleton JSON)
 // ----------------------------------------------------------------
 
-// Envoie les slots vers Supabase. Fire-and-forget : les erreurs ne bloquent pas l'UI.
+// Envoie les slots vers l'Edge Function save-planning (vérification des droits côté serveur).
+// La RLS de planning_data bloque les PATCH directs authenticated depuis la migration 20260714.
+// Fire-and-forget : les erreurs ne bloquent pas l'UI.
 export function pushDataToSupabase(slots){
-  fetch(`${SUPABASE_URL}planning_data?id=eq.singleton`, {
-    method:'PATCH',
-    headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=minimal' }),
-    body: JSON.stringify({ data: slots, updated_at: new Date().toISOString() }),
+  fetch(`${SUPABASE_FUNCTIONS_URL}save-planning`, {
+    method: 'POST',
+    headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ slots }),
   }).catch(e=> console.warn('Synchronisation Supabase impossible (hors ligne ?), données conservées en local.', e));
 }
 
