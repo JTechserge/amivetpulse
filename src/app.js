@@ -18,6 +18,7 @@ import {
 } from './utils.js';
 import { getAuthSession, saveAuthSession, supabaseHeaders, authSignIn, authUpdatePassword, authSendPasswordReset } from './auth.js';
 import { reindexPresentShades, saveASVRoster, loadASVRoster, archiveASVPerson, unarchiveASVPerson, savePersonColors } from './state.js';
+import { showToast, showSavedToast, openConfirmModal, applyPersonColorVars, loadPersonColors } from './ui.js';
 import { pushDataToSupabase, syncFromSupabase, fetchSignatures, apiSignMonth, apiRevokeSignature } from './api.js';
 /* ================================================================
    AMIVET PLANNING — Application JS (vanilla ES2022, sans dépendance)
@@ -65,19 +66,6 @@ function addASVPerson(name){
 /* ----------------------------------------------------------------
    1bis. COULEURS PERSONNALISABLES DES ASSOCIÉS
    ---------------------------------------------------------------- */
-function applyPersonColorVars(){
-  allPeople().forEach(p=> document.documentElement.style.setProperty(`--color-${p.id}`, p.color));
-}
-function loadPersonColors(){
-  try{
-    const raw = localStorage.getItem(PERSON_COLORS_KEY);
-    if(raw){
-      const colors = JSON.parse(raw);
-      allPeople().forEach(p=>{ if(colors[p.id]) p.color = colors[p.id]; });
-    }
-  }catch(e){ console.warn('Couleurs personnalisées illisibles, valeurs par défaut conservées.', e); }
-  applyPersonColorVars();
-}
 function colorPickerRow(p){
   return `
     <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;font-weight:700;color:var(--color-text);">
@@ -1422,40 +1410,7 @@ function seedDemoData(){
   saveData(false);
 }
 
-/* ----------------------------------------------------------------
-   6. TOAST
-   ---------------------------------------------------------------- */
-function showToast(message, icon='✓'){
-  const container = document.getElementById('toast-container');
-  const el = document.createElement('div');
-  el.className = 'toast';
-  el.innerHTML = `<span>${icon}</span><span>${message}</span>`;
-  container.appendChild(el);
-  setTimeout(()=> el.remove(), 15000);
-}
-function showSavedToast(){ showToast('Sauvegardé'); }
 
-/* ----------------------------------------------------------------
-   7. MODALE DE CONFIRMATION GÉNÉRIQUE
-   ---------------------------------------------------------------- */
-function openConfirmModal({title, message, confirmLabel='Confirmer', danger=true, onConfirm}){
-  const backdrop = document.getElementById('modal-backdrop');
-  const box = document.getElementById('modal-box');
-  box.className = 'modal-box';
-  box.innerHTML = `
-    <h3>${title}</h3>
-    <p>${message}</p>
-    <div class="modal-actions">
-      <button class="btn" id="modal-cancel">Annuler</button>
-      <button class="btn ${danger?'btn-danger':'btn-primary'}" id="modal-confirm">${confirmLabel}</button>
-    </div>
-  `;
-  backdrop.classList.add('open');
-  const close = ()=> backdrop.classList.remove('open');
-  box.querySelector('#modal-cancel').onclick = close;
-  box.querySelector('#modal-confirm').onclick = ()=>{ onConfirm(); close(); };
-  backdrop.onclick = (e)=>{ if(e.target === backdrop) close(); };
-}
 
 /* ----------------------------------------------------------------
    8. MENU RÉGLAGES (export / import / reset)
