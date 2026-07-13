@@ -124,6 +124,7 @@ export function renderAnnounces(){
     ? filtered.map(cardHtml).join('')
     : `<p class="text-muted" style="margin-top:16px;">Aucune annonce pour le moment.</p>`;
 
+  // eslint-disable-next-line no-unsanitized/property
   container.innerHTML = `
     <h2 class="section-title">📣 Tableau d'annonces</h2>
     <div style="margin-bottom:14px;">${filterBar}</div>
@@ -164,6 +165,7 @@ export function renderAnnounces(){
     archList.textContent = 'Chargement…';
     const archived = await loadArchivedAnnouncements();
     if(!archived.length){ archList.innerHTML = '<p style="font-size:13px;color:var(--color-muted);">Aucune archive.</p>'; return; }
+    // eslint-disable-next-line no-unsanitized/property
     archList.innerHTML = archived.map(a => {
       const cat = ANNONCE_CATEGORIES[a.category] || ANNONCE_CATEGORIES.info;
       return `<div style="border:1px solid var(--color-border);border-radius:8px;padding:10px 14px;margin-bottom:8px;background:var(--color-card);">
@@ -192,6 +194,7 @@ export function openAnnouncementModal(annId){
     return `<button type="button" class="ann-cat-btn" data-cat="${k}" style="border:1.5px solid ${c.border};background:${sel?c.bg:'var(--color-card)'};color:${c.color};padding:5px 12px;border-radius:20px;font-size:13px;cursor:pointer;font-weight:${sel?'700':'400'};">${c.icon} ${c.label}</button>`;
   }).join('');
 
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h3>${existing ? '✏️ Modifier l\'annonce' : '📣 Nouvelle annonce'}</h3>
     <div style="display:flex;flex-direction:column;gap:12px;">

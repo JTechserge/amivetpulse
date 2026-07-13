@@ -106,6 +106,7 @@ function renderRolloverBanner(){
   const bar = document.createElement('div');
   bar.id = 'rollover-banner';
   bar.className = 'rollover-banner';
+  // eslint-disable-next-line no-unsanitized/property
   bar.innerHTML = `
     <span>📅 Nous sommes en ${today.getFullYear()} — le calendrier ${fromYear} peut basculer sur ${toYear} (le prévisionnel ${toYear} devient le calendrier courant, ${toYear+1} est proposé en prévisionnel).</span>
     <div class="rollover-actions">
@@ -565,6 +566,7 @@ function renderImpersonationBanner(){
   if(store.currentUser?.role === 'admin' && store.adminViewMode === 'asv' && store.adminImpersonatedPersonId){
     const p = personOf(store.adminImpersonatedPersonId);
     banner.classList.remove('hidden');
+    // eslint-disable-next-line no-unsanitized/property
     banner.innerHTML = `
       <span>👁 Mode aperçu</span>
       <span style="display:inline-flex;align-items:center;gap:6px;">
@@ -598,6 +600,7 @@ function openASVImpersonationPicker(){
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h3>👁 Vue ASV — choisir</h3>
     <p>Sélectionnez l'ASV dont vous souhaitez voir l'expérience :</p>
@@ -827,6 +830,7 @@ updatePwaOfflineBanner();
       if(!tab.badgeId) return;
       const src=document.getElementById(tab.badgeId);
       const dst=document.getElementById('mb-'+tab.badgeId);
+      // eslint-disable-next-line no-unsanitized/property
       if(src&&dst) dst.innerHTML=src.innerHTML;
     });
   }

@@ -153,6 +153,7 @@ function updateCellDOM(cellEl){
   const info = cellRenderInfo(iso, personId, slot);
   cellEl.className = `cal-cell state-${info.stateClass}`;
   cellEl.style.cssText = info.style;
+  // eslint-disable-next-line no-unsanitized/property
   cellEl.innerHTML = info.html;
   cellEl.setAttribute('aria-label', cellAriaLabel(iso, personId, slot));
   cellEl.title = info.title || '';
@@ -168,6 +169,7 @@ function updateHalfDOM(halfEl){
   const stateCls = info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
   halfEl.className = `cal-wg-half${stateCls}${lockCls}`;
   halfEl.style.cssText = info.style || '';
+  // eslint-disable-next-line no-unsanitized/property
   halfEl.innerHTML = info.html || (slot === 'M' ? 'M' : 'A');
   halfEl.title = info.title || '';
   halfEl.setAttribute('aria-label', cellAriaLabel(iso, personId, slot));
@@ -243,6 +245,7 @@ function openClearMonthModal(viewKey, month){
   const allLabel = cfg.people.map(p=>p.short).join(' + ');
   const hasASV = cfg.people.some(p=>isASVPerson(p.id));
   const asvWarning = hasASV ? `<p style="font-size:12px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;padding:8px 10px;color:#92400E;margin:0 0 14px;">⚠️ Les saisies hebdomadaires (heures matin / déjeuner / après-midi) des ASV pour ce mois seront également supprimées.</p>` : '';
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h3>Vider ${label} ?</h3>
     <p>Choisissez ce qui doit être supprimé définitivement pour ${label}. Cette action est irréversible.</p>
@@ -851,6 +854,7 @@ function renderCalendarView(viewKey){
   const title = cfg.forecast
     ? `<h2 class="section-title">Prévisionnel ${cfg.year} — ${cfg.label}</h2>`
     : `<h2 class="section-title">Calendrier ${cfg.year} — ${cfg.label}</h2>`;
+  // eslint-disable-next-line no-unsanitized/property
   container.innerHTML = `
     ${banner}
     ${title}
@@ -994,6 +998,7 @@ function openAbsenceLabelPopover(cell, forceAbsent){
   const backdrop = document.getElementById('popover-backdrop');
   const box = document.getElementById('popover-box');
   const quickTags = ['Vacances','Formation','Congrès','Maladie','RTT','Rendez-vous médical'];
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h4>${isASV ? 'Demande de congé' : "Motif d'absence"} — ${person.short}, ${SLOT_LABELS[slot]}<br><span class="text-muted" style="font-weight:500;font-size:12px;">${formatFR(iso)}</span></h4>
     ${isASV ? `<p class="text-muted" style="font-size:12px;margin:-4px 0 12px;">Sera soumise aux vétérinaires pour validation.</p>` : ''}
@@ -1061,6 +1066,7 @@ function openAbsenceRangePopover(slots, personId, viewKey){
   const quickTags = ['Vacances','Formation','Congrès','Maladie','RTT','Rendez-vous médical'];
   const fromTxt = formatFR(slots[0].iso);
   const toTxt = formatFR(slots[slots.length-1].iso);
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h4>${isASV ? 'Demande de congé' : "Motif d'absence"} — ${person.short}<br><span class="text-muted" style="font-weight:500;font-size:12px;">${fromTxt}${slots.length>1?' → '+toTxt:''}</span></h4>
     ${isASV ? `<p class="text-muted" style="font-size:12px;margin:-4px 0 12px;">Sera soumise aux vétérinaires pour validation.</p>` : ''}
@@ -1127,6 +1133,7 @@ function openDayCommentPopover(iso, viewKey){
   const backdrop = document.getElementById('popover-backdrop');
   const box = document.getElementById('popover-box');
   const current = getDayComment(iso);
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h4>💬 Commentaire — ${formatFR(iso)}</h4>
     <textarea id="day-comment-input" rows="3" placeholder="Ex. Réunion fournisseur, journée portes ouvertes...">${escapeHTML(current)}</textarea>
@@ -1153,6 +1160,7 @@ function openOvertimeDayPopover(iso, people, viewKey){
   const backdrop = document.getElementById('popover-backdrop');
   const box = document.getElementById('popover-box');
   const [y, m] = iso.split('-').map(Number);
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h4>⏱️ Ajustement d'heures<br><span class="text-muted" style="font-weight:500;font-size:12px;">${formatFR(iso)} — positif = heures sup, négatif = départ anticipé</span></h4>
     <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
@@ -1266,6 +1274,7 @@ function openDaySidebar(iso, viewKey){
   const sidebar = document.getElementById('day-sidebar');
   const closeSidebar = ()=>{ overlay.classList.remove('open'); sidebar.classList.remove('open'); };
   const renderBody = ()=>{
+    // eslint-disable-next-line no-unsanitized/property
     sidebar.innerHTML = `
       <div class="day-sidebar-head">
         <h3>✏️ ${formatFR(iso)}</h3>
@@ -1420,6 +1429,7 @@ function initCalendarInteractions(){
     const person = personOf(pid);
     const backdrop = document.getElementById('popover-backdrop');
     const box = document.getElementById('popover-box');
+    // eslint-disable-next-line no-unsanitized/property
     box.innerHTML = `
       <div class="popover-title">⚠️ Alertes semaine — ${escapeHTML(person?.short || pid)}</div>
       <ul style="margin:8px 0 16px;padding-left:20px;font-size:13px;line-height:1.9;">

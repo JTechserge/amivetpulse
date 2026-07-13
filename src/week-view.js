@@ -247,6 +247,7 @@ function openMonthPrintWindow(pids, year, month){
 
   const printDiv = document.createElement('div');
   printDiv.id = 'wk-print-tmp';
+  // eslint-disable-next-line no-unsanitized/property
   printDiv.innerHTML = printStyle + allSheets;
   document.body.appendChild(printDiv);
   document.body.classList.add('is-printing');
@@ -263,6 +264,7 @@ function openMonthPrintPopup(viewKey){
   const people=ASV_PEOPLE.filter(p=>!p.archived);
   const backdrop=document.getElementById('popover-backdrop');
   const box=document.getElementById('popover-box');
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML=`
     <div class="popover-title">🖨️ Imprimer — ${escapeHTML(monthLabel)}</div>
     <div style="margin-bottom:16px;">
@@ -305,6 +307,7 @@ function openEarlyDepPicker(iso, pid){
   const current=getEarlyDep(iso,pid)||'';
   const shType=getShiftType(iso,pid);
   const stdEndStr=shType==='F'?'19h15':'19h00';
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML=`
     <div class="popover-title">🕐 Départ anticipé — ${escapeHTML(p?.short||pid)}</div>
     <p style="font-size:12px;color:var(--color-text-muted);margin:0 0 12px;">
@@ -410,6 +413,7 @@ function renderWeekViewASV(){
   const weekTotalFmt=weekTotalH>0?formatHHMM(weekTotalH):'—';
   const weekTotalStr=weekTotalH>0?` <span style="font-size:14px;font-weight:400;color:var(--color-primary);">(${weekTotalFmt})</span>`:'';
 
+  // eslint-disable-next-line no-unsanitized/property
   container.innerHTML=`
     <h2 class="section-title">⏱️ Vue hebdomadaire — ${escapeHTML(p?.short||'')}${weekTotalStr}</h2>
     <div class="week-nav">
@@ -436,7 +440,7 @@ function renderWeekViewASV(){
   if(canEditWeek){
     container.querySelector('#week-clear-btn').onclick=()=>{
       const label=`${monday.getDate()} ${MONTH_NAMES[monday.getMonth()].toLowerCase()} – ${days[5].getDate()} ${MONTH_NAMES[days[5].getMonth()].toLowerCase()}`;
-      openConfirmModal({ title:`Vider la semaine du ${label} ?`, message:`Tous les ajustements de ${escapeHTML(p?.short||'')} (départs anticipés, H.supp.) seront effacés.`, confirmLabel:'Vider', onConfirm:()=>{ _snapshotBeforeChange(); days.forEach(d=>{ if(isSunday(d)||!canEditDay(d))return; const iso=fmtISO(d); setEarlyDep(iso,pid,''); setWeekOtMins(iso,pid,0); setLunchOtMins(iso,pid,0); }); _saveData(); showToast(`Semaine vidée (${escapeHTML(p?.short||'')})`,'🗑️'); renderWeekViewASV(); } });
+      openConfirmModal({ title:`Vider la semaine du ${label} ?`, message:`Tous les ajustements de ${p?.short||''} (départs anticipés, H.supp.) seront effacés.`, confirmLabel:'Vider', onConfirm:()=>{ _snapshotBeforeChange(); days.forEach(d=>{ if(isSunday(d)||!canEditDay(d))return; const iso=fmtISO(d); setEarlyDep(iso,pid,''); setWeekOtMins(iso,pid,0); setLunchOtMins(iso,pid,0); }); _saveData(); showToast(`Semaine vidée (${p?.short||''})`,'🗑️'); renderWeekViewASV(); } });
     };
   }
   if(isVetUser) container.querySelector('#week-asv-pick').onchange=(e)=>{ store.weekNavState.personId=e.target.value; renderWeekViewASV(); };

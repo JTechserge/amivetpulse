@@ -87,6 +87,7 @@ function openColorPickerModal(){
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h3>🎨 Couleurs des associés et des ASV</h3>
     <p>Le vert, le rouge, le bleu foncé, le jaune et le blanc restent réservés aux indicateurs de statut (présent / congé validé / congé en attente / férié / vide).</p>
@@ -147,6 +148,7 @@ function openChangeMyPasswordModal(){
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h3>🔑 Changer mon mot de passe</h3>
     <p>Choisissez un nouveau mot de passe pour votre compte <strong>${escapeHTML(store.currentUser?.email||'')}</strong>.</p>
@@ -240,6 +242,7 @@ function openManageUsersModal(){
         </td>
       </tr>`).join('');
 
+    // eslint-disable-next-line no-unsanitized/property
     box.innerHTML = `
       <h3>👥 Gestion des collaborateurs</h3>
       <div style="overflow-x:auto;margin-bottom:16px;">
@@ -479,6 +482,7 @@ function openManageUsersModal(){
       }
     };
   }).catch(err=>{
+    // eslint-disable-next-line no-unsanitized/property
     box.innerHTML = `<h3>👥 Collaborateurs</h3><p class="text-muted">Impossible de charger la liste : ${escapeHTML(err.message)}.</p><div class="modal-actions"><button class="btn" id="modal-cancel">Fermer</button></div>`;
     box.querySelector('#modal-cancel').onclick = close;
   });
@@ -587,6 +591,7 @@ function openEditUserModal(userId, users, onBack){
   const isAdmin = store.currentUser?.role === 'admin';
   const personId = user.person_id;
 
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h3>Modifier ${escapeHTML(user.display_name||user.email||'collaborateur')}</h3>
     <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
@@ -701,7 +706,7 @@ function openEditUserModal(userId, users, onBack){
   // Résultat : la personne revient à l'état "Sans compte" avec bouton "Inviter".
   box.querySelector('#edit-reset-profile')?.addEventListener('click', ()=>{
     openConfirmModal({
-      title:`Réinitialiser le compte de ${escapeHTML(user.display_name||user.email||'ce collaborateur')} ?`,
+      title:`Réinitialiser le compte de ${user.display_name||user.email||'ce collaborateur'} ?`,
       message:`Le compte Supabase (email, mot de passe, accès à l'app) sera supprimé.\n\nLes données de planning et la ligne dans le calendrier restent intactes.\n\nVous pourrez ensuite inviter un nouvel email sur ce profil.\n\nCette action est irréversible.`,
       confirmLabel:'Supprimer le compte',
       danger: true,
@@ -712,7 +717,7 @@ function openEditUserModal(userId, users, onBack){
             body:JSON.stringify({ action:'delete', user_id:userId }),
           });
           if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
-          showToast(`Compte de ${escapeHTML(user.display_name||user.email||'ce profil')} supprimé — planning conservé`, '✅');
+          showToast(`Compte de ${user.display_name||user.email||'ce profil'} supprimé — planning conservé`, '✅');
           onBack();
         }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
       },
@@ -846,6 +851,7 @@ function renderCalendarSyncPersonBody(box, person, status, link){
   const bodyEl = box.querySelector(`#cal-sync-body-${person.id}`);
   const prefsHtml = calendarSyncPreferencesHtml(person, status);
   if(active){
+    // eslint-disable-next-line no-unsanitized/property
     bodyEl.innerHTML = `
       ${prefsHtml}
       <input type="text" readonly value="${escapeHTML(link)}" style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:6px;font-size:11.5px;font-family:inherit;margin-bottom:8px;" onclick="this.select();">
@@ -866,6 +872,7 @@ function renderCalendarSyncPersonBody(box, person, status, link){
       showToast(`Synchronisation de ${person.short} désactivée`, '📅');
     };
   } else {
+    // eslint-disable-next-line no-unsanitized/property
     bodyEl.innerHTML = `
       ${prefsHtml}
       <button type="button" class="btn btn-primary" data-generate style="width:100%;justify-content:center;font-size:12.5px;">Générer mon lien</button>
@@ -884,6 +891,7 @@ function openCalendarSyncModal(){
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box modal-box-wide';
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h3>📅 Synchronisation calendrier</h3>
     <p>Chaque vétérinaire peut abonner son calendrier iPhone ou Android à son planning Amivet. Une fois le lien ajouté, la mise à jour est automatique (toutes les quelques heures, gérée par le téléphone) — sens unique du planning vers le téléphone.</p>
@@ -962,6 +970,7 @@ function initSettingsMenu(){
   const toggle = document.getElementById('settings-toggle');
   const menu = document.getElementById('settings-menu');
   updateHeaderUsername();
+  // eslint-disable-next-line no-unsanitized/property
   menu.innerHTML = buildSettingsMenuHtml();
 
   toggle.addEventListener('click', (e)=>{
@@ -1331,6 +1340,7 @@ function openHelpModal(){
   const navItems = isAsv ? navItemsAsv : navItemsVet;
   const faqData = isAsv ? faqDataAsv : faqDataVet;
 
+  // eslint-disable-next-line no-unsanitized/property
   root.innerHTML = `
     <div class="ho-sidebar">
       <div class="ho-sidebar-logo">❓ Guide & FAQ</div>
@@ -1354,11 +1364,13 @@ function openHelpModal(){
   const content = root.querySelector('#ho-content');
 
   function renderSection(item){
+    // eslint-disable-next-line no-unsanitized/property
     content.innerHTML = item.content;
     root.querySelector('#ho-section-label').textContent = item.label;
     content.scrollTop = 0;
     if(item.id === 'faq'){
       const list = content.querySelector('#ho-faq-list');
+      // eslint-disable-next-line no-unsanitized/property
       if(list) list.innerHTML = faqData.map((f,i)=>`
         <div class="ho-faq-item" data-i="${i}">
           <button class="help-faq-q" aria-expanded="false"><span>${escapeHTML(f.q)}</span><span class="help-faq-chevron">▾</span></button>

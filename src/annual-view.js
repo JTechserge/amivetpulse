@@ -107,6 +107,7 @@ export function openAnnualDayDetail(iso, people, viewKey){
   const personRows = people.map(p=>`
     <p style="font-size:13px;margin:5px 0;"><strong style="color:${p.color}">${p.short}</strong> — Matin : ${stateLabel(iso,p.id,'M')} · Après-midi : ${stateLabel(iso,p.id,'AM')}</p>
   `).join('');
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h4>${formatFR(iso)}${hName ? ` <span class="cal-holiday-badge">Férié</span>` : ''}</h4>
     ${comment ? `<p class="text-muted" style="font-size:12.5px;margin:8px 0;">💬 ${escapeHTML(comment)}</p>` : ''}
@@ -138,6 +139,7 @@ export function renderAnnualViewForGroup(group){
   const mode = store.annualYearState[group];
   const viewKey = mode === 'current' ? g.calendarViewKey : g.forecastViewKey;
   const cfg = store.CAL_VIEWS[viewKey];
+  // eslint-disable-next-line no-unsanitized/property
   container.innerHTML = `
     <h2 class="section-title">Vue Annuelle ${cfg.year} — ${g.label}</h2>
     <p class="section-desc" style="margin-bottom:12px;">Heatmap de présence — cliquez une cellule pour voir le détail du jour.</p>

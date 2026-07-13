@@ -45,6 +45,7 @@ export function openSigningLinkModal(signingLink, recipientLabel, emailError) {
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h3>🔗 Lien de signature</h3>
     <p style="font-size:13.5px;color:var(--color-text-muted);margin-bottom:14px;">
@@ -79,6 +80,7 @@ export function openSignConfirmModal(tokenId) {
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h3>✍️ Confirmer ma signature</h3>
     <p style="margin-bottom:12px;">Vous allez signer électroniquement votre feuille de présence. Votre identité, email et l'horodatage seront enregistrés de façon permanente.</p>

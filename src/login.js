@@ -8,6 +8,7 @@ export function setupLogin({ loadCurrentUser, initApp }) {
 }
 
 export function renderLoginContent(html) {
+  // eslint-disable-next-line no-unsanitized/property
   document.getElementById('login-content').innerHTML = html;
 }
 

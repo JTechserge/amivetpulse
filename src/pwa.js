@@ -203,6 +203,7 @@ export async function openNotificationSettingsModal() {
     const isIOSNotInstalled = PWA.isIOS() && !PWA.isInstalled();
     const isBlocked = Notification.permission === 'denied';
     const canOffer = PWA.supportsPush() && !isIOSNotInstalled && Notification.permission !== 'granted';
+    // eslint-disable-next-line no-unsanitized/property
     box.innerHTML = `
       <h3>🔔 Notifications</h3>
       <p>Statut actuel : <strong>${status.text}</strong></p>

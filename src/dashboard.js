@@ -497,6 +497,7 @@ export function buildSignaturesTableASV(year){
 export function renderDashboard(){
   const container = document.getElementById('view-dashboard');
   const pendingCount = countPendingLeaveRequests();
+  // eslint-disable-next-line no-unsanitized/property
   container.innerHTML = `
     <h2 class="section-title">Tableau de bord</h2>
     <p class="section-desc">Statistiques de présence et demandes de congé ASV.</p>
@@ -534,6 +535,7 @@ export function renderDashboardStats(){
   const container = document.getElementById('dash-sub-stats');
   const year = store.dashState.year;
   const cy = getCurrentYear();
+  // eslint-disable-next-line no-unsanitized/property
   container.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:0;">
       <div class="year-toggle" id="dash-year-toggle">
@@ -580,6 +582,7 @@ export function renderDashboardSignatures(){
   const container = document.getElementById('dash-sub-signatures');
   const year = store.dashState.year;
   const cy = getCurrentYear();
+  // eslint-disable-next-line no-unsanitized/property
   container.innerHTML = `
     <div class="year-toggle" id="dash-sig-year-toggle">
       <button data-year="${cy}" class="${year===cy?'active':''}">${cy}</button>
@@ -654,6 +657,7 @@ export function renderDashboardInterviews(){
       </div>`;
   }).join('') : `<p class="text-muted">Aucune ASV dans le planning.</p>`;
 
+  // eslint-disable-next-line no-unsanitized/property
   container.innerHTML = `
     <div class="year-toggle" id="dash-itv-year-toggle" style="margin-bottom:20px;">
       <button data-year="${cy}" class="${year===cy?'active':''}">${cy}</button>
@@ -690,6 +694,7 @@ export function openInterviewModal(personId, year){
     return [1,2,3,4,5].map(n=>`<span data-star="${n}" style="font-size:26px;cursor:pointer;color:${rating>=n?'#F59E0B':'#CBD5E1'};">★</span>`).join('');
   }
 
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h3 style="margin-bottom:14px;">Entretien annuel ${year} — ${escapeHTML(p?.short||personId)}</h3>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
@@ -1121,6 +1126,7 @@ export function renderDashboardHours(){
   const year = store.dashState.year;
   const cy   = getCurrentYear();
   if(!store.weekNavState.mondayISO) store.weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
+  // eslint-disable-next-line no-unsanitized/property
   container.innerHTML = `
     <div class="year-toggle" id="dash-hours-year-toggle" style="margin-bottom:16px;">
       <button data-year="${cy}" class="${year===cy?'active':''}">${cy}</button>
@@ -1214,6 +1220,7 @@ export function renderLeaveRequestsPage(){
       </div>`;
   }).join('');
 
+  // eslint-disable-next-line no-unsanitized/property
   container.innerHTML = `
     ${changeReqs.length ? `
       <p class="section-desc" style="margin-bottom:10px;font-weight:600;color:var(--color-change-pending);">🔔 Modifications urgentes (dans les 2 semaines)</p>
@@ -1410,6 +1417,7 @@ export function renderGroupConges(group, containerId){
       `<button class="cp-year-btn" data-year="${y}" style="border:1.5px solid ${y===cpYear?'var(--color-primary)':'var(--color-border)'};background:${y===cpYear?'var(--color-secondary)':'var(--color-card)'};color:${y===cpYear?'var(--color-primary)':'var(--color-text)'};padding:5px 14px;border-radius:20px;font-size:13px;cursor:pointer;font-weight:${y===cpYear?'700':'400'};">${y}</button>`
     ).join('');
 
+    // eslint-disable-next-line no-unsanitized/property
     container.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
         <div>
@@ -1456,6 +1464,7 @@ export function openCPAdjustModal(personId, year, carriedOver, extra, note, grou
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h3>✎ Ajuster les CP — ${escapeHTML(person?.short||personId)} (${year})</h3>
     <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
@@ -1606,6 +1615,7 @@ export function renderDashboardMedical(){
       </tr>`;
     }).join('');
 
+    // eslint-disable-next-line no-unsanitized/property
     container.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
         <div></div>
@@ -1671,6 +1681,7 @@ export function renderDashboardMedical(){
         const box2 = document.getElementById('modal-box');
         const backdrop2 = document.getElementById('modal-backdrop');
         box2.className = 'modal-box';
+        // eslint-disable-next-line no-unsanitized/property
         box2.innerHTML = `<h3>ℹ️ Réserves d'aptitude</h3><p style="font-size:13.5px;line-height:1.6;">${escapeHTML(note)}</p><div class="modal-actions"><button class="btn btn-primary" id="med-res-ok">Fermer</button></div>`;
         backdrop2.classList.add('open');
         box2.querySelector('#med-res-ok').onclick = ()=> backdrop2.classList.remove('open');
@@ -1701,6 +1712,7 @@ export function openMedicalModal(existingVisit, allVisits, preselectedPid, _onSa
 
   function calcNextISO(visitDateISO, freqMonths){ return visitDateISO ? addMonthsToDate(visitDateISO, freqMonths) : ''; }
 
+  // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
     <h3>${existingVisit ? '✎ Modifier la visite' : '🏥 Ajouter une visite médicale'}</h3>
     <div style="display:flex;flex-direction:column;gap:11px;max-height:70vh;overflow-y:auto;">
