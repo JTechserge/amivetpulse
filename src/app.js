@@ -9,12 +9,13 @@ import {
   ANNUAL_FULLTIME_HOURS, HALFDAY_HOURS, WEEKLY_MAX_HOURS,
   ASV_STD_SAT_CARLA, ASV_STD_SAT_SECOND, ASV_STD_WEEKDAY_AVG,
   CLINIC_HOURS, CLINIC_M_H, CLINIC_AM_H,
+  MONTH_NAMES, MONTH_SHORT, WEEKDAY_NAMES, WEEKDAY_FULL,
 } from './config.js';
 import {
   escapeHTML, slugifyName, hexToHsl, hexToRgba, colorRejectReason,
   fmtISO, daysInMonth, isoWeekday, isSunday, isSaturday,
   holidaysFor, holidayName,
-  formatHHMM, signedHHMM, roundTo15min,
+  formatHHMM, signedHHMM, roundTo15min, formatFR, formatNum,
 } from './utils.js';
 import { getAuthSession, saveAuthSession, supabaseHeaders, authSignIn, authUpdatePassword, authSendPasswordReset } from './auth.js';
 import { reindexPresentShades, saveASVRoster, loadASVRoster, archiveASVPerson, unarchiveASVPerson, savePersonColors } from './state.js';
@@ -25,6 +26,16 @@ import { setupLogin, renderLoginScreen, renderSetPasswordScreen } from './login.
 import { PWA, initServiceWorker, showIOSInstallTip, updatePwaOfflineBanner, triggerPushNotification, openNotificationSettingsModal, notificationStatusLabel } from './pwa.js';
 import { loadAnnouncements, renderAnnounces, updateAnnouncementBadge } from './announcements.js';
 import { setupSignatures, signatureKey, isMonthSigned, getSignatureDetail, loadSignatures, signMonth, revokeSignature, openSigningLinkModal, openSignConfirmModal } from './signatures.js';
+import {
+  slotKey, labelKey, commentKey, decisionKey, decisionCommentKey, changeKey, overtimeKey,
+  isASVPerson, isWithinNextTwoWeeks,
+  getLeaveDecision, setLeaveDecision, getLeaveDecisionComment, setLeaveDecisionComment,
+  getChangeDecision, setChangeDecision,
+  getOvertimeHours, setOvertimeHours,
+  getSlotState, setSlotState, getSlotLabel, setSlotLabel,
+  getDayComment, setDayComment, cycleState,
+} from './slots.js';
+import { setupAnnualView, stateLabel, buildHeatmap, openAnnualDayDetail, renderAnnualViewForGroup } from './annual-view.js';
 /* ================================================================
    AMIVET PLANNING — Application JS (vanilla ES2022, sans dépendance)
    ================================================================ */
@@ -365,7 +376,7 @@ function openManageUsersModal(){
               });
               if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
               showToast(`${name} supprimé(e) définitivement`, '🗑️');
-              CAL_VIEWS = buildCalViews();
+              store.CAL_VIEWS = buildCalViews();
               renderCalendarView(activeCalendarViewKey()||'asv-current');
               openManageUsersModal();
             }catch(e){ showToast('Erreur purge : '+e.message, '⚠️'); }
@@ -402,7 +413,7 @@ function openManageUsersModal(){
             const asvIdx = ASV_PEOPLE.findIndex(p=> p.id === personId);
             if(asvIdx !== -1){ ASV_PEOPLE.splice(asvIdx,1); reindexPresentShades(); saveASVRoster(); }
             showToast(`${name} retiré(e) du planning`, '🗑️');
-            CAL_VIEWS = buildCalViews();
+            store.CAL_VIEWS = buildCalViews();
             renderCalendarView(activeCalendarViewKey()||'asv-current');
             openManageUsersModal();
           },
@@ -883,10 +894,6 @@ function openCalendarSyncModal(){
   });
 }
 
-const MONTH_NAMES = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-const MONTH_SHORT = ['Janv','Févr','Mars','Avr','Mai','Juin','Juil','Août','Sept','Oct','Nov','Déc'];
-const WEEKDAY_NAMES = ['Lu','Ma','Me','Je','Ve','Sa','Di']; // lundi = 0
-
 // État de navigation par vue calendrier (mois affiché courant par année)
 const today = new Date();
 
@@ -902,35 +909,30 @@ function getCurrentYear(){
 }
 function setCurrentYear(y){ localStorage.setItem(CURRENT_YEAR_KEY, String(y)); }
 
-const calStateCurrent = { month: today.getFullYear() === getCurrentYear() ? today.getMonth() : 0 };
-const calStateForecast = { month: 0 };
-const calStateAsvCurrent = { month: today.getFullYear() === getCurrentYear() ? today.getMonth() : 0 };
-const calStateAsvForecast = { month: 0 };
-
-// Registre central des vues "calendrier mensuel" : chacune sait sur quelle année réelle
-// elle travaille (cfg.year), quelles personnes afficher (cfg.people, en lignes) et quel
-// état de navigation (mois affiché) lui appartient. Reconstruit après chaque bascule
-// d'année (performYearRollover) puisque cfg.year doit alors changer.
+// Cal state + store.CAL_VIEWS → store.js (see initCalState() below)
 function buildCalViews(){
   const cy = getCurrentYear();
   return {
-    'vets-current':  { year:cy,   people:PEOPLE,     navState:calStateCurrent,     todayNav:true,  forecast:false, label:'Vétérinaires', containerId:'vets-sub-calendar', printable:false },
-    'vets-forecast': { year:cy+1, people:PEOPLE,     navState:calStateForecast,    todayNav:false, forecast:true,  label:'Vétérinaires', containerId:'vets-sub-forecast', printable:false },
-    'asv-current':   { year:cy,   people:ASV_PEOPLE, navState:calStateAsvCurrent,  todayNav:true,  forecast:false, label:'ASV',          containerId:'asv-sub-calendar',  printable:true },
-    'asv-forecast':  { year:cy+1, people:ASV_PEOPLE, navState:calStateAsvForecast, todayNav:false, forecast:true,  label:'ASV',           containerId:'asv-sub-forecast',  printable:true },
+    'vets-current':  { year:cy,   people:PEOPLE,     navState:store.calStateCurrent,     todayNav:true,  forecast:false, label:'Vétérinaires', containerId:'vets-sub-calendar', printable:false },
+    'vets-forecast': { year:cy+1, people:PEOPLE,     navState:store.calStateForecast,    todayNav:false, forecast:true,  label:'Vétérinaires', containerId:'vets-sub-forecast', printable:false },
+    'asv-current':   { year:cy,   people:ASV_PEOPLE, navState:store.calStateAsvCurrent,  todayNav:true,  forecast:false, label:'ASV',          containerId:'asv-sub-calendar',  printable:true },
+    'asv-forecast':  { year:cy+1, people:ASV_PEOPLE, navState:store.calStateAsvForecast, todayNav:false, forecast:true,  label:'ASV',          containerId:'asv-sub-forecast',  printable:true },
   };
 }
-let CAL_VIEWS = buildCalViews();
-const dashState = { year: getCurrentYear() };
-
-// Onglets groupés (Vétérinaires / ASV) : chacun a 3 sous-pages (calendrier mensuel / vue
-// annuelle / prévisionnel). subNavState retient la sous-page active de chaque groupe.
-const subNavState = { vets:'calendar', asv:'calendar' };
-const annualYearState = { vets:'current', asv:'current' }; // année affichée dans la sous-page "Vue annuelle"
+function initCalState(){
+  const cy = getCurrentYear();
+  const m = today.getFullYear() === cy ? today.getMonth() : 0;
+  store.calStateCurrent.month = m;
+  store.calStateAsvCurrent.month = m;
+  store.CAL_VIEWS = buildCalViews();
+  store.dashState.year = cy;
+}
 const GROUP_VIEWS = {
   vets: { label:'Vétérinaires', calendarViewKey:'vets-current', forecastViewKey:'vets-forecast', calendarContainer:'vets-sub-calendar', annualContainer:'vets-sub-annual', forecastContainer:'vets-sub-forecast' },
   asv:  { label:'ASV',          calendarViewKey:'asv-current',  forecastViewKey:'asv-forecast',  calendarContainer:'asv-sub-calendar',  annualContainer:'asv-sub-annual',  forecastContainer:'asv-sub-forecast' },
 };
+
+initCalState();
 
 // Verrou par mot de passe (protection légère) des onglets sensibles. Le mot de passe
 // lui-même n'existe nulle part dans ce code source (public sur GitHub) : il est stocké
@@ -945,11 +947,11 @@ function performYearRollover(){
   const fromYear = getCurrentYear();
   const toYear = fromYear + 1;
   setCurrentYear(toYear);
-  CAL_VIEWS = buildCalViews();
-  calStateCurrent.month = 0;
-  calStateAsvCurrent.month = 0;
-  calStateForecast.month = 0;
-  calStateAsvForecast.month = 0;
+  store.CAL_VIEWS = buildCalViews();
+  store.calStateCurrent.month = 0;
+  store.calStateAsvCurrent.month = 0;
+  store.calStateForecast.month = 0;
+  store.calStateAsvForecast.month = 0;
   document.getElementById('rollover-banner')?.remove();
   renderCurrentView();
   showToast(`Calendrier basculé sur ${toYear}`, '🔄');
@@ -973,24 +975,22 @@ function renderRolloverBanner(){
   bar.querySelector('#rollover-dismiss').onclick = ()=> bar.remove();
 }
 
-// État global d'annulation (undo) — pile de snapshots de store.DATA.slots avant chaque action
-const UNDO_STACK = [];
 const UNDO_MAX = 30;
 function snapshotBeforeChange(){
-  UNDO_STACK.push(JSON.stringify(store.DATA.slots));
-  if(UNDO_STACK.length > UNDO_MAX) UNDO_STACK.shift();
+  store.UNDO_STACK.push(JSON.stringify(store.DATA.slots));
+  if(store.UNDO_STACK.length > UNDO_MAX) store.UNDO_STACK.shift();
   updateUndoButtons();
 }
 function undoLastAction(){
-  if(UNDO_STACK.length === 0) return;
-  store.DATA.slots = JSON.parse(UNDO_STACK.pop());
+  if(store.UNDO_STACK.length === 0) return;
+  store.DATA.slots = JSON.parse(store.UNDO_STACK.pop());
   saveData(false);
   renderCurrentView();
   updateUndoButtons();
   showToast('Dernière action annulée', '↩️');
 }
 function updateUndoButtons(){
-  document.querySelectorAll('.undo-btn').forEach(btn=>{ btn.disabled = UNDO_STACK.length === 0; });
+  document.querySelectorAll('.undo-btn').forEach(btn=>{ btn.disabled = store.UNDO_STACK.length === 0; });
 }
 
 
@@ -1157,93 +1157,7 @@ function updateDashboardNavBadge(){
 // ----------------------------------------------------------------
 /* announcements.js — annonceViewerId, loadAnnouncements, renderAnnounces, etc. */
 
-function slotKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}`; }
-function labelKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}_label`; }
-function commentKey(isoDate){ return `${isoDate}_comment`; }
-function isASVPerson(personId){ return ASV_PEOPLE.some(p=>p.id===personId); }
-
-// ----------------------------------------------------------------
-// Demandes de congé ASV — statut de décision rattaché à chaque demi-journée plutôt qu'à
-// une entité "demande" séparée : ça réutilise directement la logique de fusion des
-// absences contiguës déjà en place (mêmes clés store.DATA.slots, même date ISO réelle), sans
-// avoir à synchroniser deux structures de données en parallèle.
-function decisionKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}_decision`; }
-function decisionCommentKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}_decision_comment`; }
-function getLeaveDecision(isoDate, personId, slot){ return store.DATA.slots[decisionKey(isoDate,personId,slot)] || null; }
-function setLeaveDecision(isoDate, personId, slot, decision){
-  const key = decisionKey(isoDate,personId,slot);
-  if(decision) store.DATA.slots[key] = decision; else delete store.DATA.slots[key];
-}
-function getLeaveDecisionComment(isoDate, personId, slot){ return store.DATA.slots[decisionCommentKey(isoDate,personId,slot)] || ''; }
-function setLeaveDecisionComment(isoDate, personId, slot, text){
-  const key = decisionCommentKey(isoDate,personId,slot);
-  if(text) store.DATA.slots[key] = text; else delete store.DATA.slots[key];
-}
-// Modifications urgentes dans les 14 jours à venir (vue mensuelle ASV uniquement)
-function changeKey(iso, pid, slot){ return `${iso}_${pid}_${slot}_chg`; }
-function getChangeDecision(iso, pid, slot){ return store.DATA.slots[changeKey(iso,pid,slot)] || null; }
-function setChangeDecision(iso, pid, slot, dec){
-  const k = changeKey(iso,pid,slot);
-  if(dec) store.DATA.slots[k] = dec; else delete store.DATA.slots[k];
-}
-// Retourne true si la date ISO est dans les 14 prochains jours (aujourd'hui inclus)
-function isWithinNextTwoWeeks(iso){
-  const d = new Date(iso+'T00:00:00');
-  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  return d.getTime() >= t0 && d.getTime() <= t0 + 14*24*60*60*1000;
-}
-
-// Heures supplémentaires ASV — un nombre d'heures par personne et par jour (pas par
-// demi-journée : une ASV peut faire 1h30 de plus sans que ça corresponde à un créneau M/AM).
-function overtimeKey(isoDate, personId){ return `${isoDate}_${personId}_overtime`; }
-function getOvertimeHours(isoDate, personId){ return parseFloat(store.DATA.slots[overtimeKey(isoDate,personId)]) || 0; }
-function setOvertimeHours(isoDate, personId, hours){
-  const key = overtimeKey(isoDate, personId);
-  const n = parseFloat(hours);
-  if(!isNaN(n) && n !== 0) store.DATA.slots[key] = n; else delete store.DATA.slots[key];
-}
-
-function getSlotState(isoDate, personId, slot){ return store.DATA.slots[slotKey(isoDate,personId,slot)] || 'empty'; }
-function setSlotState(isoDate, personId, slot, state){
-  const key = slotKey(isoDate,personId,slot);
-  const wasAbsent = store.DATA.slots[key] === 'absent';
-  if(state === 'empty'){
-    delete store.DATA.slots[key];
-    delete store.DATA.slots[labelKey(isoDate,personId,slot)];
-  } else {
-    store.DATA.slots[key] = state;
-    if(state !== 'absent') delete store.DATA.slots[labelKey(isoDate,personId,slot)];
-  }
-  if(isASVPerson(personId)){
-    if(state === 'absent' && !wasAbsent){
-      // Nouvelle absence ASV : demande de congé automatiquement créée en attente de
-      // validation vétérinaire (sauf si une décision existait déjà sur cette demi-journée,
-      // ex. ré-application du même état pendant un glisser-peindre).
-      if(!getLeaveDecision(isoDate, personId, slot)) setLeaveDecision(isoDate, personId, slot, 'pending');
-      // Des heures sup n'ont plus de sens un jour de congé : on les efface automatiquement.
-      setOvertimeHours(isoDate, personId, 0);
-    } else if(state !== 'absent' && wasAbsent){
-      setLeaveDecision(isoDate, personId, slot, null);
-      setLeaveDecisionComment(isoDate, personId, slot, '');
-    }
-  }
-}
-function getSlotLabel(isoDate, personId, slot){ return store.DATA.slots[labelKey(isoDate,personId,slot)] || ''; }
-function setSlotLabel(isoDate, personId, slot, label){
-  const key = labelKey(isoDate,personId,slot);
-  if(label) store.DATA.slots[key] = label; else delete store.DATA.slots[key];
-}
-function getDayComment(isoDate){ return store.DATA.slots[commentKey(isoDate)] || ''; }
-function setDayComment(isoDate, text){
-  const key = commentKey(isoDate);
-  if(text) store.DATA.slots[key] = text; else delete store.DATA.slots[key];
-}
-// Cycle d'état d'une demi-journée : vide -> présent -> absent -> vide
-function cycleState(state){
-  if(state === 'empty') return 'present';
-  if(state === 'present') return 'absent';
-  return 'empty';
-}
+/* slots.js — slotKey, labelKey, getSlotState/setSlotState, etc. */
 
 /* ----------------------------------------------------------------
    5. DONNÉES DE DÉMONSTRATION
@@ -1836,7 +1750,7 @@ function switchView(viewId){
 // Renvoie l'id du conteneur DOM de la sous-page actuellement sélectionnée pour ce groupe.
 function activeSubContainer(group){
   const g = GROUP_VIEWS[group];
-  const sub = subNavState[group];
+  const sub = store.subNavState[group];
   if(sub === 'calendar') return g.calendarContainer;
   if(sub === 'forecast') return g.forecastContainer;
   return g.annualContainer;
@@ -1847,7 +1761,7 @@ function activeSubContainer(group){
 // détruire la sous-navigation (sub-nav) ni les autres sous-pages masquées.
 function renderCurrentView(){
   renderRolloverBanner();
-  const isForecastSubPage = (currentView === 'vets' && subNavState.vets === 'forecast') || (currentView === 'asv' && subNavState.asv === 'forecast');
+  const isForecastSubPage = (currentView === 'vets' && store.subNavState.vets === 'forecast') || (currentView === 'asv' && store.subNavState.asv === 'forecast');
   document.body.classList.toggle('forecast-theme', isForecastSubPage);
   if(currentView === 'dashboard' && !canAccessDashboard()){
     switchView('vets');
@@ -1862,7 +1776,7 @@ function renderCurrentView(){
 // directement quand le groupe est protégé et verrouillé).
 function renderGroupSubPage(group){
   const g = GROUP_VIEWS[group];
-  const sub = subNavState[group];
+  const sub = store.subNavState[group];
   if(sub === 'calendar') renderCalendarView(g.calendarViewKey);
   else if(sub === 'forecast') renderCalendarView(g.forecastViewKey);
   else if(sub === 'week' && group === 'asv') renderWeekViewASV();
@@ -1870,7 +1784,7 @@ function renderGroupSubPage(group){
 }
 function switchSubPage(group, subKey){
   const g = GROUP_VIEWS[group];
-  subNavState[group] = subKey;
+  store.subNavState[group] = subKey;
   document.querySelectorAll(`#${group}-sub-nav .sub-tab`).forEach(btn=>{
     btn.classList.toggle('active', btn.dataset.sub === subKey);
   });
@@ -2114,7 +2028,7 @@ function openMonthPrintWindow(pids, year, month){
 
 // Popup de sélection ASV avant impression mensuelle
 function openMonthPrintPopup(viewKey){
-  const cfg=CAL_VIEWS[viewKey];
+  const cfg=store.CAL_VIEWS[viewKey];
   const year=cfg.year, month=cfg.navState.month;
   const monthLabel=`${MONTH_NAMES[month]} ${year}`;
   const people=ASV_PEOPLE.filter(p=>!p.archived);
@@ -2307,8 +2221,8 @@ function saveViewState(){
   try{
     localStorage.setItem(VIEW_STATE_KEY, JSON.stringify({
       currentView,
-      subNavState,
-      annualYearState,
+      subNavState: store.subNavState,
+      annualYearState: store.annualYearState,
       dashSubTab: (typeof dashSubState !== 'undefined') ? dashSubState.tab : undefined,
     }));
   }catch(e){ /* stockage indisponible : tant pis, on retombera sur la vue par défaut */ }
@@ -2320,8 +2234,8 @@ function loadViewState(){
     const raw = localStorage.getItem(VIEW_STATE_KEY);
     if(!raw) return null;
     const saved = JSON.parse(raw);
-    if(saved.subNavState) Object.assign(subNavState, saved.subNavState);
-    if(saved.annualYearState) Object.assign(annualYearState, saved.annualYearState);
+    if(saved.subNavState) Object.assign(store.subNavState, saved.subNavState);
+    if(saved.annualYearState) Object.assign(store.annualYearState, saved.annualYearState);
     if(saved.dashSubTab && typeof dashSubState !== 'undefined') dashSubState.tab = saved.dashSubTab;
     return saved.currentView || null;
   }catch(e){ return null; }
@@ -2343,12 +2257,12 @@ function initNav(){
 /* ----------------------------------------------------------------
    10. RACCOURCIS CLAVIER
    ---------------------------------------------------------------- */
-// Renvoie la clé CAL_VIEWS du calendrier mensuel actuellement affiché, ou null si la vue
+// Renvoie la clé store.CAL_VIEWS du calendrier mensuel actuellement affiché, ou null si la vue
 // courante n'est pas un calendrier (ex. tableau de bord, sous-page "Vue annuelle"...).
 function activeCalendarViewKey(){
   const g = GROUP_VIEWS[currentView];
   if(!g) return null;
-  const sub = subNavState[currentView];
+  const sub = store.subNavState[currentView];
   if(sub === 'calendar') return g.calendarViewKey;
   if(sub === 'forecast') return g.forecastViewKey;
   return null;
@@ -2365,7 +2279,7 @@ function initKeyboardShortcuts(){
     if(!viewKey) return;
     if(e.key === 'ArrowLeft'){ changeMonth(viewKey, -1); }
     else if(e.key === 'ArrowRight'){ changeMonth(viewKey, 1); }
-    else if(e.key.toLowerCase() === 't' && CAL_VIEWS[viewKey].todayNav){ goToToday(viewKey); }
+    else if(e.key.toLowerCase() === 't' && store.CAL_VIEWS[viewKey].todayNav){ goToToday(viewKey); }
   });
 }
 
@@ -2378,13 +2292,13 @@ function personOf(id){ return PEOPLE.find(p=>p.id===id) || ASV_PEOPLE.find(p=>p.
    12. VUE CALENDRIER (moteur partagé 2026 / 2027)
    ================================================================ */
 function changeMonth(viewKey, delta){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   const m = cfg.navState.month + delta;
   cfg.navState.month = ((m % 12) + 12) % 12;
   renderCalendarView(viewKey);
 }
 function goToToday(viewKey){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   cfg.navState.month = (today.getFullYear() === cfg.year) ? today.getMonth() : 0;
   renderCalendarView(viewKey);
 }
@@ -2507,7 +2421,7 @@ function updateHalfDOM(halfEl){
 }
 
 function buildCalendarToolbar(viewKey){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   const monthLabel = `${MONTH_NAMES[cfg.navState.month]} ${cfg.year}`;
   const todayBtn = cfg.todayNav ? `<button class="btn btn-sm" id="cal-today-${viewKey}" aria-label="Revenir au mois actuel">📍 Aujourd'hui</button>` : '';
   const hasASV = cfg.people && cfg.people.some(p=>isASVPerson(p.id));
@@ -2530,7 +2444,7 @@ function buildCalendarToolbar(viewKey){
         ${todayBtn}
       </div>
       <div class="cal-toolbar-actions">
-        <button class="btn-icon undo-btn" id="cal-undo-${viewKey}" aria-label="Annuler la dernière action" title="Annuler la dernière action (Cmd/Ctrl+Z)" ${UNDO_STACK.length===0?'disabled':''}>↩️</button>
+        <button class="btn-icon undo-btn" id="cal-undo-${viewKey}" aria-label="Annuler la dernière action" title="Annuler la dernière action (Cmd/Ctrl+Z)" ${store.UNDO_STACK.length===0?'disabled':''}>↩️</button>
         <button class="btn btn-sm btn-danger" id="cal-clear-month-${viewKey}" aria-label="Vider le mois affiché">🗑️ Vider le mois</button>
         ${cfg.printable ? `<button class="btn btn-sm" id="cal-print-${viewKey}" title="Imprimer les fiches mensuelles ASV">🖨️ Imprimer</button>` : ''}
       </div>
@@ -2543,7 +2457,7 @@ function buildCalendarToolbar(viewKey){
 // tout le groupe affiché si personId est omis (dans ce cas, les commentaires de journée
 // sont aussi effacés).
 function clearMonth(viewKey, month, personId){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   snapshotBeforeChange();
   const nbDays = daysInMonth(cfg.year, month);
   const targets = personId ? cfg.people.filter(p=>p.id===personId) : cfg.people;
@@ -2565,7 +2479,7 @@ function clearMonth(viewKey, month, personId){
   saveData();
   renderCalendarView(viewKey);
   // Si la vue hebdomadaire est affichée, la rafraîchir aussi pour refléter la suppression des TE
-  if(subNavState.asv === 'week') renderWeekViewASV();
+  if(store.subNavState.asv === 'week') renderWeekViewASV();
   const who = personId ? personOf(personId).short : cfg.people.map(p=>p.short).join(' et ');
   showToast(`${MONTH_NAMES[month]} ${cfg.year} vidé (${who})`, '🗑️');
 }
@@ -2574,7 +2488,7 @@ function clearMonth(viewKey, month, personId){
 // partir de cfg.people, donc le même code sert le calendrier à 2 personnes (vétérinaires)
 // comme celui à 3 (ASV).
 function openClearMonthModal(viewKey, month){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   const label = `${MONTH_NAMES[month]} ${cfg.year}`;
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
@@ -2697,7 +2611,7 @@ function blockIfOver42h(pid, isoDate){
   const mon = getWeekMondayDate(new Date(isoDate + 'T00:00:00'));
   const weekH = computeWeekTotalHours(pid, mon);
   if(weekH > WEEKLY_MAX_HOURS){
-    if(UNDO_STACK.length > 0){ store.DATA.slots = JSON.parse(UNDO_STACK.pop()); updateUndoButtons(); }
+    if(store.UNDO_STACK.length > 0){ store.DATA.slots = JSON.parse(store.UNDO_STACK.pop()); updateUndoButtons(); }
     saveData(false);
     showToast(`Plafond 42h dépassé (${formatHHMM(weekH)}) — saisie annulée`, '🚫');
     return true;
@@ -3136,7 +3050,7 @@ function buildHalfTable(year, month, days, people){
 }
 
 function buildCalendarGrid(viewKey){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   const month = cfg.navState.month;
   return buildWeekGrid(cfg.year, month, cfg.people);
 }
@@ -3190,7 +3104,7 @@ function buildLegend(people = PEOPLE){
 // le calendrier réel de l'année en cours, jamais sur le prévisionnel (données spéculatives,
 // rien à certifier) ni côté vétérinaires (pas de feuille de présence pour eux ici).
 function buildSignaturePanelHtml(viewKey){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   if(viewKey !== 'asv-current') return '';
   const month = cfg.navState.month;
   const monthLabel = `${MONTH_NAMES[month]} ${cfg.year}`;
@@ -3228,7 +3142,7 @@ function buildSignaturePanelHtml(viewKey){
 // Ligne visible uniquement à l'impression (la version écran a déjà le 🔒 dans l'en-tête de
 // ligne, mais sur papier ce repère seul ne suffit pas à prouver qui a signé et quand).
 function buildPrintSignatureStatusHtml(viewKey){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   if(viewKey !== 'asv-current') return '';
   const month = cfg.navState.month;
   const parts = cfg.people.map(p=>{
@@ -3241,7 +3155,7 @@ function buildPrintSignatureStatusHtml(viewKey){
 }
 // Admin/vet demande la signature d'une ASV : envoie l'email à son compte.
 async function adminRequestSignature(viewKey, personId){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   const month = cfg.navState.month;
   const btn = document.querySelector(`[data-admin-request-sign="${personId}"]`);
   if(btn){ btn.disabled = true; btn.textContent = 'Envoi…'; }
@@ -3271,7 +3185,7 @@ async function adminRequestSignature(viewKey, personId){
 // Demande de signature : envoie un email à l'ASV avec le récap du mois + lien unique.
 // La vraie signature n'est enregistrée que lorsqu'elle clique ce lien (confirm-signature).
 async function requestSignatureEmail(viewKey, personId){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   const month = cfg.navState.month;
   const btn = document.querySelector(`[data-sign-person="${personId}"]`);
   if(btn){ btn.disabled = true; btn.textContent = 'Envoi…'; }
@@ -3298,7 +3212,7 @@ async function requestSignatureEmail(viewKey, personId){
 }
 
 function renderCalendarView(viewKey){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   const container = document.getElementById(cfg.containerId);
   if(!container || !cfg) return;
   const banner = cfg.forecast ? `
@@ -3332,12 +3246,6 @@ VIEW_RENDERERS['annonces'] = renderAnnounces;
 /* ----------------------------------------------------------------
    13. INTERACTIONS CALENDRIER (clic, glisser-peindre, popovers, sidebar)
    ---------------------------------------------------------------- */
-const WEEKDAY_FULL = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
-function formatFR(iso){
-  const [y,m,d] = iso.split('-').map(Number);
-  const date = new Date(y, m-1, d);
-  return `${WEEKDAY_FULL[isoWeekday(date)]} ${d} ${MONTH_NAMES[m-1].toLowerCase()} ${y}`;
-}
 function calViewKeyOfEventTarget(target){
   const section = target.closest('[data-cal-view]');
   return section ? section.dataset.calView : null;
@@ -3732,7 +3640,7 @@ function sidebarPersonBlock(iso, person){
   `;
 }
 function openDaySidebar(iso, viewKey){
-  const people = CAL_VIEWS[viewKey].people;
+  const people = store.CAL_VIEWS[viewKey].people;
   const overlay = document.getElementById('sidebar-overlay');
   const sidebar = document.getElementById('day-sidebar');
   const closeSidebar = ()=>{ overlay.classList.remove('open'); sidebar.classList.remove('open'); };
@@ -3827,7 +3735,7 @@ function initCalendarInteractions(){
   document.addEventListener('dblclick', (e)=>{
     // Vue hebdomadaire : colonne-jour entière
     const dayCol = e.target.closest('.cal-wg-day[data-date]');
-    if(dayCol && currentView === 'asv' && subNavState.asv !== 'week'){
+    if(dayCol && currentView === 'asv' && store.subNavState.asv !== 'week'){
       if(!dayCol.classList.contains('cal-wg-day-we')){
         const iso = dayCol.dataset.date;
         if(iso){ weekNavState.mondayISO = fmtISO(getWeekMondayDate(new Date(iso+'T00:00:00'))); switchSubPage('asv','week'); }
@@ -3836,7 +3744,7 @@ function initCalendarInteractions(){
     }
     // Vue mensuelle : cellule individuelle avec data-date
     const monthCell = e.target.closest('.cal-cell[data-date]');
-    if(monthCell && currentView === 'asv' && (subNavState.asv === 'calendar' || subNavState.asv === 'forecast')){
+    if(monthCell && currentView === 'asv' && (store.subNavState.asv === 'calendar' || store.subNavState.asv === 'forecast')){
       if(monthCell.classList.contains('sunday-cell')) return;
       const iso = monthCell.dataset.date;
       if(!iso) return;
@@ -3967,7 +3875,7 @@ function initCalendarInteractions(){
     if(e.target.id === `cal-next-${viewKey}`) return changeMonth(viewKey, 1);
     if(e.target.id === `cal-today-${viewKey}`) return goToToday(viewKey);
     if(e.target.id === `cal-clear-month-${viewKey}`){
-      openClearMonthModal(viewKey, CAL_VIEWS[viewKey].navState.month);
+      openClearMonthModal(viewKey, store.CAL_VIEWS[viewKey].navState.month);
       return;
     }
     if(e.target.id === `cal-undo-${viewKey}`) return undoLastAction();
@@ -3980,7 +3888,7 @@ function initCalendarInteractions(){
     if(editBtn){ openDaySidebar(editBtn.dataset.date, viewKey); return; }
 
     const overtimeBtn = e.target.closest('[data-action="overtime-day"]');
-    if(overtimeBtn){ openOvertimeDayPopover(overtimeBtn.dataset.date, CAL_VIEWS[viewKey].people, viewKey); return; }
+    if(overtimeBtn){ openOvertimeDayPopover(overtimeBtn.dataset.date, store.CAL_VIEWS[viewKey].people, viewKey); return; }
   });
 }
 
@@ -3988,7 +3896,6 @@ function initCalendarInteractions(){
    14. TABLEAU DE BORD (statistiques, graphique, table récapitulative,
        demandes de congé ASV)
    ================================================================ */
-function formatNum(n){ return Number.isInteger(n) ? String(n) : n.toFixed(1); }
 // Formate des heures décimales en "Xh MM" (ex: 1.25 → "1h15", 0.5 → "0h30")
 
 // Regroupe les demi-journées d'absence ASV contiguës (même personne, même motif, même
@@ -4506,7 +4413,7 @@ VIEW_RENDERERS['dashboard'] = renderDashboard;
 
 function renderDashboardStats(){
   const container = document.getElementById('dash-sub-stats');
-  const year = dashState.year;
+  const year = store.dashState.year;
   const cy = getCurrentYear();
   container.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:0;">
@@ -4540,7 +4447,7 @@ function renderDashboardStats(){
   container.querySelector('#dash-year-toggle').addEventListener('click', (e)=>{
     const btn = e.target.closest('button');
     if(!btn) return;
-    dashState.year = parseInt(btn.dataset.year, 10);
+    store.dashState.year = parseInt(btn.dataset.year, 10);
     renderDashboardStats();
   });
   container.querySelector('#dash-reset-current').onclick = ()=> openResetYearModal(cy, false);
@@ -4552,7 +4459,7 @@ function renderDashboardStats(){
 // annulation possible (rouvre le mois correspondant pour la personne concernée). ---
 function renderDashboardSignatures(){
   const container = document.getElementById('dash-sub-signatures');
-  const year = dashState.year;
+  const year = store.dashState.year;
   const cy = getCurrentYear();
   container.innerHTML = `
     <div class="year-toggle" id="dash-sig-year-toggle">
@@ -4583,7 +4490,7 @@ function renderDashboardSignatures(){
   container.querySelector('#dash-sig-year-toggle').addEventListener('click', (e)=>{
     const btn = e.target.closest('button');
     if(!btn) return;
-    dashState.year = parseInt(btn.dataset.year, 10);
+    store.dashState.year = parseInt(btn.dataset.year, 10);
     renderDashboardSignatures();
   });
 }
@@ -4591,7 +4498,7 @@ function renderDashboardSignatures(){
 // --- Sous-page "Entretiens annuels" : suivi des entretiens annuels des ASV ---
 function renderDashboardInterviews(){
   const container = document.getElementById('dash-sub-interviews');
-  const year = dashState.year;
+  const year = store.dashState.year;
   const cy = getCurrentYear();
 
   function getInterview(personId){ return store.INTERVIEWS.find(i=>i.person_id===personId && i.year===year); }
@@ -4637,7 +4544,7 @@ function renderDashboardInterviews(){
   `;
   container.querySelector('#dash-itv-year-toggle').addEventListener('click', (e)=>{
     const btn=e.target.closest('button'); if(!btn) return;
-    dashState.year=parseInt(btn.dataset.year,10); renderDashboardInterviews();
+    store.dashState.year=parseInt(btn.dataset.year,10); renderDashboardInterviews();
   });
   container.querySelectorAll('[data-itv-open]').forEach(btn=>{
     btn.onclick=()=> openInterviewModal(btn.dataset.itvOpen, year);
@@ -5092,7 +4999,7 @@ function buildASVMonthlyTable(year){
 
 function renderDashboardHours(){
   const container = document.getElementById('dash-sub-hours');
-  const year = dashState.year;
+  const year = store.dashState.year;
   const cy   = getCurrentYear();
   if(!weekNavState.mondayISO) weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
   container.innerHTML = `
@@ -5108,7 +5015,7 @@ function renderDashboardHours(){
   `;
   container.querySelector('#dash-hours-year-toggle').addEventListener('click', e => {
     const btn = e.target.closest('button'); if(!btn) return;
-    dashState.year = parseInt(btn.dataset.year, 10); renderDashboardHours();
+    store.dashState.year = parseInt(btn.dataset.year, 10); renderDashboardHours();
   });
   renderGroupConges('asv', 'dash-asv-cp');
 }
@@ -5803,160 +5710,9 @@ function openMedicalModal(existingVisit, allVisits, preselectedPid, onSaved){
 }
 
 /* ================================================================
-   15. VUE ANNUELLE (heatmap)
+   15. VUE ANNUELLE (heatmap) → annual-view.js
    ================================================================ */
-function stateLabel(iso, personId, slot){
-  const state = getSlotState(iso, personId, slot);
-  if(state === 'present') return 'Présent';
-  if(state === 'absent'){
-    const l = getSlotLabel(iso, personId, slot);
-    if(isASVPerson(personId)){
-      const decision = getLeaveDecision(iso, personId, slot) || 'pending';
-      if(decision === 'pending') return `Demande de congé en attente${l?' ('+escapeHTML(l)+')':''}`;
-      if(decision === 'rejected') return 'Congé refusé — voir un vétérinaire';
-      return `Congé approuvé${l?' ('+escapeHTML(l)+')':''}`;
-    }
-    return l ? `Absent (${escapeHTML(l)})` : 'Absent';
-  }
-  return '—';
-}
-
-// Couleur d'une demi-journée pour la heatmap : présent = couleur de la personne, absent =
-// rouge (congé vétérinaire ou ASV approuvé), demande ASV en attente = cyan, refusée =
-// gris, vide = blanc.
-// Reprend exactement les mêmes couleurs que le calendrier mensuel (cellRenderInfo) pour
-// que la heatmap et la grille restent visuellement identiques case pour case.
-function heatmapSlotColor(person, iso, slot){
-  const state = getSlotState(iso, person.id, slot);
-  if(state === 'present') return person.present.bg;
-  if(state === 'absent'){
-    if(isASVPerson(person.id)){
-      const decision = getLeaveDecision(iso, person.id, slot) || 'pending';
-      if(decision === 'pending') return 'var(--color-leave-pending)';
-      if(decision === 'rejected') return 'var(--color-leave-rejected)';
-    }
-    return 'var(--color-absent)';
-  }
-  return '#ffffff';
-}
-function buildHeatmap(year, people = PEOPLE){
-  const dayHeaderCells = Array.from({length:31}, (_,i)=>`<th>${i+1}</th>`).join('');
-  let rows = '';
-  for(let month=0; month<12; month++){
-    const nbDays = daysInMonth(year, month);
-    // Ligne fine "jours de la semaine" propre à ce mois — le 1er d'un mois ne tombe pas
-    // forcément le même jour de semaine que le 1er du mois suivant, donc cette ligne est
-    // recalculée à chaque bloc plutôt que d'être un en-tête partagé sur toute l'année.
-    let weekdayCols = '';
-    for(let day=1; day<=31; day++){
-      if(day > nbDays){ weekdayCols += `<td class="heatmap-weekday-cell empty-cell"></td>`; continue; }
-      const wd = isoWeekday(new Date(year, month, day));
-      weekdayCols += `<td class="heatmap-weekday-cell${wd===6?' is-sunday':wd===5?' is-saturday':''}">${WEEKDAY_NAMES[wd][0]}</td>`;
-    }
-    rows += `<tr class="heatmap-weekday-row"><th class="heatmap-month-label" rowspan="${people.length+1}">${MONTH_SHORT[month]}</th><th class="heatmap-row-label"></th>${weekdayCols}</tr>`;
-    people.forEach(person=>{
-      let cols = '';
-      for(let day=1; day<=31; day++){
-        if(day > nbDays){ cols += `<td><div class="heatmap-cell empty-cell"></div></td>`; continue; }
-        const date = new Date(year, month, day);
-        const iso = fmtISO(date);
-        if(isSunday(date)){
-          cols += `<td><div class="heatmap-cell" style="background:var(--color-sunday);cursor:default;" title="${formatFR(iso)} — Fermé"></div></td>`;
-          continue;
-        }
-        const mState = getSlotState(iso, person.id, 'M');
-        const amState = getSlotState(iso, person.id, 'AM');
-        const colorM = heatmapSlotColor(person, iso, 'M'), colorAM = heatmapSlotColor(person, iso, 'AM');
-        let style = mState === amState
-          ? `background:${colorM};`
-          : `background:linear-gradient(to bottom, ${colorM} 50%, ${colorAM} 50%);`;
-        const hName = holidayName(iso);
-        if(hName) style += 'box-shadow:0 0 0 2px var(--color-holiday) inset;';
-        const overtime = getOvertimeHours(iso, person.id);
-        const title = `${formatFR(iso)}${hName?' — '+hName:''} — Matin : ${stateLabel(iso,person.id,'M')} · Après-midi : ${stateLabel(iso,person.id,'AM')}${overtime>0?' · +'+formatNum(overtime)+'h sup.':''}`;
-        cols += `<td><div class="heatmap-cell" data-date="${iso}" style="${style}" title="${escapeHTML(title)}" tabindex="0" role="button" aria-label="Détail du ${formatFR(iso)}"></div></td>`;
-      }
-      rows += `<tr><th class="heatmap-row-label" style="color:${person.color}">${person.short}</th>${cols}</tr>`;
-    });
-  }
-  return `
-    <div class="heatmap-wrap">
-      <table class="heatmap-table">
-        <colgroup><col class="col-month"><col class="col-label">${'<col>'.repeat(31)}</colgroup>
-        <thead><tr><th></th><th></th>${dayHeaderCells}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  `;
-}
-
-// Popover de détail jour, partagé par la vue annuelle vétérinaires et la vue annuelle
-// ASV : affiche le statut de chaque personne de `people`, et le bouton « Éditer ce jour »
-// saute dans le calendrier mensuel correspondant à viewKey (clé de CAL_VIEWS).
-function openAnnualDayDetail(iso, people, viewKey){
-  const backdrop = document.getElementById('popover-backdrop');
-  const box = document.getElementById('popover-box');
-  const hName = holidayName(iso);
-  const comment = getDayComment(iso);
-  const personRows = people.map(p=>`
-    <p style="font-size:13px;margin:5px 0;"><strong style="color:${p.color}">${p.short}</strong> — Matin : ${stateLabel(iso,p.id,'M')} · Après-midi : ${stateLabel(iso,p.id,'AM')}</p>
-  `).join('');
-  box.innerHTML = `
-    <h4>${formatFR(iso)}${hName ? ` <span class="cal-holiday-badge">Férié</span>` : ''}</h4>
-    ${comment ? `<p class="text-muted" style="font-size:12.5px;margin:8px 0;">💬 ${escapeHTML(comment)}</p>` : ''}
-    <div style="margin:10px 0;">${personRows}</div>
-    <div class="popover-actions">
-      <button class="btn" id="popover-cancel">Fermer</button>
-      <button class="btn btn-primary" id="popover-edit">Éditer ce jour</button>
-    </div>
-  `;
-  backdrop.classList.add('open');
-  const close = ()=> backdrop.classList.remove('open');
-  box.querySelector('#popover-cancel').onclick = close;
-  box.querySelector('#popover-edit').onclick = ()=>{
-    close();
-    const month = parseInt(iso.split('-')[1], 10) - 1;
-    CAL_VIEWS[viewKey].navState.month = month;
-    const group = viewKey.startsWith('asv') ? 'asv' : 'vets';
-    switchSubPage(group, viewKey.endsWith('forecast') ? 'forecast' : 'calendar');
-    switchView(group);
-    setTimeout(()=> openDaySidebar(iso, viewKey), 50);
-  };
-  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
-}
-
-// Sous-page "Vue annuelle" d'un onglet groupé — factorisée pour servir aussi bien
-// Vétérinaires que ASV : même heatmap, même bascule année courante / prévisionnelle.
-function renderAnnualViewForGroup(group){
-  const g = GROUP_VIEWS[group];
-  const container = document.getElementById(g.annualContainer);
-  const mode = annualYearState[group];
-  const viewKey = mode === 'current' ? g.calendarViewKey : g.forecastViewKey;
-  const cfg = CAL_VIEWS[viewKey];
-  container.innerHTML = `
-    <h2 class="section-title">Vue Annuelle ${cfg.year} — ${g.label}</h2>
-    <p class="section-desc" style="margin-bottom:12px;">Heatmap de présence — cliquez une cellule pour voir le détail du jour.</p>
-    <div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
-      <button data-mode="current" class="${mode==='current'?'active':''}">${CAL_VIEWS[g.calendarViewKey].year}</button>
-      <button data-mode="forecast" class="${mode==='forecast'?'active':''}">${CAL_VIEWS[g.forecastViewKey].year}</button>
-    </div>
-    <div class="card" style="padding:14px;">${buildHeatmap(cfg.year, cfg.people)}</div>
-    <div class="legend" style="margin-top:12px;padding:10px 16px;">${buildLegendColors(cfg.people)}</div>
-  `;
-  container.querySelector(`#${group}-annual-year-toggle`).addEventListener('click', (e)=>{
-    const btn = e.target.closest('button');
-    if(!btn) return;
-    annualYearState[group] = btn.dataset.mode;
-    renderAnnualViewForGroup(group);
-    saveViewState();
-  });
-  container.querySelectorAll('.heatmap-cell[data-date]').forEach(cell=>{
-    cell.addEventListener('click', ()=> openAnnualDayDetail(cell.dataset.date, cfg.people, viewKey));
-    cell.addEventListener('keydown', (e)=>{
-      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openAnnualDayDetail(cell.dataset.date, cfg.people, viewKey); }
-    });
-  });
-}
+/* stateLabel, heatmapSlotColor, buildHeatmap, openAnnualDayDetail, renderAnnualViewForGroup */
 
 /* ================================================================
    16. INITIALISATION GÉNÉRALE
@@ -6047,8 +5803,8 @@ function initApp(){
   initCalendarInteractions();
   updateDashboardNavBadge();
   const restoredView = loadViewState();
-  switchSubPage('vets', subNavState.vets);
-  switchSubPage('asv', subNavState.asv);
+  switchSubPage('vets', store.subNavState.vets);
+  switchSubPage('asv', store.subNavState.asv);
   const startView = !canAccessDashboard() && restoredView === 'dashboard' ? 'vets' : restoredView;
   switchView(VIEW_RENDERERS[startView] ? startView : 'vets');
   syncFromSupabase().then(remoteSlots=>{
@@ -6176,6 +5932,7 @@ function handlePwaShortcutAction(){
 /* ---------------- Amorçage ---------------- */
 setupLogin({ loadCurrentUser, initApp });
 setupSignatures({ onLoaded: renderCurrentView, renderCalendarView });
+setupAnnualView({ switchSubPage, switchView, openDaySidebar, saveViewState, buildLegendColors, GROUP_VIEWS });
 initServiceWorker(navigateForNotificationType);
 setTimeout(showIOSInstallTip, 4000);
 updatePwaOfflineBanner();

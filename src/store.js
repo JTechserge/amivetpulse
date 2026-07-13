@@ -26,4 +26,23 @@ export const store = {
     loaded: false,
     filter: 'all',
   },
+
+  // Calendar views (rebuilt each year rollover via buildCalViews())
+  // Format: { [viewKey]: { year, people, navState, todayNav, forecast, label, containerId, printable } }
+  CAL_VIEWS: null,
+
+  // Nav state objects referenced inside CAL_VIEWS.navState
+  // Initialized by initCalState() in app.js after getCurrentYear() is available
+  calStateCurrent: { month: 0 },
+  calStateForecast: { month: 0 },
+  calStateAsvCurrent: { month: 0 },
+  calStateAsvForecast: { month: 0 },
+
+  // Dashboard + sub-navigation state
+  dashState: { year: 0 },           // year set by initCalState()
+  subNavState: { vets: 'calendar', asv: 'calendar' },
+  annualYearState: { vets: 'current', asv: 'current' },
+
+  // Undo stack (snapshots of DATA.slots before each user action)
+  UNDO_STACK: [],
 };
