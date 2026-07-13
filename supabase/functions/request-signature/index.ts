@@ -366,7 +366,7 @@ ${pendingHalfDaysTotal > 0 ? `<tr style="background:#FFF;"><td style="padding:5p
         body: JSON.stringify({
           sender: { name: 'Amivet PULSE', email: 'jeremie.pvt@gmail.com' },
           to: [{ email: targetEmail, name: displayName }],
-          subject: `Amivet PULSE — Signature feuille de présence ${monthLabel}`,
+          subject: `Amivet PULSE — Signature feuille de présence ${monthLabel} - ${new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',timeZone:'Europe/Paris'})} ${new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Paris'})}`,
           textContent: text,
           htmlContent: html,
           trackClicks: false,
