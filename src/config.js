@@ -89,6 +89,21 @@ export const CLINIC_HOURS = { mStart:'08:30', mEnd:'13:00', amStart:'15:00', amE
 export const CLINIC_M_H  = 4.5;   // 8h30→13h00
 export const CLINIC_AM_H = 4.25;  // 15h00→19h15
 
+// ----------------------------------------------------------------
+// Année courante (clé localStorage + accesseurs)
+// ----------------------------------------------------------------
+const CURRENT_YEAR_KEY = 'amivet_current_year';
+export function getCurrentYear(){
+  const stored = parseInt(localStorage.getItem(CURRENT_YEAR_KEY), 10);
+  return Number.isInteger(stored) ? stored : 2026;
+}
+export function setCurrentYear(y){ localStorage.setItem(CURRENT_YEAR_KEY, String(y)); }
+
+// ----------------------------------------------------------------
+// Lookup rapide d'une personne (vétérinaires + ASV)
+// ----------------------------------------------------------------
+export function personOf(id){ return PEOPLE.find(p=>p.id===id) || ASV_PEOPLE.find(p=>p.id===id); }
+
 export const MONTH_NAMES  = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 export const MONTH_SHORT  = ['Janv','Févr','Mars','Avr','Mai','Juin','Juil','Août','Sept','Oct','Nov','Déc'];
 export const WEEKDAY_NAMES = ['Lu','Ma','Me','Je','Ve','Sa','Di']; // lundi = 0

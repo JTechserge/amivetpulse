@@ -1,4 +1,4 @@
-import { ASV_PEOPLE } from './config.js';
+import { ASV_PEOPLE, ASV_STD_SAT_CARLA, personOf } from './config.js';
 import { store } from './store.js';
 
 /* ---------- Clés de stockage ---------- */
@@ -94,3 +94,49 @@ export function cycleState(state){
   if(state === 'present') return 'absent';
   return 'empty';
 }
+
+/* ---------- Suivi des heures ASV (vue semaine + dashboard) ---------- */
+
+// Poste du jour : ouverture 'O' ou fermeture 'F'
+export function shiftTypeKey(iso, pid){ return `${iso}_${pid}_shift`; }
+export function getShiftType(iso, pid){ return store.DATA.slots[shiftTypeKey(iso, pid)] || 'O'; }
+
+export function timeToMins(t){ if(!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0); }
+
+// Heures nominales par jour selon poste et jour de semaine
+export function getDayNominal(iso, pid){
+  const d = new Date(iso + 'T00:00:00');
+  if(d.getDay() === 6){ const p = personOf(pid); return p?.saturdayOnly ? ASV_STD_SAT_CARLA : 7.0; }
+  return getShiftType(iso, pid) === 'F' ? 8.25 : 8.5;
+}
+
+// Départ anticipé (vue semaine)
+export function earlyDepKey(iso, pid){ return `${iso}_${pid}_early_dep`; }
+export function getEarlyDep(iso, pid){ return store.DATA.slots[earlyDepKey(iso, pid)] || ''; }
+export function setEarlyDep(iso, pid, v){ if(v) store.DATA.slots[earlyDepKey(iso, pid)] = v; else delete store.DATA.slots[earlyDepKey(iso, pid)]; }
+
+// Heures déficitaires (départ avant fin standard du poste)
+export function getDayDeficitH(iso, pid){
+  const early = getEarlyDep(iso, pid);
+  if(!early) return 0;
+  const stdEndMins = getShiftType(iso, pid) === 'F' ? 19 * 60 + 15 : 19 * 60;
+  return Math.max(0, (stdEndMins - timeToMins(early)) / 60);
+}
+
+// Heures supplémentaires semaine (zone drag, stockées en minutes entières)
+export function weekOtKey(iso, pid){ return `${iso}_${pid}_ot_mins`; }
+export function getWeekOtMins(iso, pid){ return parseInt(store.DATA.slots[weekOtKey(iso, pid)], 10) || 0; }
+export function setWeekOtMins(iso, pid, v){ if(v > 0) store.DATA.slots[weekOtKey(iso, pid)] = v; else delete store.DATA.slots[weekOtKey(iso, pid)]; }
+export function getDayOtH(iso, pid){ return getWeekOtMins(iso, pid) / 60; }
+
+// Heures supplémentaires pause repas
+export function lunchOtKey(iso, pid){ return `${iso}_${pid}_lunch_ot_mins`; }
+export function getLunchOtMins(iso, pid){ return parseInt(store.DATA.slots[lunchOtKey(iso, pid)], 10) || 0; }
+export function setLunchOtMins(iso, pid, v){ if(v > 0) store.DATA.slots[lunchOtKey(iso, pid)] = v; else delete store.DATA.slots[lunchOtKey(iso, pid)]; }
+export function getDayLunchOtH(iso, pid){ return getLunchOtMins(iso, pid) / 60; }
+export function getDayAllOtH(iso, pid){ return getDayOtH(iso, pid) + getDayLunchOtH(iso, pid); }
+
+// Note de jour (texte libre par ASV)
+export function dayNoteKey(iso, pid){ return `${iso}_${pid}_day_note`; }
+export function getDayNote(iso, pid){ return store.DATA.slots[dayNoteKey(iso, pid)] || ''; }
+export function setDayNote(iso, pid, v){ if(v) store.DATA.slots[dayNoteKey(iso, pid)] = v; else delete store.DATA.slots[dayNoteKey(iso, pid)]; }
