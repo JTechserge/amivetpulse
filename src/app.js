@@ -20,6 +20,7 @@ import { getAuthSession, saveAuthSession, supabaseHeaders, authSignIn, authUpdat
 import { reindexPresentShades, saveASVRoster, loadASVRoster, archiveASVPerson, unarchiveASVPerson, savePersonColors } from './state.js';
 import { showToast, showSavedToast, openConfirmModal, applyPersonColorVars, loadPersonColors } from './ui.js';
 import { pushDataToSupabase, syncFromSupabase, fetchSignatures, apiSignMonth, apiRevokeSignature } from './api.js';
+import { store } from './store.js';
 /* ================================================================
    AMIVET PLANNING — Application JS (vanilla ES2022, sans dépendance)
    ================================================================ */
@@ -143,7 +144,7 @@ function openChangeMyPasswordModal(){
   box.className = 'modal-box';
   box.innerHTML = `
     <h3>🔑 Changer mon mot de passe</h3>
-    <p>Choisissez un nouveau mot de passe pour votre compte <strong>${escapeHTML(currentUser?.email||'')}</strong>.</p>
+    <p>Choisissez un nouveau mot de passe pour votre compte <strong>${escapeHTML(store.currentUser?.email||'')}</strong>.</p>
     <div style="display:flex;flex-direction:column;gap:10px;">
       <input type="password" id="pwd-new" placeholder="Nouveau mot de passe" autocomplete="new-password">
       <input type="password" id="pwd-confirm" placeholder="Confirmer le nouveau mot de passe" autocomplete="new-password">
@@ -196,7 +197,7 @@ function openManageUsersModal(){
     const users = data.users;
     const roleLabels = { admin:'Admin', vet:'Vétérinaire', asv:'ASV' };
 
-    const isAdmin = currentUser?.role === 'admin';
+    const isAdmin = store.currentUser?.role === 'admin';
     const linkedPersonIds = new Set(users.map(u=>u.person_id).filter(Boolean));
     const localOnlyASV = ASV_PEOPLE.filter(p=> !p.archived && !linkedPersonIds.has(p.id));
     const localOnlyVets = PEOPLE.filter(p=> !linkedPersonIds.has(p.id) && !users.some(u=> (u.display_name||'').toLowerCase().includes(p.short.toLowerCase()) || (u.display_name||'').toLowerCase().includes(p.name.toLowerCase())));
@@ -345,9 +346,9 @@ function openManageUsersModal(){
             try{
               // 1. Nettoyer les données de planning en local
               if(personId){
-                Object.keys(DATA.slots).filter(k=> k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
-                  .forEach(k=> delete DATA.slots[k]);
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+                Object.keys(store.DATA.slots).filter(k=> k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
+                  .forEach(k=> delete store.DATA.slots[k]);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
                 pushDataToSupabase();
               }
               // 2. Retirer de l'effectif ASV si présent
@@ -390,9 +391,9 @@ function openManageUsersModal(){
           confirmLabel:`Retirer définitivement`,
           danger:true,
           onConfirm: ()=>{
-            Object.keys(DATA.slots).filter(k=> k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
-              .forEach(k=> delete DATA.slots[k]);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+            Object.keys(store.DATA.slots).filter(k=> k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
+              .forEach(k=> delete store.DATA.slots[k]);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
             pushDataToSupabase();
             const asvIdx = ASV_PEOPLE.findIndex(p=> p.id === personId);
             if(asvIdx !== -1){ ASV_PEOPLE.splice(asvIdx,1); reindexPresentShades(); saveASVRoster(); }
@@ -571,7 +572,7 @@ function openEditUserModal(userId, users, onBack){
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = store.currentUser?.role === 'admin';
   const personId = user.person_id;
 
   box.innerHTML = `
@@ -968,17 +969,17 @@ function renderRolloverBanner(){
   bar.querySelector('#rollover-dismiss').onclick = ()=> bar.remove();
 }
 
-// État global d'annulation (undo) — pile de snapshots de DATA.slots avant chaque action
+// État global d'annulation (undo) — pile de snapshots de store.DATA.slots avant chaque action
 const UNDO_STACK = [];
 const UNDO_MAX = 30;
 function snapshotBeforeChange(){
-  UNDO_STACK.push(JSON.stringify(DATA.slots));
+  UNDO_STACK.push(JSON.stringify(store.DATA.slots));
   if(UNDO_STACK.length > UNDO_MAX) UNDO_STACK.shift();
   updateUndoButtons();
 }
 function undoLastAction(){
   if(UNDO_STACK.length === 0) return;
-  DATA.slots = JSON.parse(UNDO_STACK.pop());
+  store.DATA.slots = JSON.parse(UNDO_STACK.pop());
   saveData(false);
   renderCurrentView();
   updateUndoButtons();
@@ -997,22 +998,12 @@ function updateUndoButtons(){
 // ----------------------------------------------------------------
 // Authentification — état global et gestion de session
 // ----------------------------------------------------------------
-let currentUser = null;
-// { id, email, role, person_id, display_name, can_edit_vet_calendar, can_edit_all_asv }
-let adminViewMode = 'vet'; // 'vet' | 'asv' — seulement pertinent pour le rôle admin
 
 // ----------------------------------------------------------------
 // État global — Annonces
 // ----------------------------------------------------------------
-let announcementsCache = {
-  list: [],
-  reads: new Set(),
-  loaded: false,
-  filter: 'all', // catégorie filtrée
-};
-let adminImpersonatedPersonId = null; // quelle ASV l'admin imite en mode ASV
 
-function clearAuthSession(){ sessionStorage.removeItem(AUTH_SESSION_KEY); currentUser = null; }
+function clearAuthSession(){ sessionStorage.removeItem(AUTH_SESSION_KEY); store.currentUser = null; }
 
 // ----------------------------------------------------------------
 // Fonctions d'authentification (Supabase Auth REST)
@@ -1064,59 +1055,58 @@ async function loadCurrentUser(){
   const profiles = await profRes.json();
   if(!profiles.length) return null;
   const p = profiles[0];
-  currentUser = {
+  store.currentUser = {
     id: authUser.id, email: authUser.email,
     role: p.role, person_id: p.person_id, display_name: p.display_name,
     can_edit_vet_calendar: p.can_edit_vet_calendar,
     can_edit_all_asv: p.can_edit_all_asv,
   };
-  return currentUser;
+  return store.currentUser;
 }
 
 // ----------------------------------------------------------------
 // Helpers de permissions
 // ----------------------------------------------------------------
 function effectiveRole(){
-  if(!currentUser) return null;
-  if(currentUser.role === 'admin') return adminViewMode === 'asv' ? 'asv' : 'vet';
-  return currentUser.role;
+  if(!store.currentUser) return null;
+  if(store.currentUser.role === 'admin') return store.adminViewMode === 'asv' ? 'asv' : 'vet';
+  return store.currentUser.role;
 }
 function canAccessDashboard(){ const r = effectiveRole(); return r === 'vet' || r === 'admin'; }
-function canAccessSettings(){ return currentUser?.role === 'admin' || currentUser?.role === 'vet'; }
+function canAccessSettings(){ return store.currentUser?.role === 'admin' || store.currentUser?.role === 'vet'; }
 function canEditSlot(personId){
-  if(!currentUser) return false;
+  if(!store.currentUser) return false;
   const asvPerson = ASV_PEOPLE.find(p=>p.id===personId);
   if(asvPerson?.archived) return false;
   const role = effectiveRole();
   if(role === 'vet') return true;
   if(role === 'asv'){
-    const isImpersonating = currentUser.role === 'admin' && adminViewMode === 'asv';
-    const myId = isImpersonating ? adminImpersonatedPersonId : currentUser.person_id;
+    const isImpersonating = store.currentUser.role === 'admin' && store.adminViewMode === 'asv';
+    const myId = isImpersonating ? store.adminImpersonatedPersonId : store.currentUser.person_id;
     if(isASVPerson(personId)){
       // En impersonation : strictement la ligne de la personne choisie, comme un vrai ASV
       if(isImpersonating) return personId === myId;
-      return personId === myId || currentUser.can_edit_all_asv === true;
+      return personId === myId || store.currentUser.can_edit_all_asv === true;
     }
     // Calendrier vétérinaires : jamais modifiable en impersonation
     if(isImpersonating) return false;
-    return currentUser.can_edit_vet_calendar === true;
+    return store.currentUser.can_edit_vet_calendar === true;
   }
   return false;
 }
-let DATA = { version:2, slots:{} };
 
 function loadData(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(raw){
       const parsed = JSON.parse(raw);
-      if(parsed && parsed.slots) { DATA = parsed; return; }
+      if(parsed && parsed.slots) { store.DATA = parsed; return; }
     }
   }catch(e){ console.warn('Lecture localStorage impossible, ré-initialisation.', e); }
-  DATA = { version:2, slots:{} };
+  store.DATA = { version:2, slots:{} };
 }
 function saveData(showToast = true){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
   updateDashboardNavBadge();
   scheduleSupabasePush();
   if(showToast) showSavedToast();
@@ -1129,28 +1119,24 @@ function scheduleSupabasePush(){
   clearTimeout(_supabasePushTimer);
   // Attend une courte pause après la dernière modification (ex. fin d'un glisser-peindre)
   // pour grouper les écritures plutôt que d'envoyer une requête à chaque case cochée.
-  _supabasePushTimer = setTimeout(()=> pushDataToSupabase(DATA.slots), 900);
+  _supabasePushTimer = setTimeout(()=> pushDataToSupabase(store.DATA.slots), 900);
 }
 // Signatures électroniques mensuelles (feuille de présence ASV) : un cache local simple
 // (clé "personId|year|month") rechargé au démarrage et après chaque signature/annulation —
 // pas besoin de la sophistication du sync push/pull de planning_data, ces écritures sont
 // rares et ponctuelles (quelques-unes par mois, pas par clic).
-const SIGNATURES = new Set();
-let pendingSignToken = null; // token ?sign=UUID capturé dans l'URL avant authentification
-let INTERVIEWS = [];
 function signatureKey(personId, year, month){ return `${personId}|${year}|${month}`; }
-function isMonthSigned(personId, year, month){ return SIGNATURES.has(signatureKey(personId, year, month)); }
-const signatureDetails = new Map();
-function getSignatureDetail(personId, year, month){ return signatureDetails.get(signatureKey(personId, year, month)) || null; }
+function isMonthSigned(personId, year, month){ return store.SIGNATURES.has(signatureKey(personId, year, month)); }
+function getSignatureDetail(personId, year, month){ return store.signatureDetails.get(signatureKey(personId, year, month)) || null; }
 async function loadSignatures(){
   const rows = await fetchSignatures();
   if(!rows) return;
-  SIGNATURES.clear();
-  signatureDetails.clear();
+  store.SIGNATURES.clear();
+  store.signatureDetails.clear();
   rows.forEach(r=>{
     const key = signatureKey(r.person_id, r.year, r.month);
-    SIGNATURES.add(key);
-    signatureDetails.set(key, { signedName:r.signed_name, signedAt:r.signed_at });
+    store.SIGNATURES.add(key);
+    store.signatureDetails.set(key, { signedName:r.signed_name, signedAt:r.signed_at });
   });
   renderCurrentView();
 }
@@ -1167,7 +1153,7 @@ async function loadInterviews(){
   try{
     const res = await fetch(`${SUPABASE_URL}annual_interviews?select=*`, { headers: supabaseHeaders() });
     if(!res.ok) return;
-    INTERVIEWS = await res.json();
+    store.INTERVIEWS = await res.json();
   }catch(e){ console.warn('Entretiens inaccessibles.', e); }
 }
 
@@ -1189,10 +1175,10 @@ function updateDashboardNavBadge(){
 // ----------------------------------------------------------------
 // Module Annonces — chargement + badge
 // ----------------------------------------------------------------
-function annonceViewerId(){ return currentUser?.person_id || currentUser?.id || ''; }
+function annonceViewerId(){ return store.currentUser?.person_id || store.currentUser?.id || ''; }
 
 async function loadAnnouncements(){
-  if(!currentUser) return;
+  if(!store.currentUser) return;
   try{
     const today = new Date().toISOString();
     const [annRes, readRes] = await Promise.all([
@@ -1201,22 +1187,22 @@ async function loadAnnouncements(){
     ]);
     const anns = annRes.ok ? await annRes.json() : [];
     const reads = readRes.ok ? await readRes.json() : [];
-    announcementsCache.list = Array.isArray(anns) ? anns : [];
-    announcementsCache.reads = new Set((Array.isArray(reads) ? reads : []).map(r => r.announcement_id));
-    announcementsCache.loaded = true;
+    store.announcementsCache.list = Array.isArray(anns) ? anns : [];
+    store.announcementsCache.reads = new Set((Array.isArray(reads) ? reads : []).map(r => r.announcement_id));
+    store.announcementsCache.loaded = true;
     updateAnnouncementBadge();
   }catch(e){ console.warn('Annonces inaccessibles.', e); }
 }
 
 function getUnreadCount(){
-  const role = currentUser?.role;
-  const visible = announcementsCache.list.filter(a => {
+  const role = store.currentUser?.role;
+  const visible = store.announcementsCache.list.filter(a => {
     if(a.target_roles === 'all') return true;
     if(a.target_roles === 'vet' && role === 'vet') return true;
     if(a.target_roles === 'asv' && role === 'asv') return true;
     return role === 'admin';
   });
-  return visible.filter(a => !announcementsCache.reads.has(a.id)).length;
+  return visible.filter(a => !store.announcementsCache.reads.has(a.id)).length;
 }
 
 function updateAnnouncementBadge(){
@@ -1228,8 +1214,8 @@ function updateAnnouncementBadge(){
 }
 
 async function markAnnouncementRead(annId){
-  if(announcementsCache.reads.has(annId)) return;
-  announcementsCache.reads.add(annId);
+  if(store.announcementsCache.reads.has(annId)) return;
+  store.announcementsCache.reads.add(annId);
   updateAnnouncementBadge();
   try{
     await fetch(`${SUPABASE_URL}announcement_reads`, {
@@ -1256,26 +1242,26 @@ function isASVPerson(personId){ return ASV_PEOPLE.some(p=>p.id===personId); }
 // ----------------------------------------------------------------
 // Demandes de congé ASV — statut de décision rattaché à chaque demi-journée plutôt qu'à
 // une entité "demande" séparée : ça réutilise directement la logique de fusion des
-// absences contiguës déjà en place (mêmes clés DATA.slots, même date ISO réelle), sans
+// absences contiguës déjà en place (mêmes clés store.DATA.slots, même date ISO réelle), sans
 // avoir à synchroniser deux structures de données en parallèle.
 function decisionKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}_decision`; }
 function decisionCommentKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}_decision_comment`; }
-function getLeaveDecision(isoDate, personId, slot){ return DATA.slots[decisionKey(isoDate,personId,slot)] || null; }
+function getLeaveDecision(isoDate, personId, slot){ return store.DATA.slots[decisionKey(isoDate,personId,slot)] || null; }
 function setLeaveDecision(isoDate, personId, slot, decision){
   const key = decisionKey(isoDate,personId,slot);
-  if(decision) DATA.slots[key] = decision; else delete DATA.slots[key];
+  if(decision) store.DATA.slots[key] = decision; else delete store.DATA.slots[key];
 }
-function getLeaveDecisionComment(isoDate, personId, slot){ return DATA.slots[decisionCommentKey(isoDate,personId,slot)] || ''; }
+function getLeaveDecisionComment(isoDate, personId, slot){ return store.DATA.slots[decisionCommentKey(isoDate,personId,slot)] || ''; }
 function setLeaveDecisionComment(isoDate, personId, slot, text){
   const key = decisionCommentKey(isoDate,personId,slot);
-  if(text) DATA.slots[key] = text; else delete DATA.slots[key];
+  if(text) store.DATA.slots[key] = text; else delete store.DATA.slots[key];
 }
 // Modifications urgentes dans les 14 jours à venir (vue mensuelle ASV uniquement)
 function changeKey(iso, pid, slot){ return `${iso}_${pid}_${slot}_chg`; }
-function getChangeDecision(iso, pid, slot){ return DATA.slots[changeKey(iso,pid,slot)] || null; }
+function getChangeDecision(iso, pid, slot){ return store.DATA.slots[changeKey(iso,pid,slot)] || null; }
 function setChangeDecision(iso, pid, slot, dec){
   const k = changeKey(iso,pid,slot);
-  if(dec) DATA.slots[k] = dec; else delete DATA.slots[k];
+  if(dec) store.DATA.slots[k] = dec; else delete store.DATA.slots[k];
 }
 // Retourne true si la date ISO est dans les 14 prochains jours (aujourd'hui inclus)
 function isWithinNextTwoWeeks(iso){
@@ -1287,23 +1273,23 @@ function isWithinNextTwoWeeks(iso){
 // Heures supplémentaires ASV — un nombre d'heures par personne et par jour (pas par
 // demi-journée : une ASV peut faire 1h30 de plus sans que ça corresponde à un créneau M/AM).
 function overtimeKey(isoDate, personId){ return `${isoDate}_${personId}_overtime`; }
-function getOvertimeHours(isoDate, personId){ return parseFloat(DATA.slots[overtimeKey(isoDate,personId)]) || 0; }
+function getOvertimeHours(isoDate, personId){ return parseFloat(store.DATA.slots[overtimeKey(isoDate,personId)]) || 0; }
 function setOvertimeHours(isoDate, personId, hours){
   const key = overtimeKey(isoDate, personId);
   const n = parseFloat(hours);
-  if(!isNaN(n) && n !== 0) DATA.slots[key] = n; else delete DATA.slots[key];
+  if(!isNaN(n) && n !== 0) store.DATA.slots[key] = n; else delete store.DATA.slots[key];
 }
 
-function getSlotState(isoDate, personId, slot){ return DATA.slots[slotKey(isoDate,personId,slot)] || 'empty'; }
+function getSlotState(isoDate, personId, slot){ return store.DATA.slots[slotKey(isoDate,personId,slot)] || 'empty'; }
 function setSlotState(isoDate, personId, slot, state){
   const key = slotKey(isoDate,personId,slot);
-  const wasAbsent = DATA.slots[key] === 'absent';
+  const wasAbsent = store.DATA.slots[key] === 'absent';
   if(state === 'empty'){
-    delete DATA.slots[key];
-    delete DATA.slots[labelKey(isoDate,personId,slot)];
+    delete store.DATA.slots[key];
+    delete store.DATA.slots[labelKey(isoDate,personId,slot)];
   } else {
-    DATA.slots[key] = state;
-    if(state !== 'absent') delete DATA.slots[labelKey(isoDate,personId,slot)];
+    store.DATA.slots[key] = state;
+    if(state !== 'absent') delete store.DATA.slots[labelKey(isoDate,personId,slot)];
   }
   if(isASVPerson(personId)){
     if(state === 'absent' && !wasAbsent){
@@ -1319,15 +1305,15 @@ function setSlotState(isoDate, personId, slot, state){
     }
   }
 }
-function getSlotLabel(isoDate, personId, slot){ return DATA.slots[labelKey(isoDate,personId,slot)] || ''; }
+function getSlotLabel(isoDate, personId, slot){ return store.DATA.slots[labelKey(isoDate,personId,slot)] || ''; }
 function setSlotLabel(isoDate, personId, slot, label){
   const key = labelKey(isoDate,personId,slot);
-  if(label) DATA.slots[key] = label; else delete DATA.slots[key];
+  if(label) store.DATA.slots[key] = label; else delete store.DATA.slots[key];
 }
-function getDayComment(isoDate){ return DATA.slots[commentKey(isoDate)] || ''; }
+function getDayComment(isoDate){ return store.DATA.slots[commentKey(isoDate)] || ''; }
 function setDayComment(isoDate, text){
   const key = commentKey(isoDate);
-  if(text) DATA.slots[key] = text; else delete DATA.slots[key];
+  if(text) store.DATA.slots[key] = text; else delete store.DATA.slots[key];
 }
 // Cycle d'état d'une demi-journée : vide -> présent -> absent -> vide
 function cycleState(state){
@@ -1417,8 +1403,8 @@ function seedDemoData(){
    ---------------------------------------------------------------- */
 function buildSettingsMenuHtml(){
   const isVet = canAccessSettings();
-  const isAdmin = currentUser?.role === 'admin';
-  const userName = currentUser?.display_name || currentUser?.email || '';
+  const isAdmin = store.currentUser?.role === 'admin';
+  const userName = store.currentUser?.display_name || store.currentUser?.email || '';
   return `
     ${isVet ? `
       <div class="settings-section-label">Personnalisation</div>
@@ -1438,7 +1424,7 @@ function buildSettingsMenuHtml(){
     ` : ''}
     ${isAdmin ? `
       <div class="settings-section-label">Mode d'affichage</div>
-      <button id="action-toggle-view" role="menuitem">👁 ${adminViewMode === 'asv' ? 'Passer en vue Vétérinaires' : 'Passer en vue ASV'}</button>
+      <button id="action-toggle-view" role="menuitem">👁 ${store.adminViewMode === 'asv' ? 'Passer en vue Vétérinaires' : 'Passer en vue ASV'}</button>
       <hr>
     ` : ''}
     <div class="settings-section-label">Notifications</div>
@@ -1455,7 +1441,7 @@ function buildSettingsMenuHtml(){
 function updateHeaderUsername(){
   const el = document.getElementById('header-username');
   if(!el) return;
-  const name = currentUser?.display_name || currentUser?.email || '';
+  const name = store.currentUser?.display_name || store.currentUser?.email || '';
   el.textContent = name ? name : '';
   el.style.display = name ? 'inline' : 'none';
 }
@@ -1486,7 +1472,7 @@ function initSettingsMenu(){
       menu.classList.remove('open'); openCalendarSyncModal();
     });
     document.getElementById('action-export').addEventListener('click', ()=>{
-      const blob = new Blob([JSON.stringify(DATA, null, 2)], { type:'application/json' });
+      const blob = new Blob([JSON.stringify(store.DATA, null, 2)], { type:'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = `amivet_planning_${fmtISO(new Date())}.json`;
@@ -1503,7 +1489,7 @@ function initSettingsMenu(){
         try{
           const parsed = JSON.parse(reader.result);
           if(!parsed || typeof parsed.slots !== 'object') throw new Error('Format invalide');
-          snapshotBeforeChange(); DATA = parsed; saveData(false); renderCurrentView();
+          snapshotBeforeChange(); store.DATA = parsed; saveData(false); renderCurrentView();
           showToast('Import réussi', '⬆️');
         }catch{ showToast('Fichier JSON invalide', '⚠️'); }
         fileInput.value = '';
@@ -1515,13 +1501,13 @@ function initSettingsMenu(){
     });
   }
 
-  if(currentUser?.role === 'admin'){
+  if(store.currentUser?.role === 'admin'){
     document.getElementById('action-toggle-view').addEventListener('click', ()=>{
       menu.classList.remove('open');
-      if(adminViewMode === 'asv'){
+      if(store.adminViewMode === 'asv'){
         // Déjà en mode ASV → retour immédiat
-        adminViewMode = 'vet';
-        adminImpersonatedPersonId = null;
+        store.adminViewMode = 'vet';
+        store.adminImpersonatedPersonId = null;
         applyRoleToDOM();
         initSettingsMenu();
         renderCurrentView();
@@ -1897,7 +1883,7 @@ function openResetYearModal(year, isForecast){
     confirmLabel:`Réinitialiser ${year}`,
     onConfirm:()=>{
       snapshotBeforeChange();
-      Object.keys(DATA.slots).filter(k=>k.startsWith(`${year}-`)).forEach(k=> delete DATA.slots[k]);
+      Object.keys(store.DATA.slots).filter(k=>k.startsWith(`${year}-`)).forEach(k=> delete store.DATA.slots[k]);
       saveData();
       renderCurrentView();
       showToast(`${year} réinitialisé`, '🗑️');
@@ -1986,10 +1972,10 @@ function getWeekMondayDate(date){
 }
 function weekPersonId(){
   // Admin en impersonation → la personne choisie (ex. Marie)
-  if(currentUser?.role === 'admin' && adminViewMode === 'asv')
-    return adminImpersonatedPersonId || ASV_PEOPLE[0]?.id;
+  if(store.currentUser?.role === 'admin' && store.adminViewMode === 'asv')
+    return store.adminImpersonatedPersonId || ASV_PEOPLE[0]?.id;
   // ASV authentifiée → toujours soi-même
-  if(effectiveRole() === 'asv') return currentUser?.person_id || ASV_PEOPLE[0]?.id;
+  if(effectiveRole() === 'asv') return store.currentUser?.person_id || ASV_PEOPLE[0]?.id;
   // Vétérinaires / admin (vue normale) → sélecteur dans la vue
   return weekNavState.personId || ASV_PEOPLE[0]?.id;
 }
@@ -2387,7 +2373,7 @@ function renderWeekViewASV(){
     };
   }
   if(isVetUser) container.querySelector('#week-asv-pick').onchange=(e)=>{ weekNavState.personId=e.target.value; renderWeekViewASV(); };
-  container.querySelectorAll('.week-shift-btn').forEach(btn=>{ btn.addEventListener('click',()=>{ const iso2=btn.dataset.shiftIso,pid2=btn.dataset.shiftPid; DATA.slots[shiftTypeKey(iso2,pid2)]=getShiftType(iso2,pid2)==='O'?'F':'O'; saveData(false); renderWeekViewASV(); }); });
+  container.querySelectorAll('.week-shift-btn').forEach(btn=>{ btn.addEventListener('click',()=>{ const iso2=btn.dataset.shiftIso,pid2=btn.dataset.shiftPid; store.DATA.slots[shiftTypeKey(iso2,pid2)]=getShiftType(iso2,pid2)==='O'?'F':'O'; saveData(false); renderWeekViewASV(); }); });
 }
 
 
@@ -2480,7 +2466,7 @@ function goToToday(viewKey){
   renderCalendarView(viewKey);
 }
 
-// Calcule classes + contenu d'une cellule demi-journée à partir de DATA. Pour une absence
+// Calcule classes + contenu d'une cellule demi-journée à partir de store.DATA. Pour une absence
 // ASV, l'apparence dépend aussi du statut de la demande de congé (en attente / approuvée /
 // refusée) — sans changement pour les vétérinaires, qui n'ont pas ce concept.
 function cellRenderInfo(iso, personId, slot){
@@ -2788,7 +2774,7 @@ function blockIfOver42h(pid, isoDate){
   const mon = getWeekMondayDate(new Date(isoDate + 'T00:00:00'));
   const weekH = computeWeekTotalHours(pid, mon);
   if(weekH > WEEKLY_MAX_HOURS){
-    if(UNDO_STACK.length > 0){ DATA.slots = JSON.parse(UNDO_STACK.pop()); updateUndoButtons(); }
+    if(UNDO_STACK.length > 0){ store.DATA.slots = JSON.parse(UNDO_STACK.pop()); updateUndoButtons(); }
     saveData(false);
     showToast(`Plafond 42h dépassé (${formatHHMM(weekH)}) — saisie annulée`, '🚫');
     return true;
@@ -2845,8 +2831,8 @@ function getWeekAlerts(personId, sundayISO){
     }
     // Même poste les jours de semaine (pas samedi) — uniquement via shiftType stocké (pas TE)
     if(present.length === 2 && dt.getDay() !== 6){
-      const s0 = DATA.slots[shiftTypeKey(iso2, present[0].id)] || null;
-      const s1 = DATA.slots[shiftTypeKey(iso2, present[1].id)] || null;
+      const s0 = store.DATA.slots[shiftTypeKey(iso2, present[0].id)] || null;
+      const s1 = store.DATA.slots[shiftTypeKey(iso2, present[1].id)] || null;
       if(s0 && s1 && s0 === s1){
         sameShiftIssues.push(`${DAY_MINI[d]}:2×${s0==='O'?'Ouv':'Fer'} (${present.map(q=>q.short).join('+')})`);
       }
@@ -3297,8 +3283,8 @@ function buildSignaturePanelHtml(viewKey){
                 return `<span class="text-muted" style="font-size:12.5px;">✅ Signé par ${escapeHTML(detail.signedName)} le ${signedDate}</span>`;
               })()
             : '';
-          const isOwn = currentUser?.person_id === p.id && currentUser?.role === 'asv';
-          const isAdminOrVet = currentUser?.role === 'admin' || currentUser?.role === 'vet';
+          const isOwn = store.currentUser?.person_id === p.id && store.currentUser?.role === 'asv';
+          const isAdminOrVet = store.currentUser?.role === 'admin' || store.currentUser?.role === 'vet';
           const asvPendingNote = isOwn && !detail
             ? `<span class="text-muted" style="font-size:12px;font-style:italic;">La signature s'effectue via le lien envoyé par email par le vétérinaire.</span>`
             : '';
@@ -3408,11 +3394,11 @@ async function requestSignatureEmail(viewKey, personId){
     const data = await res.json();
     if(!data.ok) throw new Error(data.error || 'Erreur inconnue');
     if(data.email_sent){
-      showToast(`Email de signature envoyé à ${currentUser.email}`, '📧');
+      showToast(`Email de signature envoyé à ${store.currentUser.email}`, '📧');
       renderCalendarView(viewKey);
     } else {
       // Resend ne peut pas envoyer à cet email (plan gratuit) — afficher le lien à copier
-      openSigningLinkModal(data.signing_link, currentUser.email);
+      openSigningLinkModal(data.signing_link, store.currentUser.email);
       renderCalendarView(viewKey);
     }
   }catch(e){
@@ -3430,8 +3416,8 @@ function openSignConfirmModal(tokenId){
     <h3>✍️ Confirmer ma signature</h3>
     <p style="margin-bottom:12px;">Vous allez signer électroniquement votre feuille de présence. Votre identité, email et l'horodatage seront enregistrés de façon permanente.</p>
     <div style="background:#F0FDF9;border:1px solid #99F6E4;border-radius:8px;padding:12px 14px;font-size:13px;color:#0F766E;margin-bottom:14px;line-height:1.6;">
-      <strong>Signataire :</strong> ${escapeHTML(currentUser.display_name || currentUser.email)}<br>
-      <strong>Email :</strong> ${escapeHTML(currentUser.email)}
+      <strong>Signataire :</strong> ${escapeHTML(store.currentUser.display_name || store.currentUser.email)}<br>
+      <strong>Email :</strong> ${escapeHTML(store.currentUser.email)}
     </div>
     <p id="sign-confirm-error" style="color:#B91C1C;font-size:12px;display:none;margin:0 0 10px;"></p>
     <div class="modal-actions" style="margin-top:4px;">
@@ -3505,18 +3491,18 @@ VIEW_RENDERERS['annonces'] = renderAnnounces;
    ---------------------------------------------------------------- */
 function renderAnnounces(){
   const container = document.getElementById('view-annonces');
-  const isAdmin = currentUser?.role === 'admin';
-  const role = currentUser?.role;
+  const isAdmin = store.currentUser?.role === 'admin';
+  const role = store.currentUser?.role;
   const viewerId = annonceViewerId();
 
   const now = new Date();
-  const allList = announcementsCache.list;
+  const allList = store.announcementsCache.list;
   const active = allList.filter(a => {
     if(a.target_roles === 'vet' && role === 'asv') return false;
     if(a.target_roles === 'asv' && (role === 'vet' || role === 'admin')) return false;
     return true;
   });
-  const filterCat = announcementsCache.filter;
+  const filterCat = store.announcementsCache.filter;
 
   const filtered = filterCat === 'all' ? active : active.filter(a => a.category === filterCat);
 
@@ -3540,7 +3526,7 @@ function renderAnnounces(){
 
   function cardHtml(a){
     const cat = ANNONCE_CATEGORIES[a.category] || ANNONCE_CATEGORIES.info;
-    const unread = !announcementsCache.reads.has(a.id);
+    const unread = !store.announcementsCache.reads.has(a.id);
     const bg = unread ? cat.bg : 'var(--color-card)';
     return `<div class="ann-card" data-ann-id="${a.id}" style="position:relative;border:1.5px solid ${a.pinned?cat.color:unread?cat.border:'var(--color-border)'};border-left:${a.pinned?`4px solid ${cat.color}`:''};border-radius:10px;padding:14px 16px;margin-bottom:10px;background:${bg};cursor:pointer;">
       ${unread ? `<span style="position:absolute;top:10px;left:10px;width:8px;height:8px;border-radius:50%;background:#3B82F6;"></span>` : ''}
@@ -3570,7 +3556,7 @@ function renderAnnounces(){
   `;
 
   container.querySelectorAll('.ann-filter-pill').forEach(btn => {
-    btn.onclick = ()=>{ announcementsCache.filter = btn.dataset.cat; renderAnnounces(); };
+    btn.onclick = ()=>{ store.announcementsCache.filter = btn.dataset.cat; renderAnnounces(); };
   });
 
   container.querySelectorAll('.ann-card').forEach(card => {
@@ -3614,9 +3600,9 @@ function renderAnnounces(){
 }
 
 function openAnnouncementModal(annId){
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = store.currentUser?.role === 'admin';
   if(!isAdmin) return;
-  const existing = annId ? announcementsCache.list.find(a => a.id === annId) : null;
+  const existing = annId ? store.announcementsCache.list.find(a => a.id === annId) : null;
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
@@ -3695,7 +3681,7 @@ function openAnnouncementModal(annId){
         await fetch(`${SUPABASE_URL}announcements?id=eq.${existing.id}`, {
           method: 'DELETE', headers: supabaseHeaders({ Prefer:'return=minimal' }),
         });
-        announcementsCache.list = announcementsCache.list.filter(a => a.id !== existing.id);
+        store.announcementsCache.list = store.announcementsCache.list.filter(a => a.id !== existing.id);
         close(); updateAnnouncementBadge(); renderAnnounces();
         showToast('Annonce supprimée', '🗑️');
       }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
@@ -3722,7 +3708,7 @@ function openAnnouncementModal(annId){
         });
         if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.message||`Erreur ${res.status}`); }
         [ann] = await res.json();
-        announcementsCache.list = announcementsCache.list.map(a => a.id===ann.id?ann:a);
+        store.announcementsCache.list = store.announcementsCache.list.map(a => a.id===ann.id?ann:a);
       } else {
         const res = await fetch(`${SUPABASE_URL}announcements`, {
           method: 'POST',
@@ -3731,8 +3717,8 @@ function openAnnouncementModal(annId){
         });
         if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.message||`Erreur ${res.status}`); }
         [ann] = await res.json();
-        if(pinned) announcementsCache.list = [ann, ...announcementsCache.list];
-        else announcementsCache.list = [ann, ...announcementsCache.list].sort((a,b) => (b.pinned?1:0)-(a.pinned?1:0));
+        if(pinned) store.announcementsCache.list = [ann, ...store.announcementsCache.list];
+        else store.announcementsCache.list = [ann, ...store.announcementsCache.list].sort((a,b) => (b.pinned?1:0)-(a.pinned?1:0));
       }
       close(); updateAnnouncementBadge(); renderAnnounces();
       showToast(existing?'Annonce mise à jour':'Annonce publiée', '📣');
@@ -3809,10 +3795,10 @@ function applyPaint(cell, value){
   dragCtx.touched.add(`${iso}|${personId}|${slot}`);
   if(dragCtx.paintMode === 'opening'){
     setSlotState(iso, personId, slot, 'present');
-    DATA.slots[shiftTypeKey(iso, personId)] = 'O';
+    store.DATA.slots[shiftTypeKey(iso, personId)] = 'O';
   } else if(dragCtx.paintMode === 'closing'){
     setSlotState(iso, personId, slot, 'present');
-    DATA.slots[shiftTypeKey(iso, personId)] = 'F';
+    store.DATA.slots[shiftTypeKey(iso, personId)] = 'F';
   } else if(dragCtx.paintMode === 'repos'){
     setSlotState(iso, personId, slot, 'absent');
     setSlotLabel(iso, personId, slot, 'Repos planifié');
@@ -3823,7 +3809,7 @@ function applyPaint(cell, value){
   } else if(dragCtx.paintMode === 'erase'){
     setSlotState(iso, personId, slot, 'empty');
     setSlotLabel(iso, personId, slot, '');
-    delete DATA.slots[shiftTypeKey(iso, personId)];
+    delete store.DATA.slots[shiftTypeKey(iso, personId)];
     setChangeDecision(iso, personId, slot, null); // effacement = plus de demande d'approbation
   } else {
     setSlotState(iso, personId, slot, value);
@@ -4689,7 +4675,7 @@ function computeOvertimeStats(year){
 
 // Poste (ouverture / fermeture) par jour/personne
 function shiftTypeKey(iso,pid){ return `${iso}_${pid}_shift`; }
-function getShiftType(iso,pid){ return DATA.slots[shiftTypeKey(iso,pid)] || 'O'; }
+function getShiftType(iso,pid){ return store.DATA.slots[shiftTypeKey(iso,pid)] || 'O'; }
 function timeToMins(t){ if(!t)return 0; const[h,m]=t.split(':').map(Number); return h*60+(m||0); }
 // Heures nominales par jour selon poste et jour de semaine
 function getDayNominal(iso,pid){
@@ -4699,8 +4685,8 @@ function getDayNominal(iso,pid){
 }
 // Départ anticipé (vue semaine)
 function earlyDepKey(iso,pid){ return `${iso}_${pid}_early_dep`; }
-function getEarlyDep(iso,pid){ return DATA.slots[earlyDepKey(iso,pid)]||''; }
-function setEarlyDep(iso,pid,v){ if(v) DATA.slots[earlyDepKey(iso,pid)]=v; else delete DATA.slots[earlyDepKey(iso,pid)]; }
+function getEarlyDep(iso,pid){ return store.DATA.slots[earlyDepKey(iso,pid)]||''; }
+function setEarlyDep(iso,pid,v){ if(v) store.DATA.slots[earlyDepKey(iso,pid)]=v; else delete store.DATA.slots[earlyDepKey(iso,pid)]; }
 // Heures déficitaires (départ avant fin standard du poste)
 function getDayDeficitH(iso,pid){
   const early=getEarlyDep(iso,pid);
@@ -4710,17 +4696,17 @@ function getDayDeficitH(iso,pid){
 }
 // Heures supplémentaires semaine (zone drag, stockées en minutes entières)
 function weekOtKey(iso,pid){ return `${iso}_${pid}_ot_mins`; }
-function getWeekOtMins(iso,pid){ return parseInt(DATA.slots[weekOtKey(iso,pid)],10)||0; }
-function setWeekOtMins(iso,pid,v){ if(v>0) DATA.slots[weekOtKey(iso,pid)]=v; else delete DATA.slots[weekOtKey(iso,pid)]; }
+function getWeekOtMins(iso,pid){ return parseInt(store.DATA.slots[weekOtKey(iso,pid)],10)||0; }
+function setWeekOtMins(iso,pid,v){ if(v>0) store.DATA.slots[weekOtKey(iso,pid)]=v; else delete store.DATA.slots[weekOtKey(iso,pid)]; }
 function getDayOtH(iso,pid){ return getWeekOtMins(iso,pid)/60; }
 function lunchOtKey(iso,pid){ return `${iso}_${pid}_lunch_ot_mins`; }
-function getLunchOtMins(iso,pid){ return parseInt(DATA.slots[lunchOtKey(iso,pid)],10)||0; }
-function setLunchOtMins(iso,pid,v){ if(v>0) DATA.slots[lunchOtKey(iso,pid)]=v; else delete DATA.slots[lunchOtKey(iso,pid)]; }
+function getLunchOtMins(iso,pid){ return parseInt(store.DATA.slots[lunchOtKey(iso,pid)],10)||0; }
+function setLunchOtMins(iso,pid,v){ if(v>0) store.DATA.slots[lunchOtKey(iso,pid)]=v; else delete store.DATA.slots[lunchOtKey(iso,pid)]; }
 function getDayLunchOtH(iso,pid){ return getLunchOtMins(iso,pid)/60; }
 function getDayAllOtH(iso,pid){ return getDayOtH(iso,pid)+getDayLunchOtH(iso,pid); }
 function dayNoteKey(iso,pid){ return `${iso}_${pid}_day_note`; }
-function getDayNote(iso,pid){ return DATA.slots[dayNoteKey(iso,pid)]||''; }
-function setDayNote(iso,pid,v){ if(v) DATA.slots[dayNoteKey(iso,pid)]=v; else delete DATA.slots[dayNoteKey(iso,pid)]; }
+function getDayNote(iso,pid){ return store.DATA.slots[dayNoteKey(iso,pid)]||''; }
+function setDayNote(iso,pid,v){ if(v) store.DATA.slots[dayNoteKey(iso,pid)]=v; else delete store.DATA.slots[dayNoteKey(iso,pid)]; }
 // Outil de peinture mensuelle ASV : 'opening' | 'closing' | 'repos' | 'conge' | 'maladie'
 let calMonthPaintMode = 'opening';
 // État de navigation de la vue semaine (outil : 'earlyDep' | 'overtime')
@@ -5017,7 +5003,7 @@ function renderDashboardInterviews(){
   const year = dashState.year;
   const cy = getCurrentYear();
 
-  function getInterview(personId){ return INTERVIEWS.find(i=>i.person_id===personId && i.year===year); }
+  function getInterview(personId){ return store.INTERVIEWS.find(i=>i.person_id===personId && i.year===year); }
   function isoToFR(iso){ if(!iso) return ''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
   function statusBadge(itv){
     if(!itv || itv.status==='pending')
@@ -5069,7 +5055,7 @@ function renderDashboardInterviews(){
 
 function openInterviewModal(personId, year){
   const p = personOf(personId);
-  const existing = INTERVIEWS.find(i=>i.person_id===personId && i.year===year) || {};
+  const existing = store.INTERVIEWS.find(i=>i.person_id===personId && i.year===year) || {};
   const itvId = existing.id || null;
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
@@ -5709,17 +5695,17 @@ function getCPTakenDays(personId, startISO, endISO){
   let halfDays = 0;
   const isASV = isASVPerson(personId);
   const labelRe = /cp|cong[eé]/i;
-  for(const key of Object.keys(DATA.slots)){
+  for(const key of Object.keys(store.DATA.slots)){
     const m = key.match(/^(\d{4}-\d{2}-\d{2})_(.+)_(M|AM)$/);
     if(!m) continue;
     const [,iso,pid] = m;
     if(pid !== personId) continue;
     if(iso < startISO || iso > endISO) continue;
-    if(DATA.slots[key] !== 'absent') continue;
+    if(store.DATA.slots[key] !== 'absent') continue;
     if(isASV){
       // ASV : seules les absences avec motif CP/Congé comptent (les autres motifs
       // comme Maladie ou Formation ne consomment pas de CP)
-      const label = DATA.slots[key.replace(/_(M|AM)$/, '_$1_label')] || '';
+      const label = store.DATA.slots[key.replace(/_(M|AM)$/, '_$1_label')] || '';
       if(!labelRe.test(label)) continue;
     }
     // Vétérinaires : toute absence = CP (pas de workflow de demande de congé)
@@ -5753,7 +5739,7 @@ function getCPAcquired(person, referenceYear){
 function renderGroupConges(group, containerId){
   const container = document.getElementById(containerId || `${group}-sub-conges`);
   if(!container) return;
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = store.currentUser?.role === 'admin';
   const cy = getCurrentYear();
   if(!renderGroupConges._year) renderGroupConges._year = {};
   let cpYear = (typeof renderGroupConges._year[group] === 'number') ? renderGroupConges._year[group] : cy;
@@ -5913,7 +5899,7 @@ function getAbsenteeismRate(personId, year, month){ // module absentéisme suppr
     for(let d=1; d<=daysInMonth; d++){
       const iso = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
       const key = `${iso}_${personId}_${slot}`;
-      if(DATA.slots[key] === 'absent'){
+      if(store.DATA.slots[key] === 'absent'){
         // For ASV: only count if decision is not 'rejected' (rejected means not absent)
         if(isASVPerson(personId)){
           const dec = getLeaveDecision(iso, personId, slot);
@@ -5959,7 +5945,7 @@ function getMedicalAlert(visit){
 
 function renderDashboardMedical(){
   const container = document.getElementById('dash-sub-medical');
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = store.currentUser?.role === 'admin';
   container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--color-muted);">Chargement…</div>';
 
   (async ()=>{
@@ -6023,11 +6009,11 @@ function renderDashboardMedical(){
         </table>
       </div>
       ${(()=>{
-        // Visites médicales marquées directement dans le calendrier (état 'medical' dans DATA.slots)
+        // Visites médicales marquées directement dans le calendrier (état 'medical' dans store.DATA.slots)
         const seen = {};
         const calEntries = [];
-        Object.keys(DATA.slots).forEach(key=>{
-          if(DATA.slots[key] !== 'medical') return;
+        Object.keys(store.DATA.slots).forEach(key=>{
+          if(store.DATA.slots[key] !== 'medical') return;
           const m = key.match(/^(\d{4}-\d{2}-\d{2})_([^_]+)_(M|AM)$/);
           if(!m) return;
           const [,iso,pid] = m;
@@ -6087,7 +6073,7 @@ function renderDashboardMedical(){
 }
 
 function openMedicalModal(existingVisit, allVisits, preselectedPid, onSaved){
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = store.currentUser?.role === 'admin';
   if(!isAdmin) return;
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
@@ -6388,20 +6374,20 @@ function renderAnnualViewForGroup(group){
 function renderImpersonationBanner(){
   const banner = document.getElementById('impersonation-banner');
   if(!banner) return;
-  if(currentUser?.role === 'admin' && adminViewMode === 'asv' && adminImpersonatedPersonId){
-    const p = personOf(adminImpersonatedPersonId);
+  if(store.currentUser?.role === 'admin' && store.adminViewMode === 'asv' && store.adminImpersonatedPersonId){
+    const p = personOf(store.adminImpersonatedPersonId);
     banner.classList.remove('hidden');
     banner.innerHTML = `
       <span>👁 Mode aperçu</span>
       <span style="display:inline-flex;align-items:center;gap:6px;">
         <span style="width:10px;height:10px;border-radius:50%;background:${p?.color||'#fff'};display:inline-block;"></span>
-        Vue de <strong>${escapeHTML(p?.short||adminImpersonatedPersonId)}</strong>
+        Vue de <strong>${escapeHTML(p?.short||store.adminImpersonatedPersonId)}</strong>
       </span>
       <button class="imp-back" id="imp-back-btn">← Retour à ma vue</button>
     `;
     document.getElementById('imp-back-btn').onclick = ()=>{
-      adminViewMode = 'vet';
-      adminImpersonatedPersonId = null;
+      store.adminViewMode = 'vet';
+      store.adminImpersonatedPersonId = null;
       applyRoleToDOM();
       initSettingsMenu();
       renderCurrentView();
@@ -6444,14 +6430,14 @@ function openASVImpersonationPicker(){
   backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
   box.querySelectorAll('[data-pick-asv]').forEach(btn=>{
     btn.onclick = ()=>{
-      adminImpersonatedPersonId = btn.dataset.pickAsv;
-      adminViewMode = 'asv';
+      store.adminImpersonatedPersonId = btn.dataset.pickAsv;
+      store.adminViewMode = 'asv';
       close();
       applyRoleToDOM();
       initSettingsMenu();
       if(currentView === 'dashboard') switchView('vets');
       else renderCurrentView();
-      showToast(`Vue ASV : ${personOf(adminImpersonatedPersonId)?.short}`, '👁');
+      showToast(`Vue ASV : ${personOf(store.adminImpersonatedPersonId)?.short}`, '👁');
     };
   });
 }
@@ -6476,8 +6462,8 @@ function initApp(){
   switchView(VIEW_RENDERERS[startView] ? startView : 'vets');
   syncFromSupabase().then(remoteSlots=>{
     if(remoteSlots !== null){
-      DATA = { version:2, slots: remoteSlots };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+      store.DATA = { version:2, slots: remoteSlots };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
       renderCurrentView();
       updateDashboardNavBadge();
     }
@@ -6487,9 +6473,9 @@ function initApp(){
   loadAnnouncements();
   document.getElementById('login-overlay').classList.add('hidden');
   // Ouvrir le modal de confirmation si l'utilisateur vient d'un lien de signature email
-  if(pendingSignToken){
-    const token = pendingSignToken;
-    pendingSignToken = null;
+  if(store.pendingSignToken){
+    const token = store.pendingSignToken;
+    store.pendingSignToken = null;
     openSignConfirmModal(token);
   }
   if(typeof handlePwaShortcutAction === 'function') handlePwaShortcutAction();
@@ -6514,7 +6500,7 @@ async function init(){
   // puis le traiter dans initApp() une fois l'utilisateur identifié.
   const signToken = query.get('sign');
   if(signToken){
-    pendingSignToken = signToken;
+    store.pendingSignToken = signToken;
     const cleanUrl = new URL(window.location.href);
     cleanUrl.searchParams.delete('sign');
     history.replaceState({}, '', cleanUrl.toString());
@@ -6753,8 +6739,8 @@ function updatePwaOfflineBanner(){
 function refreshAllPwaData(){
   syncFromSupabase().then(remoteSlots=>{
     if(remoteSlots !== null){
-      DATA = { version:2, slots: remoteSlots };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+      store.DATA = { version:2, slots: remoteSlots };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
       renderCurrentView();
       updateDashboardNavBadge();
     }
@@ -6769,7 +6755,7 @@ document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refresh
 
 /* ---------------- Raccourcis manifest + navigation au clic sur une notification ---------------- */
 function navigateForNotificationType(type){
-  if(typeof currentUser === 'undefined' || !currentUser) return;
+  if(typeof store.currentUser === 'undefined' || !store.currentUser) return;
   switch(type){
     case 'leave_request': case 'leave_approved': case 'leave_rejected':
       if(canAccessDashboard()){ switchView('dashboard'); dashSubState.tab = 'requests'; renderDashboard(); }
@@ -6811,7 +6797,7 @@ function handlePwaShortcutAction(){
 }
 
 /* ---------------- Abonnement push ---------------- */
-function currentPushPersonId(){ return currentUser?.person_id || null; }
+function currentPushPersonId(){ return store.currentUser?.person_id || null; }
 
 async function savePushSubscription(sub){
   const user_name = currentPushPersonId();
