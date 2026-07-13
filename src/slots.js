@@ -140,3 +140,15 @@ export function getDayAllOtH(iso, pid){ return getDayOtH(iso, pid) + getDayLunch
 export function dayNoteKey(iso, pid){ return `${iso}_${pid}_day_note`; }
 export function getDayNote(iso, pid){ return store.DATA.slots[dayNoteKey(iso, pid)] || ''; }
 export function setDayNote(iso, pid, v){ if(v) store.DATA.slots[dayNoteKey(iso, pid)] = v; else delete store.DATA.slots[dayNoteKey(iso, pid)]; }
+
+// Retourne true si la date est un jour de travail contractuel pour cette personne.
+// saturdayOnly → seulement le samedi (Carla). workingDays → jours spécifiques (1=Lun…6=Sam).
+// Sans contrainte définie, tous les jours ouvrés sont valides.
+export function isPersonWorkingDay(personId, date){
+  const p = personOf(personId);
+  if(!p) return true;
+  const dow = date.getDay(); // 0=Dim, 1=Lun, ..., 6=Sam
+  if(p.saturdayOnly) return dow === 6;
+  if(p.workingDays && p.workingDays.length > 0) return p.workingDays.includes(dow);
+  return true;
+}
