@@ -1756,6 +1756,9 @@ function buildSettingsMenuHtml(){
     <div class="settings-section-label">Notifications</div>
     <button id="action-notifications" role="menuitem">🔔 Notifications</button>
     <hr>
+    <div class="settings-section-label">Aide</div>
+    <button id="action-help" role="menuitem">❓ Guide utilisateur & FAQ</button>
+    <hr>
     <div class="settings-section-label">Mon compte${userName ? ` — ${escapeHTML(userName)}` : ''}</div>
     <button id="action-change-password" role="menuitem">🔑 Changer mon mot de passe</button>
     <button id="action-logout" class="danger" role="menuitem">🚪 Se déconnecter</button>
@@ -1842,6 +1845,9 @@ function initSettingsMenu(){
     });
   }
 
+  document.getElementById('action-help').addEventListener('click', ()=>{
+    menu.classList.remove('open'); openHelpModal();
+  });
   document.getElementById('action-notifications').addEventListener('click', ()=>{
     menu.classList.remove('open'); openNotificationSettingsModal();
   });
@@ -1852,6 +1858,154 @@ function initSettingsMenu(){
     menu.classList.remove('open');
     await authSignOut();
     renderLoginScreen();
+  });
+}
+function openHelpModal(){
+  const isAsv = effectiveRole() === 'asv';
+  const backdrop = document.getElementById('modal-backdrop');
+  const box = document.getElementById('modal-box');
+  box.className = 'modal-box modal-box--wide';
+
+  const guideVet = `
+    <div class="help-section">
+      <h4 class="help-section-title">📊 Tableau de bord</h4>
+      <div class="help-grid">
+        <div class="help-card"><span class="help-card-icon">🩺</span><div><strong>Suivi vétérinaires</strong><p>Compteurs annuels de congés (CP, ancienneté, récupération), jours travaillés et objectif. Cliquez ✎ pour ajuster les soldes manuellement.</p></div></div>
+        <div class="help-card"><span class="help-card-icon">🐾</span><div><strong>Suivi ASV</strong><p>Heures effectuées, H.supp. cumulées et départs anticipés par ASV sur la période sélectionnée.</p></div></div>
+        <div class="help-card"><span class="help-card-icon">📋</span><div><strong>Demandes de congé & modification</strong><p>Validez ou refusez les demandes des collaborateurs. Les modifications dans les 14 prochains jours apparaissent en <span style="color:#6D28D9;font-weight:600;">violet</span> et attendent votre approbation ici.</p></div></div>
+        <div class="help-card"><span class="help-card-icon">✍️</span><div><strong>Feuilles de présence signées</strong><p>Historique des feuilles ASV signées électroniquement avec horodatage et lien vers la feuille complète.</p></div></div>
+        <div class="help-card"><span class="help-card-icon">📝</span><div><strong>Entretiens annuels</strong><p>Suivi des visites médicales et entretiens professionnels de chaque collaborateur.</p></div></div>
+      </div>
+    </div>
+    <div class="help-section">
+      <h4 class="help-section-title">🩺 Vétérinaires</h4>
+      <div class="help-grid">
+        <div class="help-card"><span class="help-card-icon">📅</span><div><strong>Calendrier mensuel</strong><p>Saisie des présences matin/après-midi, absences typées et commentaires. Double-clic sur une colonne pour ouvrir l'édition rapide de la journée.</p></div></div>
+        <div class="help-card"><span class="help-card-icon">🗓️</span><div><strong>Vue annuelle</strong><p>Synthèse des 12 mois en une seule vue. Identifiez rapidement les périodes chargées.</p></div></div>
+        <div class="help-card"><span class="help-card-icon">🔮</span><div><strong>Prévisionnel</strong><p>Planification sur l'année suivante. Les données prévues ne sont pas comptabilisées dans les totaux actuels.</p></div></div>
+      </div>
+    </div>
+    <div class="help-section">
+      <h4 class="help-section-title">🐾 ASV</h4>
+      <div class="help-grid">
+        <div class="help-card"><span class="help-card-icon">⏱️</span><div><strong>Vue hebdomadaire</strong><p>Saisie des postes O (Ouverture 8h30–19h) et F (Fermeture 9h–19h15), H.supp. soir/midi, départs anticipés. Bouton ✍️ pour envoyer la feuille de présence à signer par email.</p></div></div>
+        <div class="help-card"><span class="help-card-icon">📅</span><div><strong>Calendrier mensuel</strong><p>Vue consolidée par ASV. Double-clic sur un jour → vue hebdomadaire correspondante de l'ASV concernée.</p></div></div>
+        <div class="help-card"><span class="help-card-icon">🗓️</span><div><strong>Vue annuelle & Prévisionnel</strong><p>Synthèse annuelle des présences ASV et planification prospective.</p></div></div>
+      </div>
+    </div>
+    <div class="help-section">
+      <h4 class="help-section-title">📣 Annonces</h4>
+      <p class="help-text">Créez et publiez des annonces destinées aux vétérinaires ou aux ASV. Une annonce non publiée reste invisible aux collaborateurs. Les annonces non lues incrémentent le badge rouge sur l'onglet.</p>
+    </div>
+    <div class="help-section">
+      <h4 class="help-section-title">⚙️ Réglages</h4>
+      <div class="help-grid">
+        <div class="help-card"><span class="help-card-icon">🎨</span><div><strong>Couleurs des associés</strong><p>Personnalisez la couleur de chaque vétérinaire dans les calendriers.</p></div></div>
+        <div class="help-card"><span class="help-card-icon">📅</span><div><strong>Synchronisation calendrier</strong><p>Générez un lien iCal pour synchroniser votre planning avec Google Agenda, Apple Calendrier ou Outlook.</p></div></div>
+        <div class="help-card"><span class="help-card-icon">⬇️⬆️</span><div><strong>Export / Import JSON</strong><p>Sauvegardez l'intégralité des données de planning ou restaurez une sauvegarde antérieure.</p></div></div>
+        <div class="help-card"><span class="help-card-icon">👥</span><div><strong>Gérer les collaborateurs</strong><p>Invitez de nouveaux collaborateurs, modifiez leurs rôles, email et temps de travail contractuel. L'admin peut réinitialiser un compte (supprime l'accès sans effacer le planning) ou supprimer définitivement un profil.</p></div></div>
+      </div>
+    </div>`;
+
+  const guideAsv = `
+    <div class="help-section">
+      <h4 class="help-section-title">🐾 Votre planning</h4>
+      <div class="help-grid">
+        <div class="help-card"><span class="help-card-icon">⏱️</span><div><strong>Vue hebdomadaire</strong><p>Consultez vos postes de la semaine, vos heures supplémentaires et votre total hebdomadaire. Poste O = Ouverture (8h30–19h), F = Fermeture (9h–19h15), Samedi : 9h–16h30.</p></div></div>
+        <div class="help-card"><span class="help-card-icon">📅</span><div><strong>Calendrier mensuel</strong><p>Vue d'ensemble de votre mois. Double-clic sur un jour → vue hebdomadaire correspondante.</p></div></div>
+        <div class="help-card"><span class="help-card-icon">🗓️</span><div><strong>Vue annuelle & Prévisionnel</strong><p>Vos présences sur l'année en cours et votre planning prévisionnel.</p></div></div>
+      </div>
+    </div>
+    <div class="help-section">
+      <h4 class="help-section-title">📋 Demandes</h4>
+      <div class="help-grid">
+        <div class="help-card"><span class="help-card-icon">🏖️</span><div><strong>Demande de congé</strong><p>Cliquez sur une cellule de jour dans la vue hebdomadaire ou mensuelle, sélectionnez le type d'absence (Congé annuel, RTT, Maladie…) et soumettez votre demande.</p></div></div>
+        <div class="help-card"><span class="help-card-icon" style="color:#6D28D9;">🟣</span><div><strong>Modifications urgentes</strong><p>Toute modification dans les <strong>14 prochains jours</strong> apparaît en <span style="color:#6D28D9;font-weight:600;">violet</span> et doit être approuvée par votre responsable avant de prendre effet.</p></div></div>
+      </div>
+    </div>
+    <div class="help-section">
+      <h4 class="help-section-title">✍️ Feuille de présence</h4>
+      <p class="help-text">En fin de mois, votre responsable vous envoie un email récapitulatif avec un bouton de signature. Cliquez sur le lien <strong>«&nbsp;Je certifie et signe ma feuille de présence&nbsp;»</strong> pour valider vos heures. Le lien est à usage unique et valable 7 jours.</p>
+    </div>
+    <div class="help-section">
+      <h4 class="help-section-title">📣 Annonces</h4>
+      <p class="help-text">Consultez les annonces publiées par votre équipe. Les nouvelles annonces incrémentent le badge rouge sur l'onglet jusqu'à ce que vous les ayez lues.</p>
+    </div>`;
+
+  const faqVet = [
+    { q:'Comment approuver une demande de congé ?', a:'Tableau de bord → onglet <strong>Demandes de congé et de modification</strong> → cliquez ✅ pour valider ou ❌ pour refuser.' },
+    { q:'Comment envoyer une feuille de présence à une ASV ?', a:'Vue hebdomadaire ASV → naviguez sur la semaine souhaitée → bouton <strong>✍️ Signer</strong> en haut à droite → l\'email est envoyé automatiquement à l\'ASV.' },
+    { q:'Comment inviter un nouveau collaborateur ?', a:'⚙️ → <strong>Gérer les collaborateurs</strong> → <strong>Inviter un collaborateur</strong> → saisissez email, prénom et rôle.' },
+    { q:'Comment réinitialiser le compte d\'un collaborateur ?', a:'⚙️ → Gérer les collaborateurs → cliquez sur le collaborateur → <strong>Réinitialiser le profil</strong>. Le compte Supabase est supprimé, le planning est conservé. Vous pourrez ensuite le réinviter avec un nouvel email.' },
+    { q:'Que signifie la couleur violette sur une cellule ?', a:'Une modification a été saisie dans les 14 prochains jours. Elle est en attente de votre approbation dans <strong>Tableau de bord → Demandes de congé et de modification</strong>.' },
+    { q:'Comment modifier les couleurs des vétérinaires ?', a:'⚙️ → <strong>Couleurs des associés</strong> → cliquez sur la pastille de couleur de chaque praticien.' },
+    { q:'Comment synchroniser avec Google Agenda / Apple Calendrier ?', a:'⚙️ → <strong>Synchronisation calendrier</strong> → copiez le lien iCal et collez-le dans votre application de calendrier.' },
+    { q:'Comment exporter ou sauvegarder les données ?', a:'⚙️ → <strong>Exporter JSON</strong>. Pour restaurer : <strong>Importer JSON</strong> avec le fichier de sauvegarde.' },
+    { q:'Comment voir les heures supplémentaires d\'une ASV ?', a:'Vue hebdomadaire ASV (colonne Total de chaque ligne) ou Tableau de bord → <strong>Suivi ASV</strong> pour une synthèse sur la période.' },
+    { q:'Comment ajouter une annonce ?', a:'Onglet <strong>📣 Annonces</strong> → bouton <strong>+ Nouvelle annonce</strong> → rédigez, choisissez les destinataires et publiez.' },
+  ];
+
+  const faqAsv = [
+    { q:'Comment demander un congé ?', a:'Cliquez sur la cellule du jour concerné dans la vue hebdomadaire ou mensuelle, sélectionnez le type d\'absence (Congé annuel, RTT, Maladie…) et confirmez. La demande sera examinée par votre responsable.' },
+    { q:'Que signifie la cellule violette ?', a:'Une modification a été saisie dans les <strong>14 prochains jours</strong>. Elle est en attente d\'approbation de votre responsable. En attendant, la modification n\'est pas encore officielle.' },
+    { q:'Que signifient les postes O et F ?', a:'<strong>O = Ouverture</strong> : 8h30–19h (8h30 de travail effectif). <strong>F = Fermeture</strong> : 9h–19h15 (8h15 de travail effectif). Samedi : 9h–16h30 (7h).' },
+    { q:'Comment signer ma feuille de présence ?', a:'Vous recevez un email en fin de mois avec un bouton <strong>«&nbsp;Je certifie et signe ma feuille de présence&nbsp;»</strong>. Cliquez dessus pour valider vos heures. Le lien est à usage unique et valable 7 jours.' },
+    { q:'Comment voir mon total d\'heures sur la semaine ?', a:'Vue hebdomadaire → regardez la ligne <strong>Total</strong> en bas du tableau. Le détail H.supp. et départs anticipés est aussi visible sur chaque ligne.' },
+    { q:'Que se passe-t-il si je pars avant 19h ?', a:'Votre responsable saisit votre heure de départ réelle. L\'écart est calculé automatiquement en départ anticipé et déduit de votre total journalier. Cette information figure sur votre feuille de présence mensuelle.' },
+    { q:'Comment consulter les annonces de l\'équipe ?', a:'Cliquez sur l\'onglet <strong>📣 Annonces</strong>. Le badge rouge indique le nombre d\'annonces non lues.' },
+  ];
+
+  const faq = isAsv ? faqAsv : faqVet;
+  const guide = isAsv ? guideAsv : guideVet;
+
+  box.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h3 style="margin:0;font-size:17px;">❓ Guide utilisateur & FAQ</h3>
+      <button id="help-close" class="btn" style="padding:4px 12px;font-size:13px;">✕ Fermer</button>
+    </div>
+    <div class="help-tabs" role="tablist">
+      <button class="help-tab active" data-tab="guide" role="tab" aria-selected="true">📖 Guide</button>
+      <button class="help-tab" data-tab="faq" role="tab" aria-selected="false">💬 FAQ</button>
+    </div>
+    <div id="help-panel-guide" class="help-panel">
+      ${guide}
+    </div>
+    <div id="help-panel-faq" class="help-panel" style="display:none;">
+      <div class="help-faq-list">
+        ${faq.map((item,i)=>`
+          <div class="help-faq-item" data-idx="${i}">
+            <button class="help-faq-q" aria-expanded="false">
+              <span>${escapeHTML(item.q)}</span>
+              <span class="help-faq-chevron">▾</span>
+            </button>
+            <div class="help-faq-a" style="display:none;">${item.a}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  backdrop.classList.add('open');
+  const close = ()=> backdrop.classList.remove('open');
+  box.querySelector('#help-close').onclick = close;
+  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+
+  box.querySelectorAll('.help-tab').forEach(tab=>{
+    tab.onclick = ()=>{
+      box.querySelectorAll('.help-tab').forEach(t=>{ t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
+      tab.classList.add('active'); tab.setAttribute('aria-selected','true');
+      box.querySelectorAll('.help-panel').forEach(p=> p.style.display='none');
+      box.querySelector(`#help-panel-${tab.dataset.tab}`).style.display='';
+    };
+  });
+
+  box.querySelectorAll('.help-faq-item').forEach(item=>{
+    item.querySelector('.help-faq-q').onclick = function(){
+      const open = this.getAttribute('aria-expanded') === 'true';
+      this.setAttribute('aria-expanded', String(!open));
+      item.querySelector('.help-faq-a').style.display = open ? 'none' : 'block';
+      item.querySelector('.help-faq-chevron').textContent = open ? '▾' : '▴';
+    };
   });
 }
 function openResetYearModal(year, isForecast){
