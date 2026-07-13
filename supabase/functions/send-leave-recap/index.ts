@@ -46,6 +46,17 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: CORS_HEADERS });
   }
   try{
+    // Rate limit : max 5 récaps/h par IP (anti-spam bouton "Envoyer maintenant")
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const rlRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/check_rate_limit`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_key: `recap:${clientIp}`, p_max: 5, p_window_s: 3600 }),
+    });
+    if(!rlRes.ok || !(await rlRes.json())){
+      return new Response(JSON.stringify({ ok: false, error: 'Trop de tentatives. Réessayez dans une heure.' }), { status: 429, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+    }
+
     const settingsRes = await fetch(`${SUPABASE_URL}/rest/v1/email_settings?select=recipient_email,frequency&id=eq.singleton`, {
       headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}` },
     });

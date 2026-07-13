@@ -164,6 +164,11 @@ async function authSignOut(){
     }).catch(()=>{});
   }
   clearAuthSession();
+  // Purger le DYNAMIC_CACHE pour ne pas laisser les données RH lisibles
+  // depuis le cache SW sur un poste partagé après déconnexion.
+  if(navigator.serviceWorker?.controller){
+    navigator.serviceWorker.controller.postMessage({ type:'PURGE_DYNAMIC_CACHE' });
+  }
 }
 async function authRefreshSession(){
   const s = getAuthSession();

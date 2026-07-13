@@ -102,6 +102,17 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'year et month sont requis.' }), { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
     }
 
+    // Rate limit : max 20 demandes de signature / heure par person_id requérant
+    const rlKey = `signature:${profile.person_id || authUser.id}`;
+    const rlRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/check_rate_limit`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_key: rlKey, p_max: 20, p_window_s: 3600 }),
+    });
+    if(!rlRes.ok || !(await rlRes.json())){
+      return new Response(JSON.stringify({ error: 'Trop de tentatives. Réessayez dans une heure.' }), { status: 429, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+    }
+
     let personId: string;
     let displayName: string;
     let targetEmail: string;

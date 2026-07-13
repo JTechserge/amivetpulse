@@ -64,6 +64,15 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: 'email, display_name et role sont requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
+      // Rate limit : max 10 invitations / heure par IP (anti-spam email)
+      const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+      const { data: rlOk } = await adminClient.rpc('check_rate_limit', {
+        p_key: `invite:${clientIp}`, p_max: 10, p_window_s: 3600,
+      });
+      if (!rlOk) {
+        return new Response(JSON.stringify({ error: 'Trop de tentatives. Réessayez dans une heure.' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
       // inviteUserByEmail utilise l'infrastructure email de Supabase — aucune restriction
       // de domaine, fonctionne pour n'importe quelle adresse email.
       const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {

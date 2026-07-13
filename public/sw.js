@@ -45,9 +45,8 @@ function isAuthRequest(url) {
   return url.pathname.includes('/auth/');
 }
 
-function isGoogleFontsRequest(url) {
-  return url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
-}
+// Google Fonts n'est plus utilisé (Inter auto-hébergé depuis Lot 4).
+function isGoogleFontsRequest(_url) { return false; }
 
 async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
@@ -106,6 +105,14 @@ self.addEventListener('fetch', (event) => {
   if (isGoogleFontsRequest(url) || request.destination === 'style' || request.destination === 'image' || url.pathname.endsWith('manifest.json')) {
     event.respondWith(cacheFirst(request, url.origin === self.location.origin ? STATIC_CACHE : DYNAMIC_CACHE));
     return;
+  }
+});
+
+// Message du client : purger le DYNAMIC_CACHE au logout pour que les données
+// RH (planning_data) ne soient plus lisibles depuis le cache après déconnexion.
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'PURGE_DYNAMIC_CACHE') {
+    event.waitUntil(caches.delete(DYNAMIC_CACHE));
   }
 });
 
