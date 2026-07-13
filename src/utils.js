@@ -1,8 +1,8 @@
 /* ================================================================
    AMIVET PLANNING — Utilitaires purs
-   Aucune dépendance externe (pas de DOM, pas d'état global, pas de réseau).
    Importé par app.js et testable par Vitest sans mock.
    ================================================================ */
+import { WEEKDAY_FULL, MONTH_NAMES } from './config.js';
 
 // ----------------------------------------------------------------
 // Chaînes
@@ -139,3 +139,10 @@ export function signedHHMM(h){
 }
 
 export function roundTo15min(h){ return Math.round(h * 4) / 4; }
+export function formatNum(n){ return Number.isInteger(n) ? String(n) : n.toFixed(1); }
+
+export function formatFR(iso){
+  const [y,m,d] = iso.split('-').map(Number);
+  const date = new Date(y, m-1, d);
+  return `${WEEKDAY_FULL[isoWeekday(date)]} ${d} ${MONTH_NAMES[m-1].toLowerCase()} ${y}`;
+}

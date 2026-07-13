@@ -15,7 +15,7 @@ import {
   escapeHTML, slugifyName, hexToHsl, hexToRgba, colorRejectReason,
   fmtISO, daysInMonth, isoWeekday, isSunday, isSaturday,
   holidaysFor, holidayName,
-  formatHHMM, signedHHMM, roundTo15min,
+  formatHHMM, signedHHMM, roundTo15min, formatFR, formatNum,
 } from './utils.js';
 import { getAuthSession, saveAuthSession, supabaseHeaders, authSignIn, authUpdatePassword, authSendPasswordReset } from './auth.js';
 import { reindexPresentShades, saveASVRoster, loadASVRoster, archiveASVPerson, unarchiveASVPerson, savePersonColors } from './state.js';
@@ -35,6 +35,7 @@ import {
   getSlotState, setSlotState, getSlotLabel, setSlotLabel,
   getDayComment, setDayComment, cycleState,
 } from './slots.js';
+import { setupAnnualView, stateLabel, buildHeatmap, openAnnualDayDetail, renderAnnualViewForGroup } from './annual-view.js';
 /* ================================================================
    AMIVET PLANNING — Application JS (vanilla ES2022, sans dépendance)
    ================================================================ */
@@ -3245,11 +3246,6 @@ VIEW_RENDERERS['annonces'] = renderAnnounces;
 /* ----------------------------------------------------------------
    13. INTERACTIONS CALENDRIER (clic, glisser-peindre, popovers, sidebar)
    ---------------------------------------------------------------- */
-function formatFR(iso){
-  const [y,m,d] = iso.split('-').map(Number);
-  const date = new Date(y, m-1, d);
-  return `${WEEKDAY_FULL[isoWeekday(date)]} ${d} ${MONTH_NAMES[m-1].toLowerCase()} ${y}`;
-}
 function calViewKeyOfEventTarget(target){
   const section = target.closest('[data-cal-view]');
   return section ? section.dataset.calView : null;
@@ -3900,7 +3896,6 @@ function initCalendarInteractions(){
    14. TABLEAU DE BORD (statistiques, graphique, table récapitulative,
        demandes de congé ASV)
    ================================================================ */
-function formatNum(n){ return Number.isInteger(n) ? String(n) : n.toFixed(1); }
 // Formate des heures décimales en "Xh MM" (ex: 1.25 → "1h15", 0.5 → "0h30")
 
 // Regroupe les demi-journées d'absence ASV contiguës (même personne, même motif, même
@@ -5715,160 +5710,9 @@ function openMedicalModal(existingVisit, allVisits, preselectedPid, onSaved){
 }
 
 /* ================================================================
-   15. VUE ANNUELLE (heatmap)
+   15. VUE ANNUELLE (heatmap) → annual-view.js
    ================================================================ */
-function stateLabel(iso, personId, slot){
-  const state = getSlotState(iso, personId, slot);
-  if(state === 'present') return 'Présent';
-  if(state === 'absent'){
-    const l = getSlotLabel(iso, personId, slot);
-    if(isASVPerson(personId)){
-      const decision = getLeaveDecision(iso, personId, slot) || 'pending';
-      if(decision === 'pending') return `Demande de congé en attente${l?' ('+escapeHTML(l)+')':''}`;
-      if(decision === 'rejected') return 'Congé refusé — voir un vétérinaire';
-      return `Congé approuvé${l?' ('+escapeHTML(l)+')':''}`;
-    }
-    return l ? `Absent (${escapeHTML(l)})` : 'Absent';
-  }
-  return '—';
-}
-
-// Couleur d'une demi-journée pour la heatmap : présent = couleur de la personne, absent =
-// rouge (congé vétérinaire ou ASV approuvé), demande ASV en attente = cyan, refusée =
-// gris, vide = blanc.
-// Reprend exactement les mêmes couleurs que le calendrier mensuel (cellRenderInfo) pour
-// que la heatmap et la grille restent visuellement identiques case pour case.
-function heatmapSlotColor(person, iso, slot){
-  const state = getSlotState(iso, person.id, slot);
-  if(state === 'present') return person.present.bg;
-  if(state === 'absent'){
-    if(isASVPerson(person.id)){
-      const decision = getLeaveDecision(iso, person.id, slot) || 'pending';
-      if(decision === 'pending') return 'var(--color-leave-pending)';
-      if(decision === 'rejected') return 'var(--color-leave-rejected)';
-    }
-    return 'var(--color-absent)';
-  }
-  return '#ffffff';
-}
-function buildHeatmap(year, people = PEOPLE){
-  const dayHeaderCells = Array.from({length:31}, (_,i)=>`<th>${i+1}</th>`).join('');
-  let rows = '';
-  for(let month=0; month<12; month++){
-    const nbDays = daysInMonth(year, month);
-    // Ligne fine "jours de la semaine" propre à ce mois — le 1er d'un mois ne tombe pas
-    // forcément le même jour de semaine que le 1er du mois suivant, donc cette ligne est
-    // recalculée à chaque bloc plutôt que d'être un en-tête partagé sur toute l'année.
-    let weekdayCols = '';
-    for(let day=1; day<=31; day++){
-      if(day > nbDays){ weekdayCols += `<td class="heatmap-weekday-cell empty-cell"></td>`; continue; }
-      const wd = isoWeekday(new Date(year, month, day));
-      weekdayCols += `<td class="heatmap-weekday-cell${wd===6?' is-sunday':wd===5?' is-saturday':''}">${WEEKDAY_NAMES[wd][0]}</td>`;
-    }
-    rows += `<tr class="heatmap-weekday-row"><th class="heatmap-month-label" rowspan="${people.length+1}">${MONTH_SHORT[month]}</th><th class="heatmap-row-label"></th>${weekdayCols}</tr>`;
-    people.forEach(person=>{
-      let cols = '';
-      for(let day=1; day<=31; day++){
-        if(day > nbDays){ cols += `<td><div class="heatmap-cell empty-cell"></div></td>`; continue; }
-        const date = new Date(year, month, day);
-        const iso = fmtISO(date);
-        if(isSunday(date)){
-          cols += `<td><div class="heatmap-cell" style="background:var(--color-sunday);cursor:default;" title="${formatFR(iso)} — Fermé"></div></td>`;
-          continue;
-        }
-        const mState = getSlotState(iso, person.id, 'M');
-        const amState = getSlotState(iso, person.id, 'AM');
-        const colorM = heatmapSlotColor(person, iso, 'M'), colorAM = heatmapSlotColor(person, iso, 'AM');
-        let style = mState === amState
-          ? `background:${colorM};`
-          : `background:linear-gradient(to bottom, ${colorM} 50%, ${colorAM} 50%);`;
-        const hName = holidayName(iso);
-        if(hName) style += 'box-shadow:0 0 0 2px var(--color-holiday) inset;';
-        const overtime = getOvertimeHours(iso, person.id);
-        const title = `${formatFR(iso)}${hName?' — '+hName:''} — Matin : ${stateLabel(iso,person.id,'M')} · Après-midi : ${stateLabel(iso,person.id,'AM')}${overtime>0?' · +'+formatNum(overtime)+'h sup.':''}`;
-        cols += `<td><div class="heatmap-cell" data-date="${iso}" style="${style}" title="${escapeHTML(title)}" tabindex="0" role="button" aria-label="Détail du ${formatFR(iso)}"></div></td>`;
-      }
-      rows += `<tr><th class="heatmap-row-label" style="color:${person.color}">${person.short}</th>${cols}</tr>`;
-    });
-  }
-  return `
-    <div class="heatmap-wrap">
-      <table class="heatmap-table">
-        <colgroup><col class="col-month"><col class="col-label">${'<col>'.repeat(31)}</colgroup>
-        <thead><tr><th></th><th></th>${dayHeaderCells}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  `;
-}
-
-// Popover de détail jour, partagé par la vue annuelle vétérinaires et la vue annuelle
-// ASV : affiche le statut de chaque personne de `people`, et le bouton « Éditer ce jour »
-// saute dans le calendrier mensuel correspondant à viewKey (clé de store.CAL_VIEWS).
-function openAnnualDayDetail(iso, people, viewKey){
-  const backdrop = document.getElementById('popover-backdrop');
-  const box = document.getElementById('popover-box');
-  const hName = holidayName(iso);
-  const comment = getDayComment(iso);
-  const personRows = people.map(p=>`
-    <p style="font-size:13px;margin:5px 0;"><strong style="color:${p.color}">${p.short}</strong> — Matin : ${stateLabel(iso,p.id,'M')} · Après-midi : ${stateLabel(iso,p.id,'AM')}</p>
-  `).join('');
-  box.innerHTML = `
-    <h4>${formatFR(iso)}${hName ? ` <span class="cal-holiday-badge">Férié</span>` : ''}</h4>
-    ${comment ? `<p class="text-muted" style="font-size:12.5px;margin:8px 0;">💬 ${escapeHTML(comment)}</p>` : ''}
-    <div style="margin:10px 0;">${personRows}</div>
-    <div class="popover-actions">
-      <button class="btn" id="popover-cancel">Fermer</button>
-      <button class="btn btn-primary" id="popover-edit">Éditer ce jour</button>
-    </div>
-  `;
-  backdrop.classList.add('open');
-  const close = ()=> backdrop.classList.remove('open');
-  box.querySelector('#popover-cancel').onclick = close;
-  box.querySelector('#popover-edit').onclick = ()=>{
-    close();
-    const month = parseInt(iso.split('-')[1], 10) - 1;
-    store.CAL_VIEWS[viewKey].navState.month = month;
-    const group = viewKey.startsWith('asv') ? 'asv' : 'vets';
-    switchSubPage(group, viewKey.endsWith('forecast') ? 'forecast' : 'calendar');
-    switchView(group);
-    setTimeout(()=> openDaySidebar(iso, viewKey), 50);
-  };
-  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
-}
-
-// Sous-page "Vue annuelle" d'un onglet groupé — factorisée pour servir aussi bien
-// Vétérinaires que ASV : même heatmap, même bascule année courante / prévisionnelle.
-function renderAnnualViewForGroup(group){
-  const g = GROUP_VIEWS[group];
-  const container = document.getElementById(g.annualContainer);
-  const mode = store.annualYearState[group];
-  const viewKey = mode === 'current' ? g.calendarViewKey : g.forecastViewKey;
-  const cfg = store.CAL_VIEWS[viewKey];
-  container.innerHTML = `
-    <h2 class="section-title">Vue Annuelle ${cfg.year} — ${g.label}</h2>
-    <p class="section-desc" style="margin-bottom:12px;">Heatmap de présence — cliquez une cellule pour voir le détail du jour.</p>
-    <div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
-      <button data-mode="current" class="${mode==='current'?'active':''}">${store.CAL_VIEWS[g.calendarViewKey].year}</button>
-      <button data-mode="forecast" class="${mode==='forecast'?'active':''}">${store.CAL_VIEWS[g.forecastViewKey].year}</button>
-    </div>
-    <div class="card" style="padding:14px;">${buildHeatmap(cfg.year, cfg.people)}</div>
-    <div class="legend" style="margin-top:12px;padding:10px 16px;">${buildLegendColors(cfg.people)}</div>
-  `;
-  container.querySelector(`#${group}-annual-year-toggle`).addEventListener('click', (e)=>{
-    const btn = e.target.closest('button');
-    if(!btn) return;
-    store.annualYearState[group] = btn.dataset.mode;
-    renderAnnualViewForGroup(group);
-    saveViewState();
-  });
-  container.querySelectorAll('.heatmap-cell[data-date]').forEach(cell=>{
-    cell.addEventListener('click', ()=> openAnnualDayDetail(cell.dataset.date, cfg.people, viewKey));
-    cell.addEventListener('keydown', (e)=>{
-      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openAnnualDayDetail(cell.dataset.date, cfg.people, viewKey); }
-    });
-  });
-}
+/* stateLabel, heatmapSlotColor, buildHeatmap, openAnnualDayDetail, renderAnnualViewForGroup */
 
 /* ================================================================
    16. INITIALISATION GÉNÉRALE
@@ -6088,6 +5932,7 @@ function handlePwaShortcutAction(){
 /* ---------------- Amorçage ---------------- */
 setupLogin({ loadCurrentUser, initApp });
 setupSignatures({ onLoaded: renderCurrentView, renderCalendarView });
+setupAnnualView({ switchSubPage, switchView, openDaySidebar, saveViewState, buildLegendColors, GROUP_VIEWS });
 initServiceWorker(navigateForNotificationType);
 setTimeout(showIOSInstallTip, 4000);
 updatePwaOfflineBanner();
