@@ -1,31 +1,31 @@
 import { PEOPLE, ASV_PEOPLE, allPeople, SLOTS, SLOT_LABELS,
   getCurrentYear, personOf,
-  ASV_STD_SAT_CARLA, ASV_STD_WEEKDAY_AVG,
+  ASV_STD_SAT_CARLA,
+  CP_DAYS_PER_MONTH,
   ANNUAL_FULLTIME_HOURS, HALFDAY_HOURS, WEEKLY_MAX_HOURS,
-  SUPABASE_URL, SUPABASE_FUNCTIONS_URL,
+  SUPABASE_URL,
   MONTH_NAMES, MONTH_SHORT,
 } from './config.js';
 import { escapeHTML, formatNum, formatHHMM, signedHHMM, roundTo15min, daysInMonth,
-  isSunday, isSaturday, fmtISO, holidayName, formatFR,
-  isoWeekday, getWeekMondayDate,
+  isSunday, isSaturday, fmtISO, formatFR,
+  getWeekMondayDate,
 } from './utils.js';
 import { supabaseHeaders } from './auth.js';
 import { store } from './store.js';
 import { showToast, openConfirmModal } from './ui.js';
-import { isMonthSigned, getSignatureDetail,
-  signMonth, revokeSignature, openSigningLinkModal,
+import { getSignatureDetail,
+  revokeSignature,
 } from './signatures.js';
 import { triggerPushNotification } from './pwa.js';
 import {
   getSlotState, getSlotLabel, getLeaveDecision, getLeaveDecisionComment,
   setLeaveDecision, setLeaveDecisionComment,
   getChangeDecision, setChangeDecision,
-  getOvertimeHours, setOvertimeHours,
-  isASVPerson, isWithinNextTwoWeeks,
+  getOvertimeHours,
+  isASVPerson,
   getDayNominal, getDayDeficitH, getDayAllOtH,
-  getShiftType, shiftTypeKey, setEarlyDep, getEarlyDep,
-  getWeekOtMins, setWeekOtMins, getLunchOtMins, setLunchOtMins,
-  getDayNote, setDayNote,
+  getShiftType,
+
 } from './slots.js';
 
 /* ---------- Callbacks injectés depuis app.js (évitent les deps circulaires) ---------- */
@@ -191,7 +191,6 @@ export function buildPersonCard(year, personId){
   const adjustedDays = Math.round(adjustedHalfDays / 2 * 10) / 10;
   const pct = Math.min(100, TARGET_HALF_DAYS > 0 ? Math.round(adjustedHalfDays / TARGET_HALF_DAYS * 100) : 0);
   const vacationDays = stats.totalAbsentHalfDays / 2;
-  const otSign = stats.totalOvertimeHours >= 0 ? '+' : '';
   const otColor = stats.totalOvertimeHours > 0 ? 'var(--color-success,#16A34A)' : stats.totalOvertimeHours < 0 ? 'var(--color-danger,#DC2626)' : 'var(--color-text-muted)';
   return `
     <div class="card person-card" data-person="${personId}" style="border-top-color:${person.color}">
@@ -1690,7 +1689,7 @@ export function renderDashboardMedical(){
   })();
 }
 
-export function openMedicalModal(existingVisit, allVisits, preselectedPid, onSaved){
+export function openMedicalModal(existingVisit, allVisits, preselectedPid, _onSaved){
   const isAdmin = store.currentUser?.role === 'admin';
   if(!isAdmin) return;
   const backdrop = document.getElementById('modal-backdrop');

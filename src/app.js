@@ -320,7 +320,7 @@ function seedAbsenceRange(personId, fromISO, toISO, label){
   }
 }
 
-function seedDemoData(){
+function _seedDemoData(){
   // --- 2026 : données réelles (issues du planning Excel de la clinique) ---
   // Janvier à août : présence par défaut Lu-Sa pour les deux associés (les jours fériés
   // restent vides, comme dans le fichier source, qui ne contient pas non plus de données
@@ -416,7 +416,7 @@ function switchView(viewId){
   saveViewState();
 }
 // Renvoie l'id du conteneur DOM de la sous-page actuellement sélectionnée pour ce groupe.
-function activeSubContainer(group){
+function _activeSubContainer(group){
   const g = GROUP_VIEWS[group];
   const sub = store.subNavState[group];
   if(sub === 'calendar') return g.calendarContainer;
@@ -485,7 +485,7 @@ function saveViewState(){
       annualYearState: store.annualYearState,
       dashSubTab: store.dashSubState.tab,
     }));
-  }catch(e){ /* stockage indisponible : tant pis, on retombera sur la vue par défaut */ }
+  }catch{ /* stockage indisponible : tant pis, on retombera sur la vue par défaut */ }
 }
 // Renvoie l'id de vue à restaurer (ou null si rien de valide n'a été sauvegardé), et
 // restaure au passage les sous-pages mémorisées dans les états globaux correspondants.
@@ -498,7 +498,7 @@ function loadViewState(){
     if(saved.annualYearState) Object.assign(store.annualYearState, saved.annualYearState);
     if(saved.dashSubTab) store.dashSubState.tab = saved.dashSubTab;
     return saved.currentView || null;
-  }catch(e){ return null; }
+  }catch{ return null; }
 }
 function initNav(){
   document.getElementById('main-nav').addEventListener('click', (e)=>{

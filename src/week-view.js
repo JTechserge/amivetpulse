@@ -58,7 +58,7 @@ function openMonthPrintWindow(pids, year, month){
       c.width = img.naturalWidth; c.height = img.naturalHeight;
       c.getContext('2d').drawImage(img, 0, 0);
       return c.toDataURL('image/png');
-    } catch(e){ return img.src; }
+    } catch{ return img.src; }
   }
   const logoSrc = getLogoDataUrl();
   const DOW_FR = ['Di','Lu','Ma','Me','Je','Ve','Sa'];
@@ -351,7 +351,7 @@ function renderWeekViewASV(){
   const canEditWeek = days.some(d => canEditDay(d));
   const DAY_SHORT = ['Lu','Ma','Me','Je','Ve','Sa'];
 
-  function isDayOff(d){ const iso2=fmtISO(d); return getSlotState(iso2,pid,'M')==='absent'&&getSlotState(iso2,pid,'AM')==='absent'; }
+  function _isDayOff(d){ const iso2=fmtISO(d); return getSlotState(iso2,pid,'M')==='absent'&&getSlotState(iso2,pid,'AM')==='absent'; }
   function isDayPresent(d){ const iso2=fmtISO(d); return getSlotState(iso2,pid,'M')==='present'||getSlotState(iso2,pid,'AM')==='present'; }
 
   // ── En-tête colonnes ──────────────────────────────────────

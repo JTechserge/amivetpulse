@@ -51,7 +51,7 @@ function pickDefaultASVColor(){
   return free || '#64748B';
 }
 
-function setASVTimeFraction(personId, fraction){
+function _setASVTimeFraction(personId, fraction){
   const p = ASV_PEOPLE.find(x=> x.id === personId);
   if(p){ p.timeFraction = fraction; saveASVRoster(); }
 }
@@ -532,7 +532,7 @@ function _computeTfFromDays(box){
   return { fraction: Math.round(weekly/35*1000)/1000, weekly, days: checked };
 }
 
-function wireTimeFractionUI(box, personId){
+function wireTimeFractionUI(box, _personId){
   if(!box.querySelector('#edit-tf-block')) return;
   const PRESET_VALUES = { full:1.0, three_quarter:0.75, half:0.5 };
   const updateSummary = ()=>{
@@ -582,7 +582,6 @@ function getTimeFractionFromUI(box){
 function openEditUserModal(userId, users, onBack){
   const user = users.find(u=>u.id===userId);
   if(!user) return;
-  const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
   const isAdmin = store.currentUser?.role === 'admin';

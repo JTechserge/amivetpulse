@@ -63,7 +63,7 @@ export async function loadArchivedAnnouncements(){
     const today = new Date().toISOString();
     const res = await fetch(`${SUPABASE_URL}announcements?select=*&expires_at=lte.${encodeURIComponent(today)}&order=created_at.desc`, { headers: supabaseHeaders() });
     return res.ok ? (await res.json()) : [];
-  }catch(e){ return []; }
+  }catch{ return []; }
 }
 
 
@@ -74,9 +74,7 @@ export function renderAnnounces(){
   const container = document.getElementById('view-annonces');
   const isAdmin = store.currentUser?.role === 'admin';
   const role = store.currentUser?.role;
-  const viewerId = annonceViewerId();
 
-  const now = new Date();
   const allList = store.announcementsCache.list;
   const active = allList.filter(a => {
     if(a.target_roles === 'vet' && role === 'asv') return false;
@@ -247,7 +245,6 @@ export function openAnnouncementModal(annId){
     btn.onclick = ()=>{
       box.querySelector('#ann-cat-val').value = btn.dataset.cat;
       box.querySelectorAll('.ann-cat-btn').forEach(b => {
-        const c = ANNONCE_CATEGORIES[b.dataset.cat];
         b.style.background = 'var(--color-card)'; b.style.fontWeight = '400';
       });
       const selC = ANNONCE_CATEGORIES[btn.dataset.cat];

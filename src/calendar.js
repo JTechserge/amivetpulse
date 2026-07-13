@@ -263,7 +263,7 @@ function openClearMonthModal(viewKey, month){
   backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
 }
 
-function splitMonthIntoHalves(year, month){
+function _splitMonthIntoHalves(year, month){
   const nbDays = daysInMonth(year, month);
   const sundays = [];
   for(let day=1; day<nbDays; day++){
@@ -616,7 +616,7 @@ function buildWeekGrid(year, month, people){
   return `<div class="cal-wg">${head}${legendHtml}${weekBlocksHtml}</div>`;
 }
 
-function buildHalfTable(year, month, days, people){
+function _buildHalfTable(year, month, days, people){
   let headCells = '';
   days.forEach(day=>{
     const date = new Date(year, month, day);
@@ -964,7 +964,7 @@ function endDrag(){
       if(dragCtx.viewKey) renderCalendarView(dragCtx.viewKey);
       // Congé uniquement : soumettre aux vétérinaires pour validation
       if(dragCtx.paintMode === 'conge'){
-        const slotsArr = Array.from(dragCtx.touched).map(k=>{ const [iso2,pid2,slot2]=k.split('|'); return {iso:iso2,slot:slot2}; });
+        const slotsArr = Array.from(dragCtx.touched).map(k=>{ const [iso2,_pid2,slot2]=k.split('|'); return {iso:iso2,slot:slot2}; });
         const pid2 = dragCtx.personId;
         const vk = dragCtx.viewKey;
         setTimeout(()=> openAbsenceRangePopover(slotsArr, pid2, vk), 50);
