@@ -325,9 +325,8 @@ export function computeOvertimeStats(year){
 // Contrôle du temps de travail ASV — quotas légaux et heures réelles
 
 // Outil de peinture mensuelle ASV : 'opening' | 'closing' | 'repos' | 'conge' | 'maladie'
-let calMonthPaintMode = 'opening';
-// État de navigation de la vue semaine (outil : 'earlyDep' | 'overtime')
-const weekNavState = { mondayISO: null, personId: null, weekTool: 'earlyDep' };
+
+const today = new Date();
 
 export function getASVTimeFraction(personId){ return personOf(personId)?.timeFraction ?? 1.0; }
 export function getASVQuota(personId){
@@ -861,7 +860,7 @@ export function buildDashWeeklyMonthCard(year, month){
   for(const mon of weeks){
     const endW=new Date(mon); endW.setDate(endW.getDate()+5);
     const wLabel=`${mon.getDate()}/${mon.getMonth()+1}–${endW.getDate()}/${endW.getMonth()+1}`;
-    const isCurrentWeek = weekNavState.mondayISO && fmtISO(mon)===weekNavState.mondayISO;
+    const isCurrentWeek = store.weekNavState.mondayISO && fmtISO(mon)===store.weekNavState.mondayISO;
     let weekOver42 = false;
     const cols=ASV_PEOPLE.map((p,i)=>{
       const {h, ot}=weekData(mon,p.id);
@@ -976,7 +975,7 @@ export function buildASVModulationCard(year){
 
 // ── Carte 2 : Semaine en cours — plafond 42h ───────────────────
 export function buildASVWeeklyCapCard(){
-  const mon  = weekNavState.mondayISO ? new Date(weekNavState.mondayISO+'T00:00:00') : getWeekMondayDate(today);
+  const mon  = store.weekNavState.mondayISO ? new Date(store.weekNavState.mondayISO+'T00:00:00') : getWeekMondayDate(today);
   const endW = new Date(mon); endW.setDate(endW.getDate() + 5);
   const fmt  = d => `${d.getDate()}/${d.getMonth()+1}`;
   const asv  = ASV_PEOPLE.filter(p => !p.archived);
@@ -1119,7 +1118,7 @@ export function renderDashboardHours(){
   const container = document.getElementById('dash-sub-hours');
   const year = store.dashState.year;
   const cy   = getCurrentYear();
-  if(!weekNavState.mondayISO) weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
+  if(!store.weekNavState.mondayISO) store.weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
   container.innerHTML = `
     <div class="year-toggle" id="dash-hours-year-toggle" style="margin-bottom:16px;">
       <button data-year="${cy}" class="${year===cy?'active':''}">${cy}</button>
