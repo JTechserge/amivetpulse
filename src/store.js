@@ -48,4 +48,7 @@ export const store = {
 
   // Dashboard sub-tab navigation (tab actif dans le tableau de bord)
   dashSubState: { tab: 'stats' },
+
+  // Vue semaine ASV
+  weekNavState: { mondayISO: null, personId: null, weekTool: 'paint' },
 };

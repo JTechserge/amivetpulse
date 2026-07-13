@@ -1819,7 +1819,7 @@ function weekPersonId(){
   // ASV authentifiée → toujours soi-même
   if(effectiveRole() === 'asv') return store.currentUser?.person_id || ASV_PEOPLE[0]?.id;
   // Vétérinaires / admin (vue normale) → sélecteur dans la vue
-  return weekNavState.personId || ASV_PEOPLE[0]?.id;
+  return store.weekNavState.personId || ASV_PEOPLE[0]?.id;
 }
 // Génère une fenêtre d'impression du planning hebdomadaire d'une ASV avec cadre de signature
 // Impression mensuelle — une fiche par ASV sélectionnée, tout le mois
@@ -2116,8 +2116,8 @@ function openEarlyDepPicker(iso, pid){
 function renderWeekViewASV(){
   const container = document.getElementById('asv-sub-week');
   if(!container) return;
-  if(!weekNavState.mondayISO) weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
-  const monday = new Date(weekNavState.mondayISO+'T00:00:00');
+  if(!store.weekNavState.mondayISO) store.weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
+  const monday = new Date(store.weekNavState.mondayISO+'T00:00:00');
   const days = Array.from({length:6},(_,i)=>{ const d=new Date(monday); d.setDate(d.getDate()+i); return d; });
   const pid = weekPersonId();
   const p = personOf(pid);
@@ -2205,16 +2205,16 @@ function renderWeekViewASV(){
     </div>
     </div>`;
 
-  container.querySelector('#week-prev').onclick=()=>{ const d=new Date(weekNavState.mondayISO+'T00:00:00'); d.setDate(d.getDate()-7); weekNavState.mondayISO=fmtISO(d); renderWeekViewASV(); };
-  container.querySelector('#week-next').onclick=()=>{ const d=new Date(weekNavState.mondayISO+'T00:00:00'); d.setDate(d.getDate()+7); weekNavState.mondayISO=fmtISO(d); renderWeekViewASV(); };
-  container.querySelector('#week-today-btn').onclick=()=>{ weekNavState.mondayISO=fmtISO(getWeekMondayDate(today)); renderWeekViewASV(); };
+  container.querySelector('#week-prev').onclick=()=>{ const d=new Date(store.weekNavState.mondayISO+'T00:00:00'); d.setDate(d.getDate()-7); store.weekNavState.mondayISO=fmtISO(d); renderWeekViewASV(); };
+  container.querySelector('#week-next').onclick=()=>{ const d=new Date(store.weekNavState.mondayISO+'T00:00:00'); d.setDate(d.getDate()+7); store.weekNavState.mondayISO=fmtISO(d); renderWeekViewASV(); };
+  container.querySelector('#week-today-btn').onclick=()=>{ store.weekNavState.mondayISO=fmtISO(getWeekMondayDate(today)); renderWeekViewASV(); };
   if(canEditWeek){
     container.querySelector('#week-clear-btn').onclick=()=>{
       const label=`${monday.getDate()} ${MONTH_NAMES[monday.getMonth()].toLowerCase()} – ${days[5].getDate()} ${MONTH_NAMES[days[5].getMonth()].toLowerCase()}`;
       openConfirmModal({ title:`Vider la semaine du ${label} ?`, message:`Tous les ajustements de ${escapeHTML(p?.short||'')} (départs anticipés, H.supp.) seront effacés.`, confirmLabel:'Vider', onConfirm:()=>{ snapshotBeforeChange(); days.forEach(d=>{ if(isSunday(d)||!canEditDay(d))return; const iso=fmtISO(d); setEarlyDep(iso,pid,''); setWeekOtMins(iso,pid,0); setLunchOtMins(iso,pid,0); }); saveData(); showToast(`Semaine vidée (${escapeHTML(p?.short||'')})`,'🗑️'); renderWeekViewASV(); } });
     };
   }
-  if(isVetUser) container.querySelector('#week-asv-pick').onchange=(e)=>{ weekNavState.personId=e.target.value; renderWeekViewASV(); };
+  if(isVetUser) container.querySelector('#week-asv-pick').onchange=(e)=>{ store.weekNavState.personId=e.target.value; renderWeekViewASV(); };
   container.querySelectorAll('.week-shift-btn').forEach(btn=>{ btn.addEventListener('click',()=>{ const iso2=btn.dataset.shiftIso,pid2=btn.dataset.shiftPid; store.DATA.slots[shiftTypeKey(iso2,pid2)]=getShiftType(iso2,pid2)==='O'?'F':'O'; saveData(false); renderWeekViewASV(); }); });
 }
 
@@ -3741,7 +3741,7 @@ function initCalendarInteractions(){
     if(dayCol && currentView === 'asv' && store.subNavState.asv !== 'week'){
       if(!dayCol.classList.contains('cal-wg-day-we')){
         const iso = dayCol.dataset.date;
-        if(iso){ weekNavState.mondayISO = fmtISO(getWeekMondayDate(new Date(iso+'T00:00:00'))); switchSubPage('asv','week'); }
+        if(iso){ store.weekNavState.mondayISO = fmtISO(getWeekMondayDate(new Date(iso+'T00:00:00'))); switchSubPage('asv','week'); }
       }
       return;
     }
@@ -3754,8 +3754,8 @@ function initCalendarInteractions(){
       const d = new Date(iso+'T00:00:00');
       if(d.getDay() === 0) return; // dimanche
       const personId = monthCell.dataset.person;
-      if(personId) weekNavState.personId = personId;
-      weekNavState.mondayISO = fmtISO(getWeekMondayDate(d));
+      if(personId) store.weekNavState.personId = personId;
+      store.weekNavState.mondayISO = fmtISO(getWeekMondayDate(d));
       switchSubPage('asv', 'week');
     }
   });
@@ -3818,7 +3818,7 @@ function initCalendarInteractions(){
   document.addEventListener('click', (e)=>{
     const btn = e.target.closest('.week-tool-btn');
     if(!btn || !btn.dataset.weekTool) return;
-    weekNavState.weekTool = btn.dataset.weekTool;
+    store.weekNavState.weekTool = btn.dataset.weekTool;
     renderWeekViewASV();
   });
 
@@ -3980,7 +3980,7 @@ function openASVImpersonationPicker(){
 }
 
 function initApp(){
-  weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
+  store.weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
   applyRoleToDOM();
   loadASVRoster();
   loadPersonColors();
