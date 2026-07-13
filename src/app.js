@@ -1,4 +1,25 @@
-'use strict';
+import {
+  PRESENT_SHADES, PEOPLE, ASV_PEOPLE, allPeople,
+  CP_DAYS_PER_MONTH, CP_REFERENCE_START_MONTH,
+  ANNONCE_CATEGORIES,
+  ASV_ROSTER_KEY, ASV_DEFAULT_COLOR_PALETTE,
+  SLOTS, SLOT_LABELS, YEARS, STORAGE_KEY, PERSON_COLORS_KEY, VIEW_STATE_KEY,
+  AUTH_SESSION_KEY,
+  SUPABASE_URL, SUPABASE_AUTH_URL, SUPABASE_FUNCTIONS_URL, CALENDAR_FEED_URL, SUPABASE_ANON_KEY,
+  ANNUAL_FULLTIME_HOURS, HALFDAY_HOURS, WEEKLY_MAX_HOURS,
+  ASV_STD_SAT_CARLA, ASV_STD_SAT_SECOND, ASV_STD_WEEKDAY_AVG,
+  CLINIC_HOURS, CLINIC_M_H, CLINIC_AM_H,
+} from './config.js';
+import {
+  escapeHTML, slugifyName, hexToHsl, hexToRgba, colorRejectReason,
+  fmtISO, daysInMonth, isoWeekday, isSunday, isSaturday,
+  holidaysFor, holidayName,
+  formatHHMM, signedHHMM, roundTo15min,
+} from './utils.js';
+import { getAuthSession, saveAuthSession, supabaseHeaders, authSignIn, authUpdatePassword, authSendPasswordReset } from './auth.js';
+import { reindexPresentShades, saveASVRoster, loadASVRoster, archiveASVPerson, unarchiveASVPerson, savePersonColors } from './state.js';
+import { showToast, showSavedToast, openConfirmModal, applyPersonColorVars, loadPersonColors } from './ui.js';
+import { pushDataToSupabase, syncFromSupabase, fetchSignatures, apiSignMonth, apiRevokeSignature } from './api.js';
 /* ================================================================
    AMIVET PLANNING — Application JS (vanilla ES2022, sans dépendance)
    ================================================================ */
@@ -6,62 +27,8 @@
 /* ----------------------------------------------------------------
    1. CONSTANTES & ÉTAT GLOBAL
    ---------------------------------------------------------------- */
-// 3 nuances de vert partagées, attribuées par position : les 2 associés utilisent les 2
-// premières, les 3 ASV les 3 — assez proches pour rester clairement "vert" (jour travaillé)
-// au premier coup d'œil, mais distinctes pour différencier les personnes dans une même vue.
-const PRESENT_SHADES = [
-  { bg:'#86EFAC', border:'#4ADE80', text:'#14532D' }, // vert
-  { bg:'#A7F3D0', border:'#34D399', text:'#064E3B' }, // émeraude
-  { bg:'#BEF264', border:'#A3E635', text:'#3F6212' }, // vert tilleul
-];
-const PEOPLE = [
-  { id:'david',    name:'Dr. David Pelois',     short:'David',    color:'#2563EB', initial:'D', present:PRESENT_SHADES[0] },
-  { id:'stephane', name:'Dr. Stéphane Maquinay', short:'Stéphane', color:'#7C3AED', initial:'S', present:PRESENT_SHADES[1] },
-];
-const ASV_PEOPLE = [
-  { id:'marie',    name:'Marie',    short:'Marie',    color:'#DB2777', initial:'M',  present:PRESENT_SHADES[0], timeFraction:1.0 },
-  { id:'johanna',  name:'Johanna',  short:'Johanna',  color:'#EA580C', initial:'Jo', present:PRESENT_SHADES[1], timeFraction:1.0 },
-  { id:'julie',    name:'Julie',    short:'Julie',    color:'#059669', initial:'Ju', present:PRESENT_SHADES[2], timeFraction:0.75 },
-  { id:'carla',   name:'Carla',   short:'Carla',   color:'#0EA5E9', initial:'Ca', present:PRESENT_SHADES[3], timeFraction: 7.25/35, saturdayOnly:true },
-];
-// Fonction plutôt que tableau figé : ASV_PEOPLE peut être modifié en place (ajout/retrait
-// d'une ASV depuis le tableau de bord), donc on recalcule à chaque appel pour ne jamais
-// servir une liste périmée.
-function allPeople(){ return [...PEOPLE, ...ASV_PEOPLE]; }
 
-// ----------------------------------------------------------------
-// Constantes Module CP (Congés Payés)
-// ----------------------------------------------------------------
-const CP_DAYS_PER_MONTH = 2.5;      // jours ouvrables acquis par mois travaillé
-const CP_REFERENCE_START_MONTH = 0; // janvier = index 0 (période 1 janv. N → 31 déc. N)
 
-// ----------------------------------------------------------------
-// Constantes Module Annonces
-// ----------------------------------------------------------------
-const ANNONCE_CATEGORIES = {
-  urgent:  { label:'Urgent',  color:'#DC2626', bg:'#FEF2F2', border:'#FECACA', icon:'🚨' },
-  meeting: { label:'Réunion', color:'#7C3AED', bg:'#EDE9FE', border:'#DDD6FE', icon:'🗓️' },
-  task:    { label:'Tâche',   color:'#D97706', bg:'#FEF3C7', border:'#FDE68A', icon:'✅' },
-  info:    { label:'Info',    color:'#0369A1', bg:'#EFF6FF', border:'#BFDBFE', icon:'ℹ️' },
-};
-
-// ----------------------------------------------------------------
-// Effectif ASV dynamique — ajout/retrait depuis le tableau de bord. ASV_PEOPLE est mutée
-// en place (push/splice) plutôt que réassignée : tout le reste de l'app (CAL_VIEWS,
-// GROUP_VIEWS, etc.) garde une référence vers ce même tableau, donc une mutation se
-// répercute automatiquement partout sans devoir reconstruire ces registres.
-const ASV_ROSTER_KEY = 'amivet_asv_roster';
-const ASV_DEFAULT_COLOR_PALETTE = ['#DB2777','#EA580C','#059669','#0EA5E9','#D946EF','#4F46E5','#0D9488','#DC2626'];
-function slugifyName(name){
-  const lower = name.toLowerCase().normalize('NFD');
-  let stripped = '';
-  for(const ch of lower){
-    const code = ch.codePointAt(0);
-    if(code >= 0x0300 && code <= 0x036f) continue; // diacritique combinant : ignoré
-    stripped += ch;
-  }
-  return stripped.replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'') || 'asv';
-}
 function uniqueASVId(base){
   let id = base, n = 2;
   while(PEOPLE.some(p=>p.id===id) || ASV_PEOPLE.some(p=>p.id===id)){ id = `${base}-${n}`; n++; }
@@ -71,32 +38,6 @@ function pickDefaultASVColor(){
   const used = allPeople().map(p=>p.color.toLowerCase());
   const free = ASV_DEFAULT_COLOR_PALETTE.find(c=> !used.includes(c.toLowerCase()) && !colorRejectReason(c));
   return free || '#64748B';
-}
-// Réattribue les nuances de vert "présent" par position : nécessaire après chaque
-// ajout/retrait pour que le 1er, 2e, 3e... de la liste gardent des teintes cohérentes.
-function reindexPresentShades(){
-  ASV_PEOPLE.forEach((p,i)=> p.present = PRESENT_SHADES[i % PRESENT_SHADES.length]);
-}
-function saveASVRoster(){
-  localStorage.setItem(ASV_ROSTER_KEY, JSON.stringify(ASV_PEOPLE.map(p=>({ id:p.id, name:p.name, short:p.short, initial:p.initial, color:p.color, timeFraction:p.timeFraction ?? 1.0, archived:p.archived ?? false, saturdayOnly:p.saturdayOnly ?? false, workingDays:p.workingDays ?? null }))));
-}
-function loadASVRoster(){
-  try{
-    const raw = localStorage.getItem(ASV_ROSTER_KEY);
-    if(raw){
-      const saved = JSON.parse(raw);
-      if(Array.isArray(saved) && saved.length){
-        ASV_PEOPLE.length = 0;
-        saved.forEach(p=> ASV_PEOPLE.push({ id:p.id, name:p.name, short:p.short, initial:p.initial, color:p.color, present:null, timeFraction:p.timeFraction ?? 1.0, archived:p.archived ?? false, saturdayOnly:p.saturdayOnly ?? false, workingDays:p.workingDays ?? null }));
-        // Fusionner Carla si absente des données sauvegardées (migration)
-        if(!ASV_PEOPLE.find(p=>p.id==='carla')){
-          ASV_PEOPLE.push({ id:'carla', name:'Carla', short:'Carla', color:'#0EA5E9', initial:'Ca', present:null, timeFraction:7.25/35, saturdayOnly:true });
-          saveASVRoster();
-        }
-      }
-    }
-  }catch(e){ console.warn('Effectif ASV personnalisé illisible, valeurs par défaut conservées.', e); }
-  reindexPresentShades();
 }
 function setASVTimeFraction(personId, fraction){
   const p = ASV_PEOPLE.find(x=> x.id === personId);
@@ -120,84 +61,11 @@ function addASVPerson(name){
   applyPersonColorVars();
   return person;
 }
-// Archive une ASV : la ligne reste dans le calendrier mais devient grisée et en lecture
-// seule pour tout le monde. Les données de présence sont conservées.
-function archiveASVPerson(id){
-  const p = ASV_PEOPLE.find(x=>x.id===id);
-  if(!p) return;
-  p.archived = true;
-  reindexPresentShades();
-  saveASVRoster();
-}
-function unarchiveASVPerson(id){
-  const p = ASV_PEOPLE.find(x=>x.id===id);
-  if(!p) return;
-  p.archived = false;
-  reindexPresentShades();
-  saveASVRoster();
-}
 
-const SLOTS = ['M','AM'];
-const SLOT_LABELS = { M:'Matin', AM:'Après-midi' };
-const YEARS = [2026, 2027];
-const STORAGE_KEY = 'amivet_planning_data';
-const PERSON_COLORS_KEY = 'amivet_person_colors';
-const VIEW_STATE_KEY = 'amivet_view_state';
 
 /* ----------------------------------------------------------------
    1bis. COULEURS PERSONNALISABLES DES ASSOCIÉS
    ---------------------------------------------------------------- */
-// Convertit un hex #rrggbb en teinte/saturation/luminosité (0-360 / 0-100 / 0-100)
-function hexToHsl(hex){
-  const r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
-  const max = Math.max(r,g,b), min = Math.min(r,g,b);
-  let h = 0, s = 0;
-  const l = (max+min)/2;
-  const d = max-min;
-  if(d !== 0){
-    s = l > 0.5 ? d/(2-max-min) : d/(max+min);
-    switch(max){
-      case r: h = ((g-b)/d) % 6; break;
-      case g: h = (b-r)/d + 2; break;
-      default: h = (r-g)/d + 4;
-    }
-    h *= 60;
-    if(h < 0) h += 360;
-  }
-  return { h, s: s*100, l: l*100 };
-}
-// Renvoie une raison de refus si la couleur empiète sur les codes de statut désormais
-// généralisés (présent=vert, congé validé=rouge, congé en attente=bleu foncé, vide=blanc),
-// ou null si la couleur est autorisée. S'applique à n'importe quelle personne (vétérinaire
-// ou ASV) puisque ces codes ne dépendent plus de l'identité de la personne.
-function colorRejectReason(hex){
-  if(!/^#[0-9a-fA-F]{6}$/.test(hex)) return 'couleur invalide.';
-  const { h, s, l } = hexToHsl(hex);
-  if(l > 92) return 'trop proche du blanc (réservé aux demi-journées vides).';
-  if(s > 25 && (h <= 15 || h >= 345)) return 'trop proche du rouge (réservé aux congés validés).';
-  if(s > 25 && (h >= 75 && h <= 160)) return 'trop proche du vert (réservé aux jours travaillés).';
-  if(s > 25 && (h >= 200 && h <= 250)) return 'trop proche du bleu foncé (réservé aux congés en attente).';
-  if(s > 25 && (h >= 40 && h <= 65)) return 'trop proche du jaune (réservé aux jours fériés).';
-  return null;
-}
-function applyPersonColorVars(){
-  allPeople().forEach(p=> document.documentElement.style.setProperty(`--color-${p.id}`, p.color));
-}
-function savePersonColors(){
-  const colors = {};
-  allPeople().forEach(p=> colors[p.id] = p.color);
-  localStorage.setItem(PERSON_COLORS_KEY, JSON.stringify(colors));
-}
-function loadPersonColors(){
-  try{
-    const raw = localStorage.getItem(PERSON_COLORS_KEY);
-    if(raw){
-      const colors = JSON.parse(raw);
-      allPeople().forEach(p=>{ if(colors[p.id]) p.color = colors[p.id]; });
-    }
-  }catch(e){ console.warn('Couleurs personnalisées illisibles, valeurs par défaut conservées.', e); }
-  applyPersonColorVars();
-}
 function colorPickerRow(p){
   return `
     <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;font-weight:700;color:var(--color-text);">
@@ -493,7 +361,7 @@ function openManageUsersModal(){
               if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
               showToast(`${name} supprimé(e) définitivement`, '🗑️');
               CAL_VIEWS = buildCalViews();
-              renderCalendarView(currentCalViewKey||'asv-current');
+              renderCalendarView(activeCalendarViewKey()||'asv-current');
               openManageUsersModal();
             }catch(e){ showToast('Erreur purge : '+e.message, '⚠️'); }
           },
@@ -530,7 +398,7 @@ function openManageUsersModal(){
             if(asvIdx !== -1){ ASV_PEOPLE.splice(asvIdx,1); reindexPresentShades(); saveASVRoster(); }
             showToast(`${name} retiré(e) du planning`, '🗑️');
             CAL_VIEWS = buildCalViews();
-            renderCalendarView(currentCalViewKey||'asv-current');
+            renderCalendarView(activeCalendarViewKey()||'asv-current');
             openManageUsersModal();
           },
         });
@@ -1120,74 +988,11 @@ function updateUndoButtons(){
   document.querySelectorAll('.undo-btn').forEach(btn=>{ btn.disabled = UNDO_STACK.length === 0; });
 }
 
-/* ----------------------------------------------------------------
-   2. JOURS FÉRIÉS FRANÇAIS (algorithme de Meeus/Jones/Butcher)
-   ---------------------------------------------------------------- */
-function getFrenchHolidays(year){
-  const a = year % 19, b = Math.floor(year/100), c = year % 100;
-  const d = Math.floor(b/4), e = b % 4, f = Math.floor((b+8)/25);
-  const g = Math.floor((b-f+1)/3), h = (19*a+b-d-g+15) % 30;
-  const i = Math.floor(c/4), k = c % 4;
-  const l = (32+2*e+2*i-h-k) % 7;
-  const m = Math.floor((a+11*h+22*l)/451);
-  const month = Math.floor((h+l-7*m+114)/31);
-  const day = ((h+l-7*m+114) % 31) + 1;
-  const easter = new Date(year, month-1, day);
 
-  const dates = [
-    new Date(year, 0, 1),                            // Jour de l'An
-    new Date(easter.getTime() + 1*86400000),          // Lundi de Pâques
-    new Date(year, 4, 1),                             // Fête du Travail
-    new Date(year, 4, 8),                             // Victoire 1945
-    new Date(easter.getTime() + 39*86400000),         // Ascension
-    new Date(easter.getTime() + 50*86400000),         // Lundi de Pentecôte
-    new Date(year, 6, 14),                            // Fête Nationale
-    new Date(year, 7, 15),                            // Assomption
-    new Date(year, 10, 1),                            // Toussaint
-    new Date(year, 10, 11),                           // Armistice
-    new Date(year, 11, 25),                           // Noël
-  ];
-  const names = ["Jour de l'An","Lundi de Pâques","Fête du Travail","Victoire 1945","Ascension","Lundi de Pentecôte","Fête Nationale","Assomption","Toussaint","Armistice","Noël"];
-  const map = {};
-  dates.forEach((d,idx)=>{ map[fmtISO(d)] = names[idx]; });
-  return map;
-}
-// Cache des fériés par année pour éviter de recalculer Pâques sans cesse
-const HOLIDAYS_CACHE = {};
-function holidaysFor(year){
-  if(!HOLIDAYS_CACHE[year]) HOLIDAYS_CACHE[year] = getFrenchHolidays(year);
-  return HOLIDAYS_CACHE[year];
-}
-function holidayName(isoDate){
-  const year = parseInt(isoDate.slice(0,4),10);
-  return holidaysFor(year)[isoDate] || null;
-}
-
-/* ----------------------------------------------------------------
-   3. UTILITAIRES DATES
-   ---------------------------------------------------------------- */
-function fmtISO(d){
-  // Évite les soucis de fuseau horaire de toISOString() en construisant la chaîne localement
-  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${day}`;
-}
-function daysInMonth(year, month){ return new Date(year, month+1, 0).getDate(); }
-// Lundi = 0 ... Dimanche = 6
-function isoWeekday(date){ return (date.getDay() + 6) % 7; }
-function isSunday(date){ return isoWeekday(date) === 6; }
-function isSaturday(date){ return isoWeekday(date) === 5; }
 
 /* ----------------------------------------------------------------
    4. PERSISTANCE (localStorage + synchronisation Supabase partagée)
    ---------------------------------------------------------------- */
-// Clé "anon" Supabase : volontairement non secrète (protégée par les policies RLS côté
-// base, pas par le secret) — c'est le fonctionnement normal d'une clé anon Supabase,
-// faite pour être embarquée dans du code client visible publiquement.
-const SUPABASE_URL      = 'https://ubowqtowyqmpraoxbaoo.supabase.co/rest/v1/';
-const SUPABASE_AUTH_URL = 'https://ubowqtowyqmpraoxbaoo.supabase.co/auth/v1/';
-const SUPABASE_FUNCTIONS_URL = 'https://ubowqtowyqmpraoxbaoo.supabase.co/functions/v1/';
-const CALENDAR_FEED_URL = `${SUPABASE_FUNCTIONS_URL}calendar-feed`;
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVib3dxdG93eXFtcHJhb3hiYW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MzkzNjksImV4cCI6MjA5ODIxNTM2OX0.cC7vTWrK-Ykii5dtlg_6lA5quHe6rv78IRxZT-ArV_8';
 
 // ----------------------------------------------------------------
 // Authentification — état global et gestion de session
@@ -1206,37 +1011,12 @@ let announcementsCache = {
   filter: 'all', // catégorie filtrée
 };
 let adminImpersonatedPersonId = null; // quelle ASV l'admin imite en mode ASV
-const AUTH_SESSION_KEY = 'amivet_auth_session';
 
-function getAuthSession(){
-  try{ return JSON.parse(sessionStorage.getItem(AUTH_SESSION_KEY)); }catch{ return null; }
-}
-function saveAuthSession(s){ sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(s)); }
 function clearAuthSession(){ sessionStorage.removeItem(AUTH_SESSION_KEY); currentUser = null; }
-
-function supabaseHeaders(extra){
-  const session = getAuthSession();
-  const token = session?.access_token || SUPABASE_ANON_KEY;
-  return Object.assign({ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${token}` }, extra || {});
-}
 
 // ----------------------------------------------------------------
 // Fonctions d'authentification (Supabase Auth REST)
 // ----------------------------------------------------------------
-async function authSignIn(email, password){
-  const res = await fetch(`${SUPABASE_AUTH_URL}token?grant_type=password`, {
-    method:'POST',
-    headers:{ apikey:SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
-    body:JSON.stringify({ email, password }),
-  });
-  if(!res.ok){
-    const err = await res.json().catch(()=>({}));
-    throw new Error(err.error_description || err.message || `Erreur ${res.status}`);
-  }
-  const session = await res.json();
-  saveAuthSession(session);
-  return session;
-}
 async function authSignOut(){
   const s = getAuthSession();
   if(s?.access_token){
@@ -1259,22 +1039,6 @@ async function authRefreshSession(){
   const session = await res.json();
   saveAuthSession(session);
   return session;
-}
-async function authUpdatePassword(accessToken, newPassword){
-  const res = await fetch(`${SUPABASE_AUTH_URL}user`, {
-    method:'PUT',
-    headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
-    body:JSON.stringify({ password:newPassword }),
-  });
-  if(!res.ok) throw new Error('Erreur lors de la mise à jour du mot de passe.');
-}
-async function authSendPasswordReset(email){
-  const res = await fetch(`${SUPABASE_AUTH_URL}recover`, {
-    method:'POST',
-    headers:{ apikey:SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
-    body:JSON.stringify({ email, redirectTo:'https://jtechserge.github.io/amivetpulse/' }),
-  });
-  if(!res.ok) throw new Error('Impossible d\'envoyer l\'email de réinitialisation.');
 }
 async function loadCurrentUser(){
   const s = getAuthSession();
@@ -1365,38 +1129,7 @@ function scheduleSupabasePush(){
   clearTimeout(_supabasePushTimer);
   // Attend une courte pause après la dernière modification (ex. fin d'un glisser-peindre)
   // pour grouper les écritures plutôt que d'envoyer une requête à chaque case cochée.
-  _supabasePushTimer = setTimeout(pushDataToSupabase, 900);
-}
-function pushDataToSupabase(){
-  fetch(`${SUPABASE_URL}planning_data?id=eq.singleton`, {
-    method:'PATCH',
-    headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=minimal' }),
-    body: JSON.stringify({ data: DATA.slots, updated_at: new Date().toISOString() }),
-  }).catch(e=> console.warn('Synchronisation Supabase impossible (hors ligne ?), données conservées en local.', e));
-}
-// Appelé une fois au démarrage, après le premier affichage instantané (local) : si la base
-// partagée contient déjà des données, elles font foi et remplacent la copie locale. Si elle
-// est vide (tout premier branchement), on y pousse la copie locale au lieu d'écraser les
-// données existantes avec du vide.
-async function syncFromSupabase(){
-  try{
-    const res = await fetch(`${SUPABASE_URL}planning_data?id=eq.singleton&select=data`, { headers: supabaseHeaders() });
-    if(!res.ok) return;
-    const rows = await res.json();
-    const remoteSlots = rows[0] && rows[0].data;
-    if(remoteSlots && Object.keys(remoteSlots).length > 0){
-      DATA = { version:2, slots: remoteSlots };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
-      renderCurrentView();
-      updateDashboardNavBadge();
-    } else if(remoteSlots !== null && remoteSlots !== undefined){
-      // Supabase est vide (purge ou première utilisation) : vider aussi le cache local
-      DATA = { version:2, slots:{} };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
-      renderCurrentView();
-      updateDashboardNavBadge();
-    }
-  }catch(e){ console.warn('Supabase inaccessible, données locales conservées.', e); }
+  _supabasePushTimer = setTimeout(()=> pushDataToSupabase(DATA.slots), 900);
 }
 // Signatures électroniques mensuelles (feuille de présence ASV) : un cache local simple
 // (clé "personId|year|month") rechargé au démarrage et après chaque signature/annulation —
@@ -1410,35 +1143,23 @@ function isMonthSigned(personId, year, month){ return SIGNATURES.has(signatureKe
 const signatureDetails = new Map();
 function getSignatureDetail(personId, year, month){ return signatureDetails.get(signatureKey(personId, year, month)) || null; }
 async function loadSignatures(){
-  try{
-    const res = await fetch(`${SUPABASE_URL}monthly_signatures?select=*`, { headers: supabaseHeaders() });
-    if(!res.ok) return;
-    const rows = await res.json();
-    SIGNATURES.clear();
-    signatureDetails.clear();
-    rows.forEach(r=>{
-      const key = signatureKey(r.person_id, r.year, r.month);
-      SIGNATURES.add(key);
-      signatureDetails.set(key, { signedName:r.signed_name, signedAt:r.signed_at });
-    });
-    renderCurrentView();
-  }catch(e){ console.warn('Signatures inaccessibles (hors ligne ?).', e); }
+  const rows = await fetchSignatures();
+  if(!rows) return;
+  SIGNATURES.clear();
+  signatureDetails.clear();
+  rows.forEach(r=>{
+    const key = signatureKey(r.person_id, r.year, r.month);
+    SIGNATURES.add(key);
+    signatureDetails.set(key, { signedName:r.signed_name, signedAt:r.signed_at });
+  });
+  renderCurrentView();
 }
 async function signMonth(personId, year, month, signedName){
-  const res = await fetch(`${SUPABASE_URL}monthly_signatures`, {
-    method:'POST',
-    headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=minimal' }),
-    body: JSON.stringify({ person_id:personId, year, month, signed_name:signedName }),
-  });
-  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  await apiSignMonth(personId, year, month, signedName);
   await loadSignatures();
 }
 async function revokeSignature(personId, year, month){
-  const res = await fetch(`${SUPABASE_URL}monthly_signatures?person_id=eq.${encodeURIComponent(personId)}&year=eq.${year}&month=eq.${month}`, {
-    method:'DELETE',
-    headers: supabaseHeaders({ Prefer:'return=minimal' }),
-  });
-  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  await apiRevokeSignature(personId, year, month);
   await loadSignatures();
 }
 
@@ -1689,40 +1410,7 @@ function seedDemoData(){
   saveData(false);
 }
 
-/* ----------------------------------------------------------------
-   6. TOAST
-   ---------------------------------------------------------------- */
-function showToast(message, icon='✓'){
-  const container = document.getElementById('toast-container');
-  const el = document.createElement('div');
-  el.className = 'toast';
-  el.innerHTML = `<span>${icon}</span><span>${message}</span>`;
-  container.appendChild(el);
-  setTimeout(()=> el.remove(), 15000);
-}
-function showSavedToast(){ showToast('Sauvegardé'); }
 
-/* ----------------------------------------------------------------
-   7. MODALE DE CONFIRMATION GÉNÉRIQUE
-   ---------------------------------------------------------------- */
-function openConfirmModal({title, message, confirmLabel='Confirmer', danger=true, onConfirm}){
-  const backdrop = document.getElementById('modal-backdrop');
-  const box = document.getElementById('modal-box');
-  box.className = 'modal-box';
-  box.innerHTML = `
-    <h3>${title}</h3>
-    <p>${message}</p>
-    <div class="modal-actions">
-      <button class="btn" id="modal-cancel">Annuler</button>
-      <button class="btn ${danger?'btn-danger':'btn-primary'}" id="modal-confirm">${confirmLabel}</button>
-    </div>
-  `;
-  backdrop.classList.add('open');
-  const close = ()=> backdrop.classList.remove('open');
-  box.querySelector('#modal-cancel').onclick = close;
-  box.querySelector('#modal-confirm').onclick = ()=>{ onConfirm(); close(); };
-  backdrop.onclick = (e)=>{ if(e.target === backdrop) close(); };
-}
 
 /* ----------------------------------------------------------------
    8. MENU RÉGLAGES (export / import / reset)
@@ -2055,7 +1743,7 @@ function openHelpModal(){
     <div class="ho-cards" style="margin-top:8px;">
       <div class="ho-card"><div class="ho-card-icon">🟦</div><strong>Poste O — Ouverture</strong><p>8h30 → 19h00 (pause déjeuner 2h) = <strong>8h30 de travail effectif</strong></p></div>
       <div class="ho-card"><div class="ho-card-icon">🟩</div><strong>Poste F — Fermeture</strong><p>9h00 → 19h15 (pause déjeuner 2h) = <strong>8h15 de travail effectif</strong></p></div>
-      <div class="ho-card"><div class="ho-card-icon">🟨</div><strong>Samedi</strong><p>9h00 → 16h30 (pause 1h) = <strong>7h00 de travail effectif</strong></p></div>
+      <div class="ho-card"><div class="ho-card-icon">🟨</div><strong>Samedi</strong><p>9h00 → 16h30 = <strong>7h00 de travail effectif</strong> (convention clinique)</p></div>
       <div class="ho-card"><div class="ho-card-icon">➕</div><strong>H.supp. soirée</strong><p>Chaque minute après 19h/19h15 est comptée en heure supplémentaire.</p></div>
       <div class="ho-card"><div class="ho-card-icon">➕</div><strong>H.supp. midi</strong><p>Dépassement de la pause déjeuner standard (ex : retour en salle 30 min plus tôt).</p></div>
       <div class="ho-card"><div class="ho-card-icon">➖</div><strong>Départ anticipé</strong><p>Départ avant 19h/19h15. L'écart est déduit du total du jour.</p></div>
@@ -2775,13 +2463,6 @@ function initKeyboardShortcuts(){
 /* ----------------------------------------------------------------
    11. UTILITAIRES DIVERS (échappement, couleurs)
    ---------------------------------------------------------------- */
-function escapeHTML(str){
-  return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-function hexToRgba(hex, alpha){
-  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
 function personOf(id){ return PEOPLE.find(p=>p.id===id) || ASV_PEOPLE.find(p=>p.id===id); }
 
 /* ================================================================
@@ -3456,7 +3137,7 @@ function buildWeekGrid(year, month, people){
         if(!e.h) return null;
         const over = !e.person.saturdayOnly && e.h >= WEEKLY_MAX_HOURS;
         return `<span class="${over?'ot-neg':'ot-pos'}" title="${escapeHTML(e.person.short)} — ${formatHHMM(e.h)} cette semaine${over?' ⚠️ Plafond 42h':''}">` +
-          `${escapeHTML(e.person.short)} ${formatHHMM(e.h)}${over?' ⚠️':''}</span>`;
+          `${escapeHTML(e.person.short)} ${formatHHMM(e.h)}${over?' ⚠️':''}</span>`;
       }).filter(Boolean);
       const weekHHtml = weekHLine.length ? `<div class="cal-wg-week-ot" style="opacity:0.85;font-size:11px;">` +
         `<span style="color:var(--color-text-muted);font-weight:600;margin-right:6px;">Total</span>` +
@@ -4732,17 +4413,6 @@ function initCalendarInteractions(){
    ================================================================ */
 function formatNum(n){ return Number.isInteger(n) ? String(n) : n.toFixed(1); }
 // Formate des heures décimales en "Xh MM" (ex: 1.25 → "1h15", 0.5 → "0h30")
-function formatHHMM(h){
-  const abs = Math.abs(h);
-  const hh = Math.floor(abs);
-  const mm = Math.round((abs - hh) * 60);
-  return `${hh}h${String(mm).padStart(2,'0')}`;
-}
-// Comme formatHHMM mais préfixé du signe (+/-)
-function signedHHMM(h){
-  if(h === 0) return '0h00';
-  return `${h > 0 ? '+' : '-'}${formatHHMM(h)}`;
-}
 
 // Regroupe les demi-journées d'absence ASV contiguës (même personne, même motif, même
 // statut de décision, même commentaire) en "demandes" pour l'affichage côté tableau de
@@ -5016,16 +4686,6 @@ function computeOvertimeStats(year){
 }
 // ----------------------------------------------------------------
 // Contrôle du temps de travail ASV — quotas légaux et heures réelles
-// ----------------------------------------------------------------
-const ANNUAL_FULLTIME_HOURS = 1607; // référence légale France (loi Aubry 2000)
-const HALFDAY_HOURS = 3.5;          // 35h / 5j / 2 demi-journées
-const WEEKLY_MAX_HOURS    = 42;     // plafond légal modulation (art. L3122-4 CT)
-const ASV_STD_SAT_CARLA   = 7.25;  // Carla : 8:30-16:45 avec 1h pause
-const ASV_STD_SAT_SECOND  = 7.0;   // 2e ASV le samedi : 9:00-16:30 avec 1h pause
-const ASV_STD_WEEKDAY_AVG = 8.375; // moyenne ouverture (8,5h) + fermeture (8,25h)
-const CLINIC_HOURS = { mStart:'08:30', mEnd:'13:00', amStart:'15:00', amEnd:'20:00' };
-const CLINIC_M_H  = 4.5;   // 8h30→13h00
-const CLINIC_AM_H = 4.25;  // 15h00→19h15 (zone standard, sans les H.supp.)
 
 // Poste (ouverture / fermeture) par jour/personne
 function shiftTypeKey(iso,pid){ return `${iso}_${pid}_shift`; }
@@ -5058,7 +4718,6 @@ function getLunchOtMins(iso,pid){ return parseInt(DATA.slots[lunchOtKey(iso,pid)
 function setLunchOtMins(iso,pid,v){ if(v>0) DATA.slots[lunchOtKey(iso,pid)]=v; else delete DATA.slots[lunchOtKey(iso,pid)]; }
 function getDayLunchOtH(iso,pid){ return getLunchOtMins(iso,pid)/60; }
 function getDayAllOtH(iso,pid){ return getDayOtH(iso,pid)+getDayLunchOtH(iso,pid); }
-function roundTo15min(h){ return Math.round(h * 4) / 4; }
 function dayNoteKey(iso,pid){ return `${iso}_${pid}_day_note`; }
 function getDayNote(iso,pid){ return DATA.slots[dayNoteKey(iso,pid)]||''; }
 function setDayNote(iso,pid,v){ if(v) DATA.slots[dayNoteKey(iso,pid)]=v; else delete DATA.slots[dayNoteKey(iso,pid)]; }
@@ -6815,7 +6474,14 @@ function initApp(){
   switchSubPage('asv', subNavState.asv);
   const startView = !canAccessDashboard() && restoredView === 'dashboard' ? 'vets' : restoredView;
   switchView(VIEW_RENDERERS[startView] ? startView : 'vets');
-  syncFromSupabase();
+  syncFromSupabase().then(remoteSlots=>{
+    if(remoteSlots !== null){
+      DATA = { version:2, slots: remoteSlots };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+      renderCurrentView();
+      updateDashboardNavBadge();
+    }
+  });
   loadSignatures();
   loadInterviews();
   loadAnnouncements();
@@ -6830,6 +6496,10 @@ function initApp(){
 }
 
 async function init(){
+  // Charger l'effectif ASV dès le démarrage (indépendant de l'auth) : garantit que
+  // localStorage est peuplé même sur l'écran de connexion, et que le roster est prêt
+  // quel que soit le chemin d'entrée (login, recovery, invite).
+  loadASVRoster();
   // Callback de réinitialisation de mot de passe : Supabase envoie le token dans le hash URL
   const hash = new URLSearchParams(window.location.hash.replace(/^#/,''));
   const query = new URLSearchParams(window.location.search);
@@ -6972,7 +6642,7 @@ const PWA_PROMPT_INTERVAL_DAYS = 14;
 const PWA_IOS_PROMPT_KEY = 'pwa_ios_prompt_ts';
 const PWA_ANDROID_PROMPT_KEY = 'pwa_android_prompt_ts';
 
-window.PWA = {
+const PWA = {
   isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent); },
   isInstalled(){ return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches; },
   supportsPush(){ return 'PushManager' in window && 'serviceWorker' in navigator; },
@@ -7081,8 +6751,15 @@ function updatePwaOfflineBanner(){
   banner.style.display = navigator.onLine ? 'none' : 'block';
 }
 function refreshAllPwaData(){
-  if(typeof syncFromSupabase === 'function') syncFromSupabase();
-  if(typeof loadSignatures === 'function') loadSignatures();
+  syncFromSupabase().then(remoteSlots=>{
+    if(remoteSlots !== null){
+      DATA = { version:2, slots: remoteSlots };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+      renderCurrentView();
+      updateDashboardNavBadge();
+    }
+  });
+  loadSignatures();
   if(typeof loadInterviews === 'function') loadInterviews();
   if(typeof loadAnnouncements === 'function') loadAnnouncements();
 }
