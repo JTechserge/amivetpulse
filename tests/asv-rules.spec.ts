@@ -305,9 +305,13 @@ test.describe("Horaires journaliers détaillés", () => {
     expect(net).toBeCloseTo(7.25, 2);
   });
 
-  test("2e ASV samedi : 9h00-16h30 avec 1h pause = 7h00", () => {
+  test("2e ASV samedi : 9h00-16h30 = 7h00 effectif (convention clinique)", () => {
+    // Convention validée par Jérémie (13/07/2026) : le poste du samedi de la 2e ASV
+    // vaut systématiquement 7h00 effectives, quelle que soit la pause réellement prise.
+    // 9h00→16h30 = 7h30 de présence, soit 30 min de pause déduite par convention.
     const brut = (16 * 60 + 30 - 9 * 60) / 60;
-    const net = brut - 1;
-    expect(net).toBeCloseTo(7.0, 2);
+    const pauseDeduite = brut - 7.0;
+    expect(pauseDeduite).toBeCloseTo(0.5, 2);
+    expect(brut - pauseDeduite).toBeCloseTo(7.0, 2);
   });
 });

@@ -94,6 +94,10 @@ function loadASVRoster(){
           saveASVRoster();
         }
       }
+    }else{
+      // Premier lancement : persister l'effectif par défaut pour que localStorage
+      // reflète toujours le roster courant (attendu par les TNR et les migrations).
+      saveASVRoster();
     }
   }catch(e){ console.warn('Effectif ASV personnalisé illisible, valeurs par défaut conservées.', e); }
   reindexPresentShades();
@@ -2055,7 +2059,7 @@ function openHelpModal(){
     <div class="ho-cards" style="margin-top:8px;">
       <div class="ho-card"><div class="ho-card-icon">🟦</div><strong>Poste O — Ouverture</strong><p>8h30 → 19h00 (pause déjeuner 2h) = <strong>8h30 de travail effectif</strong></p></div>
       <div class="ho-card"><div class="ho-card-icon">🟩</div><strong>Poste F — Fermeture</strong><p>9h00 → 19h15 (pause déjeuner 2h) = <strong>8h15 de travail effectif</strong></p></div>
-      <div class="ho-card"><div class="ho-card-icon">🟨</div><strong>Samedi</strong><p>9h00 → 16h30 (pause 1h) = <strong>7h00 de travail effectif</strong></p></div>
+      <div class="ho-card"><div class="ho-card-icon">🟨</div><strong>Samedi</strong><p>9h00 → 16h30 = <strong>7h00 de travail effectif</strong> (convention clinique)</p></div>
       <div class="ho-card"><div class="ho-card-icon">➕</div><strong>H.supp. soirée</strong><p>Chaque minute après 19h/19h15 est comptée en heure supplémentaire.</p></div>
       <div class="ho-card"><div class="ho-card-icon">➕</div><strong>H.supp. midi</strong><p>Dépassement de la pause déjeuner standard (ex : retour en salle 30 min plus tôt).</p></div>
       <div class="ho-card"><div class="ho-card-icon">➖</div><strong>Départ anticipé</strong><p>Départ avant 19h/19h15. L'écart est déduit du total du jour.</p></div>
@@ -5021,7 +5025,7 @@ const ANNUAL_FULLTIME_HOURS = 1607; // référence légale France (loi Aubry 200
 const HALFDAY_HOURS = 3.5;          // 35h / 5j / 2 demi-journées
 const WEEKLY_MAX_HOURS    = 42;     // plafond légal modulation (art. L3122-4 CT)
 const ASV_STD_SAT_CARLA   = 7.25;  // Carla : 8:30-16:45 avec 1h pause
-const ASV_STD_SAT_SECOND  = 7.0;   // 2e ASV le samedi : 9:00-16:30 avec 1h pause
+const ASV_STD_SAT_SECOND  = 7.0;   // 2e ASV le samedi : 9:00-16:30, 7h effectives par convention clinique
 const ASV_STD_WEEKDAY_AVG = 8.375; // moyenne ouverture (8,5h) + fermeture (8,25h)
 const CLINIC_HOURS = { mStart:'08:30', mEnd:'13:00', amStart:'15:00', amEnd:'20:00' };
 const CLINIC_M_H  = 4.5;   // 8h30→13h00
@@ -6830,6 +6834,10 @@ function initApp(){
 }
 
 async function init(){
+  // Charger l'effectif ASV dès le démarrage (indépendant de l'auth) : garantit que
+  // localStorage est peuplé même sur l'écran de connexion, et que le roster est prêt
+  // quel que soit le chemin d'entrée (login, recovery, invite).
+  loadASVRoster();
   // Callback de réinitialisation de mot de passe : Supabase envoie le token dans le hash URL
   const hash = new URLSearchParams(window.location.hash.replace(/^#/,''));
   const query = new URLSearchParams(window.location.search);
