@@ -146,3 +146,10 @@ export function formatFR(iso){
   const date = new Date(y, m-1, d);
   return `${WEEKDAY_FULL[isoWeekday(date)]} ${d} ${MONTH_NAMES[m-1].toLowerCase()} ${y}`;
 }
+export function getWeekMondayDate(date){
+  const d = new Date(date);
+  const day = d.getDay();
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+  d.setHours(0, 0, 0, 0);
+  return d;
+}

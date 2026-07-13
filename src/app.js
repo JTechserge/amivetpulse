@@ -17,6 +17,7 @@ import {
   fmtISO, daysInMonth, isoWeekday, isSunday, isSaturday,
   holidaysFor, holidayName,
   formatHHMM, signedHHMM, roundTo15min, formatFR, formatNum,
+  getWeekMondayDate,
 } from './utils.js';
 import { getAuthSession, saveAuthSession, supabaseHeaders, authSignIn, authUpdatePassword, authSendPasswordReset } from './auth.js';
 import { reindexPresentShades, saveASVRoster, loadASVRoster, archiveASVPerson, unarchiveASVPerson, savePersonColors } from './state.js';
@@ -1805,13 +1806,6 @@ function switchSubPage(group, subKey){
 /* ================================================================
    VUE SEMAINE ASV — saisie horaire personnelle
    ================================================================ */
-function getWeekMondayDate(date){
-  const d = new Date(date);
-  const day = d.getDay();
-  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
 function weekPersonId(){
   // Admin en impersonation → la personne choisie (ex. Marie)
   if(store.currentUser?.role === 'admin' && store.adminViewMode === 'asv')
@@ -4123,7 +4117,7 @@ function handlePwaShortcutAction(){
 setupLogin({ loadCurrentUser, initApp });
 setupSignatures({ onLoaded: renderCurrentView, renderCalendarView });
 setupAnnualView({ switchSubPage, switchView, openDaySidebar, saveViewState, buildLegendColors, GROUP_VIEWS });
-setupDashboard({ openResetYearModal, saveViewState, canEditSlot, effectiveRole, snapshotBeforeChange, saveData, renderCurrentView, openDaySidebar });
+setupDashboard({ openResetYearModal, saveViewState, canEditSlot, effectiveRole, snapshotBeforeChange, saveData, renderCurrentView, openDaySidebar, loadInterviews });
 VIEW_RENDERERS['dashboard'] = renderDashboard;
 initServiceWorker(navigateForNotificationType);
 setTimeout(showIOSInstallTip, 4000);

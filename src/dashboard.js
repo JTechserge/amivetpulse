@@ -1,13 +1,13 @@
-import { PEOPLE, ASV_PEOPLE, allPeople, SLOTS,
+import { PEOPLE, ASV_PEOPLE, allPeople, SLOTS, SLOT_LABELS,
   getCurrentYear, personOf,
   ASV_STD_SAT_CARLA, ASV_STD_WEEKDAY_AVG,
   ANNUAL_FULLTIME_HOURS, HALFDAY_HOURS, WEEKLY_MAX_HOURS,
   SUPABASE_URL, SUPABASE_FUNCTIONS_URL,
   MONTH_NAMES, MONTH_SHORT,
 } from './config.js';
-import { escapeHTML, formatNum, formatHHMM, daysInMonth,
+import { escapeHTML, formatNum, formatHHMM, signedHHMM, roundTo15min, daysInMonth,
   isSunday, isSaturday, fmtISO, holidayName, formatFR,
-  isoWeekday,
+  isoWeekday, getWeekMondayDate,
 } from './utils.js';
 import { supabaseHeaders } from './auth.js';
 import { store } from './store.js';
@@ -31,9 +31,11 @@ import {
 /* ---------- Callbacks injectés depuis app.js (évitent les deps circulaires) ---------- */
 let _openResetYearModal, _saveViewState, _canEditSlot, _effectiveRole;
 let _snapshotBeforeChange, _saveData, _renderCurrentView, _openDaySidebar;
+let _loadInterviews;
 export function setupDashboard({
   openResetYearModal, saveViewState, canEditSlot, effectiveRole,
   snapshotBeforeChange, saveData, renderCurrentView, openDaySidebar,
+  loadInterviews,
 }) {
   _openResetYearModal  = openResetYearModal;
   _saveViewState       = saveViewState;
@@ -43,6 +45,7 @@ export function setupDashboard({
   _saveData            = saveData;
   _renderCurrentView   = renderCurrentView;
   _openDaySidebar      = openDaySidebar;
+  _loadInterviews      = loadInterviews;
 }
 
 /* ================================================================
@@ -802,7 +805,7 @@ export function openInterviewModal(personId, year){
         });
       }
       if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.message||`HTTP ${res.status}`); }
-      await loadInterviews();
+      await _loadInterviews();
       close();
       renderDashboardInterviews();
       showToast('Entretien enregistré', '✅');
