@@ -550,9 +550,15 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .modal-box.modal-box--wide{width:780px;max-width:calc(100vw - 32px);padding:24px 28px;}
 
 /* Guide utilisateur — overlay plein écran */
-#help-overlay-root{position:fixed;inset:0;z-index:200;display:flex;background:var(--color-bg);}
-#help-overlay-root .ho-main{background:var(--color-bg);}
-#help-overlay-root .ho-content{background:var(--color-bg);}
+#help-overlay-root{position:fixed;inset:0;z-index:200;display:flex;background:#fff;}
+#help-overlay-root .ho-main{background:#fff;}
+#help-overlay-root .ho-content{background:#fff;}
+@media(prefers-color-scheme:dark){
+  #help-overlay-root,#help-overlay-root .ho-main,#help-overlay-root .ho-content{background:#0F172A;}
+}
+:root[data-theme="dark"] #help-overlay-root,
+:root[data-theme="dark"] #help-overlay-root .ho-main,
+:root[data-theme="dark"] #help-overlay-root .ho-content{background:#0F172A;}
 .ho-sidebar{width:200px;flex-shrink:0;background:var(--color-surface);border-right:1px solid var(--color-border);display:flex;flex-direction:column;padding:20px 0;}
 .ho-sidebar-logo{font-size:14px;font-weight:700;color:var(--color-text);padding:0 20px 16px;border-bottom:1px solid var(--color-border);margin-bottom:12px;}
 .ho-nav{display:flex;flex-direction:column;gap:2px;padding:0 10px;flex:1;}
