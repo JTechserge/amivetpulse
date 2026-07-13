@@ -20,6 +20,11 @@ import { getAuthSession, saveAuthSession, supabaseHeaders, authSignIn, authUpdat
 import { reindexPresentShades, saveASVRoster, loadASVRoster, archiveASVPerson, unarchiveASVPerson, savePersonColors } from './state.js';
 import { showToast, showSavedToast, openConfirmModal, applyPersonColorVars, loadPersonColors } from './ui.js';
 import { pushDataToSupabase, syncFromSupabase, fetchSignatures, apiSignMonth, apiRevokeSignature } from './api.js';
+import { store } from './store.js';
+import { setupLogin, renderLoginScreen, renderSetPasswordScreen } from './login.js';
+import { PWA, initServiceWorker, showIOSInstallTip, updatePwaOfflineBanner, triggerPushNotification, openNotificationSettingsModal, notificationStatusLabel } from './pwa.js';
+import { loadAnnouncements, renderAnnounces, updateAnnouncementBadge } from './announcements.js';
+import { setupSignatures, signatureKey, isMonthSigned, getSignatureDetail, loadSignatures, signMonth, revokeSignature, openSigningLinkModal, openSignConfirmModal } from './signatures.js';
 /* ================================================================
    AMIVET PLANNING — Application JS (vanilla ES2022, sans dépendance)
    ================================================================ */
@@ -143,7 +148,7 @@ function openChangeMyPasswordModal(){
   box.className = 'modal-box';
   box.innerHTML = `
     <h3>🔑 Changer mon mot de passe</h3>
-    <p>Choisissez un nouveau mot de passe pour votre compte <strong>${escapeHTML(currentUser?.email||'')}</strong>.</p>
+    <p>Choisissez un nouveau mot de passe pour votre compte <strong>${escapeHTML(store.currentUser?.email||'')}</strong>.</p>
     <div style="display:flex;flex-direction:column;gap:10px;">
       <input type="password" id="pwd-new" placeholder="Nouveau mot de passe" autocomplete="new-password">
       <input type="password" id="pwd-confirm" placeholder="Confirmer le nouveau mot de passe" autocomplete="new-password">
@@ -196,7 +201,7 @@ function openManageUsersModal(){
     const users = data.users;
     const roleLabels = { admin:'Admin', vet:'Vétérinaire', asv:'ASV' };
 
-    const isAdmin = currentUser?.role === 'admin';
+    const isAdmin = store.currentUser?.role === 'admin';
     const linkedPersonIds = new Set(users.map(u=>u.person_id).filter(Boolean));
     const localOnlyASV = ASV_PEOPLE.filter(p=> !p.archived && !linkedPersonIds.has(p.id));
     const localOnlyVets = PEOPLE.filter(p=> !linkedPersonIds.has(p.id) && !users.some(u=> (u.display_name||'').toLowerCase().includes(p.short.toLowerCase()) || (u.display_name||'').toLowerCase().includes(p.name.toLowerCase())));
@@ -345,9 +350,9 @@ function openManageUsersModal(){
             try{
               // 1. Nettoyer les données de planning en local
               if(personId){
-                Object.keys(DATA.slots).filter(k=> k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
-                  .forEach(k=> delete DATA.slots[k]);
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+                Object.keys(store.DATA.slots).filter(k=> k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
+                  .forEach(k=> delete store.DATA.slots[k]);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
                 pushDataToSupabase();
               }
               // 2. Retirer de l'effectif ASV si présent
@@ -390,9 +395,9 @@ function openManageUsersModal(){
           confirmLabel:`Retirer définitivement`,
           danger:true,
           onConfirm: ()=>{
-            Object.keys(DATA.slots).filter(k=> k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
-              .forEach(k=> delete DATA.slots[k]);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+            Object.keys(store.DATA.slots).filter(k=> k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
+              .forEach(k=> delete store.DATA.slots[k]);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
             pushDataToSupabase();
             const asvIdx = ASV_PEOPLE.findIndex(p=> p.id === personId);
             if(asvIdx !== -1){ ASV_PEOPLE.splice(asvIdx,1); reindexPresentShades(); saveASVRoster(); }
@@ -571,7 +576,7 @@ function openEditUserModal(userId, users, onBack){
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = store.currentUser?.role === 'admin';
   const personId = user.person_id;
 
   box.innerHTML = `
@@ -968,17 +973,17 @@ function renderRolloverBanner(){
   bar.querySelector('#rollover-dismiss').onclick = ()=> bar.remove();
 }
 
-// État global d'annulation (undo) — pile de snapshots de DATA.slots avant chaque action
+// État global d'annulation (undo) — pile de snapshots de store.DATA.slots avant chaque action
 const UNDO_STACK = [];
 const UNDO_MAX = 30;
 function snapshotBeforeChange(){
-  UNDO_STACK.push(JSON.stringify(DATA.slots));
+  UNDO_STACK.push(JSON.stringify(store.DATA.slots));
   if(UNDO_STACK.length > UNDO_MAX) UNDO_STACK.shift();
   updateUndoButtons();
 }
 function undoLastAction(){
   if(UNDO_STACK.length === 0) return;
-  DATA.slots = JSON.parse(UNDO_STACK.pop());
+  store.DATA.slots = JSON.parse(UNDO_STACK.pop());
   saveData(false);
   renderCurrentView();
   updateUndoButtons();
@@ -997,22 +1002,12 @@ function updateUndoButtons(){
 // ----------------------------------------------------------------
 // Authentification — état global et gestion de session
 // ----------------------------------------------------------------
-let currentUser = null;
-// { id, email, role, person_id, display_name, can_edit_vet_calendar, can_edit_all_asv }
-let adminViewMode = 'vet'; // 'vet' | 'asv' — seulement pertinent pour le rôle admin
 
 // ----------------------------------------------------------------
 // État global — Annonces
 // ----------------------------------------------------------------
-let announcementsCache = {
-  list: [],
-  reads: new Set(),
-  loaded: false,
-  filter: 'all', // catégorie filtrée
-};
-let adminImpersonatedPersonId = null; // quelle ASV l'admin imite en mode ASV
 
-function clearAuthSession(){ sessionStorage.removeItem(AUTH_SESSION_KEY); currentUser = null; }
+function clearAuthSession(){ sessionStorage.removeItem(AUTH_SESSION_KEY); store.currentUser = null; }
 
 // ----------------------------------------------------------------
 // Fonctions d'authentification (Supabase Auth REST)
@@ -1064,59 +1059,58 @@ async function loadCurrentUser(){
   const profiles = await profRes.json();
   if(!profiles.length) return null;
   const p = profiles[0];
-  currentUser = {
+  store.currentUser = {
     id: authUser.id, email: authUser.email,
     role: p.role, person_id: p.person_id, display_name: p.display_name,
     can_edit_vet_calendar: p.can_edit_vet_calendar,
     can_edit_all_asv: p.can_edit_all_asv,
   };
-  return currentUser;
+  return store.currentUser;
 }
 
 // ----------------------------------------------------------------
 // Helpers de permissions
 // ----------------------------------------------------------------
 function effectiveRole(){
-  if(!currentUser) return null;
-  if(currentUser.role === 'admin') return adminViewMode === 'asv' ? 'asv' : 'vet';
-  return currentUser.role;
+  if(!store.currentUser) return null;
+  if(store.currentUser.role === 'admin') return store.adminViewMode === 'asv' ? 'asv' : 'vet';
+  return store.currentUser.role;
 }
 function canAccessDashboard(){ const r = effectiveRole(); return r === 'vet' || r === 'admin'; }
-function canAccessSettings(){ return currentUser?.role === 'admin' || currentUser?.role === 'vet'; }
+function canAccessSettings(){ return store.currentUser?.role === 'admin' || store.currentUser?.role === 'vet'; }
 function canEditSlot(personId){
-  if(!currentUser) return false;
+  if(!store.currentUser) return false;
   const asvPerson = ASV_PEOPLE.find(p=>p.id===personId);
   if(asvPerson?.archived) return false;
   const role = effectiveRole();
   if(role === 'vet') return true;
   if(role === 'asv'){
-    const isImpersonating = currentUser.role === 'admin' && adminViewMode === 'asv';
-    const myId = isImpersonating ? adminImpersonatedPersonId : currentUser.person_id;
+    const isImpersonating = store.currentUser.role === 'admin' && store.adminViewMode === 'asv';
+    const myId = isImpersonating ? store.adminImpersonatedPersonId : store.currentUser.person_id;
     if(isASVPerson(personId)){
       // En impersonation : strictement la ligne de la personne choisie, comme un vrai ASV
       if(isImpersonating) return personId === myId;
-      return personId === myId || currentUser.can_edit_all_asv === true;
+      return personId === myId || store.currentUser.can_edit_all_asv === true;
     }
     // Calendrier vétérinaires : jamais modifiable en impersonation
     if(isImpersonating) return false;
-    return currentUser.can_edit_vet_calendar === true;
+    return store.currentUser.can_edit_vet_calendar === true;
   }
   return false;
 }
-let DATA = { version:2, slots:{} };
 
 function loadData(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(raw){
       const parsed = JSON.parse(raw);
-      if(parsed && parsed.slots) { DATA = parsed; return; }
+      if(parsed && parsed.slots) { store.DATA = parsed; return; }
     }
   }catch(e){ console.warn('Lecture localStorage impossible, ré-initialisation.', e); }
-  DATA = { version:2, slots:{} };
+  store.DATA = { version:2, slots:{} };
 }
 function saveData(showToast = true){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
   updateDashboardNavBadge();
   scheduleSupabasePush();
   if(showToast) showSavedToast();
@@ -1129,45 +1123,19 @@ function scheduleSupabasePush(){
   clearTimeout(_supabasePushTimer);
   // Attend une courte pause après la dernière modification (ex. fin d'un glisser-peindre)
   // pour grouper les écritures plutôt que d'envoyer une requête à chaque case cochée.
-  _supabasePushTimer = setTimeout(()=> pushDataToSupabase(DATA.slots), 900);
+  _supabasePushTimer = setTimeout(()=> pushDataToSupabase(store.DATA.slots), 900);
 }
 // Signatures électroniques mensuelles (feuille de présence ASV) : un cache local simple
 // (clé "personId|year|month") rechargé au démarrage et après chaque signature/annulation —
 // pas besoin de la sophistication du sync push/pull de planning_data, ces écritures sont
 // rares et ponctuelles (quelques-unes par mois, pas par clic).
-const SIGNATURES = new Set();
-let pendingSignToken = null; // token ?sign=UUID capturé dans l'URL avant authentification
-let INTERVIEWS = [];
-function signatureKey(personId, year, month){ return `${personId}|${year}|${month}`; }
-function isMonthSigned(personId, year, month){ return SIGNATURES.has(signatureKey(personId, year, month)); }
-const signatureDetails = new Map();
-function getSignatureDetail(personId, year, month){ return signatureDetails.get(signatureKey(personId, year, month)) || null; }
-async function loadSignatures(){
-  const rows = await fetchSignatures();
-  if(!rows) return;
-  SIGNATURES.clear();
-  signatureDetails.clear();
-  rows.forEach(r=>{
-    const key = signatureKey(r.person_id, r.year, r.month);
-    SIGNATURES.add(key);
-    signatureDetails.set(key, { signedName:r.signed_name, signedAt:r.signed_at });
-  });
-  renderCurrentView();
-}
-async function signMonth(personId, year, month, signedName){
-  await apiSignMonth(personId, year, month, signedName);
-  await loadSignatures();
-}
-async function revokeSignature(personId, year, month){
-  await apiRevokeSignature(personId, year, month);
-  await loadSignatures();
-}
+/* signatures.js — signatureKey, isMonthSigned, loadSignatures, signMonth, revokeSignature */
 
 async function loadInterviews(){
   try{
     const res = await fetch(`${SUPABASE_URL}annual_interviews?select=*`, { headers: supabaseHeaders() });
     if(!res.ok) return;
-    INTERVIEWS = await res.json();
+    store.INTERVIEWS = await res.json();
   }catch(e){ console.warn('Entretiens inaccessibles.', e); }
 }
 
@@ -1187,66 +1155,7 @@ function updateDashboardNavBadge(){
 }
 
 // ----------------------------------------------------------------
-// Module Annonces — chargement + badge
-// ----------------------------------------------------------------
-function annonceViewerId(){ return currentUser?.person_id || currentUser?.id || ''; }
-
-async function loadAnnouncements(){
-  if(!currentUser) return;
-  try{
-    const today = new Date().toISOString();
-    const [annRes, readRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}announcements?select=*&or=(expires_at.is.null,expires_at.gt.${encodeURIComponent(today)})&order=pinned.desc,created_at.desc`, { headers: supabaseHeaders() }),
-      fetch(`${SUPABASE_URL}announcement_reads?person_id=eq.${encodeURIComponent(annonceViewerId())}&select=announcement_id`, { headers: supabaseHeaders() }),
-    ]);
-    const anns = annRes.ok ? await annRes.json() : [];
-    const reads = readRes.ok ? await readRes.json() : [];
-    announcementsCache.list = Array.isArray(anns) ? anns : [];
-    announcementsCache.reads = new Set((Array.isArray(reads) ? reads : []).map(r => r.announcement_id));
-    announcementsCache.loaded = true;
-    updateAnnouncementBadge();
-  }catch(e){ console.warn('Annonces inaccessibles.', e); }
-}
-
-function getUnreadCount(){
-  const role = currentUser?.role;
-  const visible = announcementsCache.list.filter(a => {
-    if(a.target_roles === 'all') return true;
-    if(a.target_roles === 'vet' && role === 'vet') return true;
-    if(a.target_roles === 'asv' && role === 'asv') return true;
-    return role === 'admin';
-  });
-  return visible.filter(a => !announcementsCache.reads.has(a.id)).length;
-}
-
-function updateAnnouncementBadge(){
-  const el = document.getElementById('annonces-nav-badge');
-  if(!el) return;
-  const n = getUnreadCount();
-  el.textContent = n > 0 ? String(n) : '';
-  el.className = n > 0 ? 'nav-badge' : '';
-}
-
-async function markAnnouncementRead(annId){
-  if(announcementsCache.reads.has(annId)) return;
-  announcementsCache.reads.add(annId);
-  updateAnnouncementBadge();
-  try{
-    await fetch(`${SUPABASE_URL}announcement_reads`, {
-      method: 'POST',
-      headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=minimal,resolution=ignore-duplicates' }),
-      body: JSON.stringify({ announcement_id: annId, person_id: annonceViewerId() }),
-    });
-  }catch(e){ console.warn('markAnnouncementRead error', e); }
-}
-
-async function loadArchivedAnnouncements(){
-  try{
-    const today = new Date().toISOString();
-    const res = await fetch(`${SUPABASE_URL}announcements?select=*&expires_at=lte.${encodeURIComponent(today)}&order=created_at.desc`, { headers: supabaseHeaders() });
-    return res.ok ? (await res.json()) : [];
-  }catch(e){ return []; }
-}
+/* announcements.js — annonceViewerId, loadAnnouncements, renderAnnounces, etc. */
 
 function slotKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}`; }
 function labelKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}_label`; }
@@ -1256,26 +1165,26 @@ function isASVPerson(personId){ return ASV_PEOPLE.some(p=>p.id===personId); }
 // ----------------------------------------------------------------
 // Demandes de congé ASV — statut de décision rattaché à chaque demi-journée plutôt qu'à
 // une entité "demande" séparée : ça réutilise directement la logique de fusion des
-// absences contiguës déjà en place (mêmes clés DATA.slots, même date ISO réelle), sans
+// absences contiguës déjà en place (mêmes clés store.DATA.slots, même date ISO réelle), sans
 // avoir à synchroniser deux structures de données en parallèle.
 function decisionKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}_decision`; }
 function decisionCommentKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}_decision_comment`; }
-function getLeaveDecision(isoDate, personId, slot){ return DATA.slots[decisionKey(isoDate,personId,slot)] || null; }
+function getLeaveDecision(isoDate, personId, slot){ return store.DATA.slots[decisionKey(isoDate,personId,slot)] || null; }
 function setLeaveDecision(isoDate, personId, slot, decision){
   const key = decisionKey(isoDate,personId,slot);
-  if(decision) DATA.slots[key] = decision; else delete DATA.slots[key];
+  if(decision) store.DATA.slots[key] = decision; else delete store.DATA.slots[key];
 }
-function getLeaveDecisionComment(isoDate, personId, slot){ return DATA.slots[decisionCommentKey(isoDate,personId,slot)] || ''; }
+function getLeaveDecisionComment(isoDate, personId, slot){ return store.DATA.slots[decisionCommentKey(isoDate,personId,slot)] || ''; }
 function setLeaveDecisionComment(isoDate, personId, slot, text){
   const key = decisionCommentKey(isoDate,personId,slot);
-  if(text) DATA.slots[key] = text; else delete DATA.slots[key];
+  if(text) store.DATA.slots[key] = text; else delete store.DATA.slots[key];
 }
 // Modifications urgentes dans les 14 jours à venir (vue mensuelle ASV uniquement)
 function changeKey(iso, pid, slot){ return `${iso}_${pid}_${slot}_chg`; }
-function getChangeDecision(iso, pid, slot){ return DATA.slots[changeKey(iso,pid,slot)] || null; }
+function getChangeDecision(iso, pid, slot){ return store.DATA.slots[changeKey(iso,pid,slot)] || null; }
 function setChangeDecision(iso, pid, slot, dec){
   const k = changeKey(iso,pid,slot);
-  if(dec) DATA.slots[k] = dec; else delete DATA.slots[k];
+  if(dec) store.DATA.slots[k] = dec; else delete store.DATA.slots[k];
 }
 // Retourne true si la date ISO est dans les 14 prochains jours (aujourd'hui inclus)
 function isWithinNextTwoWeeks(iso){
@@ -1287,23 +1196,23 @@ function isWithinNextTwoWeeks(iso){
 // Heures supplémentaires ASV — un nombre d'heures par personne et par jour (pas par
 // demi-journée : une ASV peut faire 1h30 de plus sans que ça corresponde à un créneau M/AM).
 function overtimeKey(isoDate, personId){ return `${isoDate}_${personId}_overtime`; }
-function getOvertimeHours(isoDate, personId){ return parseFloat(DATA.slots[overtimeKey(isoDate,personId)]) || 0; }
+function getOvertimeHours(isoDate, personId){ return parseFloat(store.DATA.slots[overtimeKey(isoDate,personId)]) || 0; }
 function setOvertimeHours(isoDate, personId, hours){
   const key = overtimeKey(isoDate, personId);
   const n = parseFloat(hours);
-  if(!isNaN(n) && n !== 0) DATA.slots[key] = n; else delete DATA.slots[key];
+  if(!isNaN(n) && n !== 0) store.DATA.slots[key] = n; else delete store.DATA.slots[key];
 }
 
-function getSlotState(isoDate, personId, slot){ return DATA.slots[slotKey(isoDate,personId,slot)] || 'empty'; }
+function getSlotState(isoDate, personId, slot){ return store.DATA.slots[slotKey(isoDate,personId,slot)] || 'empty'; }
 function setSlotState(isoDate, personId, slot, state){
   const key = slotKey(isoDate,personId,slot);
-  const wasAbsent = DATA.slots[key] === 'absent';
+  const wasAbsent = store.DATA.slots[key] === 'absent';
   if(state === 'empty'){
-    delete DATA.slots[key];
-    delete DATA.slots[labelKey(isoDate,personId,slot)];
+    delete store.DATA.slots[key];
+    delete store.DATA.slots[labelKey(isoDate,personId,slot)];
   } else {
-    DATA.slots[key] = state;
-    if(state !== 'absent') delete DATA.slots[labelKey(isoDate,personId,slot)];
+    store.DATA.slots[key] = state;
+    if(state !== 'absent') delete store.DATA.slots[labelKey(isoDate,personId,slot)];
   }
   if(isASVPerson(personId)){
     if(state === 'absent' && !wasAbsent){
@@ -1319,15 +1228,15 @@ function setSlotState(isoDate, personId, slot, state){
     }
   }
 }
-function getSlotLabel(isoDate, personId, slot){ return DATA.slots[labelKey(isoDate,personId,slot)] || ''; }
+function getSlotLabel(isoDate, personId, slot){ return store.DATA.slots[labelKey(isoDate,personId,slot)] || ''; }
 function setSlotLabel(isoDate, personId, slot, label){
   const key = labelKey(isoDate,personId,slot);
-  if(label) DATA.slots[key] = label; else delete DATA.slots[key];
+  if(label) store.DATA.slots[key] = label; else delete store.DATA.slots[key];
 }
-function getDayComment(isoDate){ return DATA.slots[commentKey(isoDate)] || ''; }
+function getDayComment(isoDate){ return store.DATA.slots[commentKey(isoDate)] || ''; }
 function setDayComment(isoDate, text){
   const key = commentKey(isoDate);
-  if(text) DATA.slots[key] = text; else delete DATA.slots[key];
+  if(text) store.DATA.slots[key] = text; else delete store.DATA.slots[key];
 }
 // Cycle d'état d'une demi-journée : vide -> présent -> absent -> vide
 function cycleState(state){
@@ -1417,8 +1326,8 @@ function seedDemoData(){
    ---------------------------------------------------------------- */
 function buildSettingsMenuHtml(){
   const isVet = canAccessSettings();
-  const isAdmin = currentUser?.role === 'admin';
-  const userName = currentUser?.display_name || currentUser?.email || '';
+  const isAdmin = store.currentUser?.role === 'admin';
+  const userName = store.currentUser?.display_name || store.currentUser?.email || '';
   return `
     ${isVet ? `
       <div class="settings-section-label">Personnalisation</div>
@@ -1438,7 +1347,7 @@ function buildSettingsMenuHtml(){
     ` : ''}
     ${isAdmin ? `
       <div class="settings-section-label">Mode d'affichage</div>
-      <button id="action-toggle-view" role="menuitem">👁 ${adminViewMode === 'asv' ? 'Passer en vue Vétérinaires' : 'Passer en vue ASV'}</button>
+      <button id="action-toggle-view" role="menuitem">👁 ${store.adminViewMode === 'asv' ? 'Passer en vue Vétérinaires' : 'Passer en vue ASV'}</button>
       <hr>
     ` : ''}
     <div class="settings-section-label">Notifications</div>
@@ -1455,7 +1364,7 @@ function buildSettingsMenuHtml(){
 function updateHeaderUsername(){
   const el = document.getElementById('header-username');
   if(!el) return;
-  const name = currentUser?.display_name || currentUser?.email || '';
+  const name = store.currentUser?.display_name || store.currentUser?.email || '';
   el.textContent = name ? name : '';
   el.style.display = name ? 'inline' : 'none';
 }
@@ -1486,7 +1395,7 @@ function initSettingsMenu(){
       menu.classList.remove('open'); openCalendarSyncModal();
     });
     document.getElementById('action-export').addEventListener('click', ()=>{
-      const blob = new Blob([JSON.stringify(DATA, null, 2)], { type:'application/json' });
+      const blob = new Blob([JSON.stringify(store.DATA, null, 2)], { type:'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = `amivet_planning_${fmtISO(new Date())}.json`;
@@ -1503,7 +1412,7 @@ function initSettingsMenu(){
         try{
           const parsed = JSON.parse(reader.result);
           if(!parsed || typeof parsed.slots !== 'object') throw new Error('Format invalide');
-          snapshotBeforeChange(); DATA = parsed; saveData(false); renderCurrentView();
+          snapshotBeforeChange(); store.DATA = parsed; saveData(false); renderCurrentView();
           showToast('Import réussi', '⬆️');
         }catch{ showToast('Fichier JSON invalide', '⚠️'); }
         fileInput.value = '';
@@ -1515,13 +1424,13 @@ function initSettingsMenu(){
     });
   }
 
-  if(currentUser?.role === 'admin'){
+  if(store.currentUser?.role === 'admin'){
     document.getElementById('action-toggle-view').addEventListener('click', ()=>{
       menu.classList.remove('open');
-      if(adminViewMode === 'asv'){
+      if(store.adminViewMode === 'asv'){
         // Déjà en mode ASV → retour immédiat
-        adminViewMode = 'vet';
-        adminImpersonatedPersonId = null;
+        store.adminViewMode = 'vet';
+        store.adminImpersonatedPersonId = null;
         applyRoleToDOM();
         initSettingsMenu();
         renderCurrentView();
@@ -1897,7 +1806,7 @@ function openResetYearModal(year, isForecast){
     confirmLabel:`Réinitialiser ${year}`,
     onConfirm:()=>{
       snapshotBeforeChange();
-      Object.keys(DATA.slots).filter(k=>k.startsWith(`${year}-`)).forEach(k=> delete DATA.slots[k]);
+      Object.keys(store.DATA.slots).filter(k=>k.startsWith(`${year}-`)).forEach(k=> delete store.DATA.slots[k]);
       saveData();
       renderCurrentView();
       showToast(`${year} réinitialisé`, '🗑️');
@@ -1986,10 +1895,10 @@ function getWeekMondayDate(date){
 }
 function weekPersonId(){
   // Admin en impersonation → la personne choisie (ex. Marie)
-  if(currentUser?.role === 'admin' && adminViewMode === 'asv')
-    return adminImpersonatedPersonId || ASV_PEOPLE[0]?.id;
+  if(store.currentUser?.role === 'admin' && store.adminViewMode === 'asv')
+    return store.adminImpersonatedPersonId || ASV_PEOPLE[0]?.id;
   // ASV authentifiée → toujours soi-même
-  if(effectiveRole() === 'asv') return currentUser?.person_id || ASV_PEOPLE[0]?.id;
+  if(effectiveRole() === 'asv') return store.currentUser?.person_id || ASV_PEOPLE[0]?.id;
   // Vétérinaires / admin (vue normale) → sélecteur dans la vue
   return weekNavState.personId || ASV_PEOPLE[0]?.id;
 }
@@ -2387,7 +2296,7 @@ function renderWeekViewASV(){
     };
   }
   if(isVetUser) container.querySelector('#week-asv-pick').onchange=(e)=>{ weekNavState.personId=e.target.value; renderWeekViewASV(); };
-  container.querySelectorAll('.week-shift-btn').forEach(btn=>{ btn.addEventListener('click',()=>{ const iso2=btn.dataset.shiftIso,pid2=btn.dataset.shiftPid; DATA.slots[shiftTypeKey(iso2,pid2)]=getShiftType(iso2,pid2)==='O'?'F':'O'; saveData(false); renderWeekViewASV(); }); });
+  container.querySelectorAll('.week-shift-btn').forEach(btn=>{ btn.addEventListener('click',()=>{ const iso2=btn.dataset.shiftIso,pid2=btn.dataset.shiftPid; store.DATA.slots[shiftTypeKey(iso2,pid2)]=getShiftType(iso2,pid2)==='O'?'F':'O'; saveData(false); renderWeekViewASV(); }); });
 }
 
 
@@ -2480,7 +2389,7 @@ function goToToday(viewKey){
   renderCalendarView(viewKey);
 }
 
-// Calcule classes + contenu d'une cellule demi-journée à partir de DATA. Pour une absence
+// Calcule classes + contenu d'une cellule demi-journée à partir de store.DATA. Pour une absence
 // ASV, l'apparence dépend aussi du statut de la demande de congé (en attente / approuvée /
 // refusée) — sans changement pour les vétérinaires, qui n'ont pas ce concept.
 function cellRenderInfo(iso, personId, slot){
@@ -2788,7 +2697,7 @@ function blockIfOver42h(pid, isoDate){
   const mon = getWeekMondayDate(new Date(isoDate + 'T00:00:00'));
   const weekH = computeWeekTotalHours(pid, mon);
   if(weekH > WEEKLY_MAX_HOURS){
-    if(UNDO_STACK.length > 0){ DATA.slots = JSON.parse(UNDO_STACK.pop()); updateUndoButtons(); }
+    if(UNDO_STACK.length > 0){ store.DATA.slots = JSON.parse(UNDO_STACK.pop()); updateUndoButtons(); }
     saveData(false);
     showToast(`Plafond 42h dépassé (${formatHHMM(weekH)}) — saisie annulée`, '🚫');
     return true;
@@ -2845,8 +2754,8 @@ function getWeekAlerts(personId, sundayISO){
     }
     // Même poste les jours de semaine (pas samedi) — uniquement via shiftType stocké (pas TE)
     if(present.length === 2 && dt.getDay() !== 6){
-      const s0 = DATA.slots[shiftTypeKey(iso2, present[0].id)] || null;
-      const s1 = DATA.slots[shiftTypeKey(iso2, present[1].id)] || null;
+      const s0 = store.DATA.slots[shiftTypeKey(iso2, present[0].id)] || null;
+      const s1 = store.DATA.slots[shiftTypeKey(iso2, present[1].id)] || null;
       if(s0 && s1 && s0 === s1){
         sameShiftIssues.push(`${DAY_MINI[d]}:2×${s0==='O'?'Ouv':'Fer'} (${present.map(q=>q.short).join('+')})`);
       }
@@ -3297,8 +3206,8 @@ function buildSignaturePanelHtml(viewKey){
                 return `<span class="text-muted" style="font-size:12.5px;">✅ Signé par ${escapeHTML(detail.signedName)} le ${signedDate}</span>`;
               })()
             : '';
-          const isOwn = currentUser?.person_id === p.id && currentUser?.role === 'asv';
-          const isAdminOrVet = currentUser?.role === 'admin' || currentUser?.role === 'vet';
+          const isOwn = store.currentUser?.person_id === p.id && store.currentUser?.role === 'asv';
+          const isAdminOrVet = store.currentUser?.role === 'admin' || store.currentUser?.role === 'vet';
           const asvPendingNote = isOwn && !detail
             ? `<span class="text-muted" style="font-size:12px;font-style:italic;">La signature s'effectue via le lien envoyé par email par le vétérinaire.</span>`
             : '';
@@ -3358,40 +3267,7 @@ async function adminRequestSignature(viewKey, personId){
   }
 }
 
-// Modal de fallback : affiche le lien de signature à copier/partager quand l'email échoue.
-function openSigningLinkModal(signingLink, recipientLabel, emailError){
-  const backdrop = document.getElementById('modal-backdrop');
-  const box = document.getElementById('modal-box');
-  box.className = 'modal-box';
-  box.innerHTML = `
-    <h3>🔗 Lien de signature</h3>
-    <p style="font-size:13.5px;color:var(--color-text-muted);margin-bottom:14px;">
-      L'email n'a pas pu être envoyé à <strong>${escapeHTML(recipientLabel)}</strong>.
-      ${emailError ? `<br><small style="color:var(--color-text-muted);word-break:break-all;">${escapeHTML(emailError)}</small><br>` : ''}
-      Copiez ce lien et transmettez-le directement à la personne concernée — il est valable 7 jours et à usage unique.
-    </p>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <input type="text" id="signing-link-input" value="${escapeHTML(signingLink)}"
-        readonly style="flex:1;font-size:11px;padding:8px 10px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-surface-alt);color:var(--color-text-muted);cursor:text;">
-      <button class="btn btn-primary" id="copy-signing-link" style="white-space:nowrap;flex-shrink:0;">📋 Copier</button>
-    </div>
-    <div class="modal-actions" style="margin-top:16px;">
-      <button class="btn" id="modal-cancel">Fermer</button>
-    </div>
-  `;
-  backdrop.classList.add('open');
-  const close = ()=> backdrop.classList.remove('open');
-  box.querySelector('#modal-cancel').onclick = close;
-  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
-  box.querySelector('#copy-signing-link').onclick = ()=>{
-    navigator.clipboard.writeText(signingLink).then(()=>{
-      box.querySelector('#copy-signing-link').textContent = '✅ Copié !';
-      setTimeout(()=>{ box.querySelector('#copy-signing-link').textContent = '📋 Copier'; }, 2000);
-    });
-  };
-  box.querySelector('#signing-link-input').onclick = (e)=> e.target.select();
-}
-
+/* signatures.js — openSigningLinkModal, requestSignatureEmail (reste ici), openSignConfirmModal */
 // Demande de signature : envoie un email à l'ASV avec le récap du mois + lien unique.
 // La vraie signature n'est enregistrée que lorsqu'elle clique ce lien (confirm-signature).
 async function requestSignatureEmail(viewKey, personId){
@@ -3408,65 +3284,17 @@ async function requestSignatureEmail(viewKey, personId){
     const data = await res.json();
     if(!data.ok) throw new Error(data.error || 'Erreur inconnue');
     if(data.email_sent){
-      showToast(`Email de signature envoyé à ${currentUser.email}`, '📧');
+      showToast(`Email de signature envoyé à ${store.currentUser.email}`, '📧');
       renderCalendarView(viewKey);
     } else {
       // Resend ne peut pas envoyer à cet email (plan gratuit) — afficher le lien à copier
-      openSigningLinkModal(data.signing_link, currentUser.email);
+      openSigningLinkModal(data.signing_link, store.currentUser.email);
       renderCalendarView(viewKey);
     }
   }catch(e){
     showToast(`Échec — ${e.message || 'erreur réseau'}`, '❌');
     if(btn){ btn.disabled = false; btn.textContent = 'Signer ma feuille de présence'; }
   }
-}
-
-// Affiche le modal de confirmation de signature (déclenché après ouverture du lien email).
-function openSignConfirmModal(tokenId){
-  const backdrop = document.getElementById('modal-backdrop');
-  const box = document.getElementById('modal-box');
-  box.className = 'modal-box';
-  box.innerHTML = `
-    <h3>✍️ Confirmer ma signature</h3>
-    <p style="margin-bottom:12px;">Vous allez signer électroniquement votre feuille de présence. Votre identité, email et l'horodatage seront enregistrés de façon permanente.</p>
-    <div style="background:#F0FDF9;border:1px solid #99F6E4;border-radius:8px;padding:12px 14px;font-size:13px;color:#0F766E;margin-bottom:14px;line-height:1.6;">
-      <strong>Signataire :</strong> ${escapeHTML(currentUser.display_name || currentUser.email)}<br>
-      <strong>Email :</strong> ${escapeHTML(currentUser.email)}
-    </div>
-    <p id="sign-confirm-error" style="color:#B91C1C;font-size:12px;display:none;margin:0 0 10px;"></p>
-    <div class="modal-actions" style="margin-top:4px;">
-      <button class="btn" id="modal-cancel">Annuler</button>
-      <button class="btn btn-primary" id="sign-do-confirm">✍️ Confirmer ma signature</button>
-    </div>
-  `;
-  backdrop.classList.add('open');
-  const close = ()=> backdrop.classList.remove('open');
-  box.querySelector('#modal-cancel').onclick = close;
-  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
-  box.querySelector('#sign-do-confirm').onclick = async ()=>{
-    const confirmBtn = box.querySelector('#sign-do-confirm');
-    const errorEl = box.querySelector('#sign-confirm-error');
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = 'Signature en cours…';
-    try{
-      const res = await fetch(`${SUPABASE_FUNCTIONS_URL}confirm-signature`, {
-        method: 'POST',
-        headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ token_id: tokenId }),
-      });
-      const data = await res.json();
-      if(!data.ok) throw new Error(data.error || 'Erreur inconnue');
-      close();
-      await loadSignatures();
-      renderCalendarView('asv-current');
-      showToast('Feuille de présence signée — email de confirmation envoyé', '✅');
-    }catch(e){
-      errorEl.textContent = e.message || 'Échec de la signature.';
-      errorEl.style.display = 'block';
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = '✍️ Confirmer ma signature';
-    }
-  };
 }
 
 function renderCalendarView(viewKey){
@@ -3499,258 +3327,7 @@ function renderCalendarView(viewKey){
 VIEW_RENDERERS['vets'] = ()=> renderGroupSubPage('vets');
 VIEW_RENDERERS['asv'] = ()=> renderGroupSubPage('asv');
 VIEW_RENDERERS['annonces'] = renderAnnounces;
-
-/* ----------------------------------------------------------------
-   MODULE ANNONCES — renderAnnounces()
-   ---------------------------------------------------------------- */
-function renderAnnounces(){
-  const container = document.getElementById('view-annonces');
-  const isAdmin = currentUser?.role === 'admin';
-  const role = currentUser?.role;
-  const viewerId = annonceViewerId();
-
-  const now = new Date();
-  const allList = announcementsCache.list;
-  const active = allList.filter(a => {
-    if(a.target_roles === 'vet' && role === 'asv') return false;
-    if(a.target_roles === 'asv' && (role === 'vet' || role === 'admin')) return false;
-    return true;
-  });
-  const filterCat = announcementsCache.filter;
-
-  const filtered = filterCat === 'all' ? active : active.filter(a => a.category === filterCat);
-
-  function fmtDate(iso){
-    const d = new Date(iso);
-    return d.toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' });
-  }
-  function authorName(id){
-    const p = allPeople().find(p => p.id === id);
-    return p ? (p.short || p.name) : id;
-  }
-
-  const cats = [
-    { id:'all', label:'Tout', icon:'📋' },
-    ...Object.entries(ANNONCE_CATEGORIES).map(([id, c]) => ({ id, label:c.label, icon:c.icon })),
-  ];
-  const filterBar = `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-    ${cats.map(c => `<button class="ann-filter-pill${filterCat===c.id?' active':''}" data-cat="${c.id}" style="border:1.5px solid ${filterCat===c.id?'var(--color-primary)':'var(--color-border)'};background:${filterCat===c.id?'var(--color-secondary)':'var(--color-card)'};color:${filterCat===c.id?'var(--color-primary)':'var(--color-text)'};padding:5px 12px;border-radius:20px;font-size:13px;cursor:pointer;">${c.icon} ${c.label}</button>`).join('')}
-    ${isAdmin ? `<button id="ann-new-btn" class="btn btn-sm" style="margin-left:auto;">+ Nouvelle annonce</button>` : ''}
-  </div>`;
-
-  function cardHtml(a){
-    const cat = ANNONCE_CATEGORIES[a.category] || ANNONCE_CATEGORIES.info;
-    const unread = !announcementsCache.reads.has(a.id);
-    const bg = unread ? cat.bg : 'var(--color-card)';
-    return `<div class="ann-card" data-ann-id="${a.id}" style="position:relative;border:1.5px solid ${a.pinned?cat.color:unread?cat.border:'var(--color-border)'};border-left:${a.pinned?`4px solid ${cat.color}`:''};border-radius:10px;padding:14px 16px;margin-bottom:10px;background:${bg};cursor:pointer;">
-      ${unread ? `<span style="position:absolute;top:10px;left:10px;width:8px;height:8px;border-radius:50%;background:#3B82F6;"></span>` : ''}
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
-        ${a.pinned?`<span style="font-size:13px;">📌</span>`:''}
-        <span style="background:${cat.bg};color:${cat.color};border:1px solid ${cat.border};border-radius:12px;padding:2px 8px;font-size:11.5px;font-weight:700;">${cat.icon} ${cat.label}</span>
-        <span style="font-size:12px;color:var(--color-muted);margin-left:auto;">${authorName(a.author_id)} · ${fmtDate(a.created_at)}</span>
-        ${isAdmin ? `<button class="ann-edit-btn btn btn-sm" data-ann-id="${a.id}" style="font-size:11.5px;padding:3px 8px;">✎</button>` : ''}
-      </div>
-      <div style="font-size:14.5px;font-weight:700;color:var(--color-text);margin-bottom:4px;">${escapeHTML(a.title)}</div>
-      <div style="font-size:13px;color:var(--color-text);line-height:1.55;white-space:pre-wrap;">${escapeHTML(a.content)}</div>
-    </div>`;
-  }
-
-  const listHtml = filtered.length
-    ? filtered.map(cardHtml).join('')
-    : `<p class="text-muted" style="margin-top:16px;">Aucune annonce pour le moment.</p>`;
-
-  container.innerHTML = `
-    <h2 class="section-title">📣 Tableau d'annonces</h2>
-    <div style="margin-bottom:14px;">${filterBar}</div>
-    <div id="ann-list">${listHtml}</div>
-    <details id="ann-archives" style="margin-top:24px;">
-      <summary style="cursor:pointer;font-size:13.5px;color:var(--color-muted);font-weight:600;user-select:none;">📁 Archives (annonces expirées)</summary>
-      <div id="ann-archives-list" style="margin-top:10px;opacity:0.6;"></div>
-    </details>
-  `;
-
-  container.querySelectorAll('.ann-filter-pill').forEach(btn => {
-    btn.onclick = ()=>{ announcementsCache.filter = btn.dataset.cat; renderAnnounces(); };
-  });
-
-  container.querySelectorAll('.ann-card').forEach(card => {
-    card.onclick = async (e) => {
-      if(e.target.closest('.ann-edit-btn')) return;
-      const annId = card.dataset.annId;
-      await markAnnouncementRead(annId);
-      card.style.background = 'var(--color-card)';
-      const dot = card.querySelector('span[style*="#3B82F6"]');
-      if(dot) dot.remove();
-    };
-  });
-
-  container.querySelectorAll('.ann-edit-btn').forEach(btn => {
-    btn.onclick = (e) => { e.stopPropagation(); openAnnouncementModal(btn.dataset.annId); };
-  });
-
-  if(isAdmin){
-    container.querySelector('#ann-new-btn').onclick = ()=> openAnnouncementModal(null);
-  }
-
-  // Archives (lazy load)
-  container.querySelector('#ann-archives').addEventListener('toggle', async function(){
-    if(!this.open) return;
-    const archList = document.getElementById('ann-archives-list');
-    archList.textContent = 'Chargement…';
-    const archived = await loadArchivedAnnouncements();
-    if(!archived.length){ archList.innerHTML = '<p style="font-size:13px;color:var(--color-muted);">Aucune archive.</p>'; return; }
-    archList.innerHTML = archived.map(a => {
-      const cat = ANNONCE_CATEGORIES[a.category] || ANNONCE_CATEGORIES.info;
-      return `<div style="border:1px solid var(--color-border);border-radius:8px;padding:10px 14px;margin-bottom:8px;background:var(--color-card);">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;">
-          <span style="background:${cat.bg};color:${cat.color};border:1px solid ${cat.border};border-radius:12px;padding:2px 8px;font-size:11.5px;">${cat.icon} ${cat.label}</span>
-          <span style="font-size:12px;color:var(--color-muted);margin-left:auto;">${authorName(a.author_id)} · ${fmtDate(a.created_at)}</span>
-        </div>
-        <div style="font-size:13.5px;font-weight:600;">${escapeHTML(a.title)}</div>
-        <div style="font-size:12.5px;color:var(--color-muted);white-space:pre-wrap;">${escapeHTML(a.content)}</div>
-      </div>`;
-    }).join('');
-  });
-}
-
-function openAnnouncementModal(annId){
-  const isAdmin = currentUser?.role === 'admin';
-  if(!isAdmin) return;
-  const existing = annId ? announcementsCache.list.find(a => a.id === annId) : null;
-  const backdrop = document.getElementById('modal-backdrop');
-  const box = document.getElementById('modal-box');
-  box.className = 'modal-box';
-
-  const initCat = existing?.category || 'info';
-  const catOptions = Object.entries(ANNONCE_CATEGORIES).map(([k, c]) => {
-    const sel = k === initCat;
-    return `<button type="button" class="ann-cat-btn" data-cat="${k}" style="border:1.5px solid ${c.border};background:${sel?c.bg:'var(--color-card)'};color:${c.color};padding:5px 12px;border-radius:20px;font-size:13px;cursor:pointer;font-weight:${sel?'700':'400'};">${c.icon} ${c.label}</button>`;
-  }).join('');
-
-  box.innerHTML = `
-    <h3>${existing ? '✏️ Modifier l\'annonce' : '📣 Nouvelle annonce'}</h3>
-    <div style="display:flex;flex-direction:column;gap:12px;">
-      <div>
-        <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Titre <span id="ann-title-count" style="font-weight:400;color:var(--color-muted);">(${existing?.title?.length||0}/80)</span></label>
-        <input id="ann-title" type="text" maxlength="80" value="${escapeHTML(existing?.title||'')}" placeholder="Titre de l'annonce" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:6px;font-size:13.5px;background:var(--color-card);color:var(--color-text);">
-      </div>
-      <div>
-        <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Contenu</label>
-        <textarea id="ann-content" rows="4" placeholder="Contenu de l'annonce…" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;resize:vertical;background:var(--color-card);color:var(--color-text);">${escapeHTML(existing?.content||'')}</textarea>
-      </div>
-      <div>
-        <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:6px;">Catégorie</label>
-        <div id="ann-cat-btns" style="display:flex;flex-wrap:wrap;gap:6px;">${catOptions}</div>
-        <input type="hidden" id="ann-cat-val" value="${existing?.category||'info'}">
-      </div>
-      <div>
-        <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:6px;">Destinataires</label>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          ${[['all','Tout le monde'],['vet','Vétérinaires uniquement'],['asv','ASV uniquement']].map(([v,l])=>
-            `<label style="font-size:13px;display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="ann-roles" value="${v}" ${(existing?.target_roles||'all')===v?'checked':''}> ${l}</label>`
-          ).join('')}
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <label style="font-size:12.5px;font-weight:600;">📌 Épingler en haut</label>
-        <input type="checkbox" id="ann-pinned" ${existing?.pinned?'checked':''}>
-      </div>
-      <div>
-        <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px;">Date d'expiration (optionnel)</label>
-        <input id="ann-expires" type="date" value="${existing?.expires_at?existing.expires_at.slice(0,10):''}" style="padding:6px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;background:var(--color-card);color:var(--color-text);">
-      </div>
-    </div>
-    <div class="modal-actions" style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap;">
-      ${existing?`<button class="btn btn-danger" id="ann-delete-btn" style="margin-right:auto;">🗑️ Supprimer</button>`:''}
-      <button class="btn" id="ann-cancel-btn">Annuler</button>
-      <button class="btn btn-primary" id="ann-save-btn">${existing?'Mettre à jour':'Publier'}</button>
-    </div>
-  `;
-  backdrop.classList.add('open');
-  const close = ()=> backdrop.classList.remove('open');
-
-  box.querySelector('#ann-cancel-btn').onclick = close;
-  backdrop.onclick = e => { if(e.target===backdrop) close(); };
-
-  const titleInput = box.querySelector('#ann-title');
-  const countEl = box.querySelector('#ann-title-count');
-  titleInput.oninput = ()=> { countEl.textContent = `(${titleInput.value.length}/80)`; };
-
-  box.querySelectorAll('.ann-cat-btn').forEach(btn => {
-    btn.onclick = ()=>{
-      box.querySelector('#ann-cat-val').value = btn.dataset.cat;
-      box.querySelectorAll('.ann-cat-btn').forEach(b => {
-        const c = ANNONCE_CATEGORIES[b.dataset.cat];
-        b.style.background = 'var(--color-card)'; b.style.fontWeight = '400';
-      });
-      const selC = ANNONCE_CATEGORIES[btn.dataset.cat];
-      btn.style.background = selC.bg; btn.style.fontWeight = '700';
-    };
-  });
-
-  if(existing){
-    box.querySelector('#ann-delete-btn').onclick = async ()=>{
-      if(!confirm(`Supprimer l'annonce "${existing.title}" ?`)) return;
-      try{
-        await fetch(`${SUPABASE_URL}announcements?id=eq.${existing.id}`, {
-          method: 'DELETE', headers: supabaseHeaders({ Prefer:'return=minimal' }),
-        });
-        announcementsCache.list = announcementsCache.list.filter(a => a.id !== existing.id);
-        close(); updateAnnouncementBadge(); renderAnnounces();
-        showToast('Annonce supprimée', '🗑️');
-      }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
-    };
-  }
-
-  box.querySelector('#ann-save-btn').onclick = async ()=>{
-    const title = box.querySelector('#ann-title').value.trim();
-    const content = box.querySelector('#ann-content').value.trim();
-    const category = box.querySelector('#ann-cat-val').value;
-    const target_roles = box.querySelector('input[name="ann-roles"]:checked')?.value || 'all';
-    const pinned = box.querySelector('#ann-pinned').checked;
-    const expiresVal = box.querySelector('#ann-expires').value;
-    const expires_at = expiresVal ? new Date(expiresVal + 'T23:59:59').toISOString() : null;
-    if(!title || !content){ showToast('Titre et contenu requis', '⚠️'); return; }
-    const author_id = annonceViewerId();
-    try{
-      let ann;
-      if(existing){
-        const res = await fetch(`${SUPABASE_URL}announcements?id=eq.${existing.id}`, {
-          method: 'PATCH',
-          headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=representation' }),
-          body: JSON.stringify({ title, content, category, target_roles, pinned, expires_at }),
-        });
-        if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.message||`Erreur ${res.status}`); }
-        [ann] = await res.json();
-        announcementsCache.list = announcementsCache.list.map(a => a.id===ann.id?ann:a);
-      } else {
-        const res = await fetch(`${SUPABASE_URL}announcements`, {
-          method: 'POST',
-          headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=representation' }),
-          body: JSON.stringify({ title, content, category, target_roles, pinned, expires_at, author_id }),
-        });
-        if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.message||`Erreur ${res.status}`); }
-        [ann] = await res.json();
-        if(pinned) announcementsCache.list = [ann, ...announcementsCache.list];
-        else announcementsCache.list = [ann, ...announcementsCache.list].sort((a,b) => (b.pinned?1:0)-(a.pinned?1:0));
-      }
-      close(); updateAnnouncementBadge(); renderAnnounces();
-      showToast(existing?'Annonce mise à jour':'Annonce publiée', '📣');
-      if(!existing && typeof triggerPushNotification === 'function'){
-        const targetUsers = target_roles === 'vet' ? ['david','stephane']
-          : target_roles === 'asv' ? ASV_PEOPLE.map(p=>p.id)
-          : [];
-        triggerPushNotification({
-          type: 'announcement',
-          title: `📣 ${title}`,
-          body: content.length > 120 ? content.slice(0,117)+'…' : content,
-          targetUsers,
-          data: { type:'announcement' },
-        });
-      }
-    }catch(e){ showToast('Erreur : '+e.message, '⚠️'); }
-  };
-}
+/* announcements.js — renderAnnounces, openAnnouncementModal */
 
 /* ----------------------------------------------------------------
    13. INTERACTIONS CALENDRIER (clic, glisser-peindre, popovers, sidebar)
@@ -3809,10 +3386,10 @@ function applyPaint(cell, value){
   dragCtx.touched.add(`${iso}|${personId}|${slot}`);
   if(dragCtx.paintMode === 'opening'){
     setSlotState(iso, personId, slot, 'present');
-    DATA.slots[shiftTypeKey(iso, personId)] = 'O';
+    store.DATA.slots[shiftTypeKey(iso, personId)] = 'O';
   } else if(dragCtx.paintMode === 'closing'){
     setSlotState(iso, personId, slot, 'present');
-    DATA.slots[shiftTypeKey(iso, personId)] = 'F';
+    store.DATA.slots[shiftTypeKey(iso, personId)] = 'F';
   } else if(dragCtx.paintMode === 'repos'){
     setSlotState(iso, personId, slot, 'absent');
     setSlotLabel(iso, personId, slot, 'Repos planifié');
@@ -3823,7 +3400,7 @@ function applyPaint(cell, value){
   } else if(dragCtx.paintMode === 'erase'){
     setSlotState(iso, personId, slot, 'empty');
     setSlotLabel(iso, personId, slot, '');
-    delete DATA.slots[shiftTypeKey(iso, personId)];
+    delete store.DATA.slots[shiftTypeKey(iso, personId)];
     setChangeDecision(iso, personId, slot, null); // effacement = plus de demande d'approbation
   } else {
     setSlotState(iso, personId, slot, value);
@@ -4689,7 +4266,7 @@ function computeOvertimeStats(year){
 
 // Poste (ouverture / fermeture) par jour/personne
 function shiftTypeKey(iso,pid){ return `${iso}_${pid}_shift`; }
-function getShiftType(iso,pid){ return DATA.slots[shiftTypeKey(iso,pid)] || 'O'; }
+function getShiftType(iso,pid){ return store.DATA.slots[shiftTypeKey(iso,pid)] || 'O'; }
 function timeToMins(t){ if(!t)return 0; const[h,m]=t.split(':').map(Number); return h*60+(m||0); }
 // Heures nominales par jour selon poste et jour de semaine
 function getDayNominal(iso,pid){
@@ -4699,8 +4276,8 @@ function getDayNominal(iso,pid){
 }
 // Départ anticipé (vue semaine)
 function earlyDepKey(iso,pid){ return `${iso}_${pid}_early_dep`; }
-function getEarlyDep(iso,pid){ return DATA.slots[earlyDepKey(iso,pid)]||''; }
-function setEarlyDep(iso,pid,v){ if(v) DATA.slots[earlyDepKey(iso,pid)]=v; else delete DATA.slots[earlyDepKey(iso,pid)]; }
+function getEarlyDep(iso,pid){ return store.DATA.slots[earlyDepKey(iso,pid)]||''; }
+function setEarlyDep(iso,pid,v){ if(v) store.DATA.slots[earlyDepKey(iso,pid)]=v; else delete store.DATA.slots[earlyDepKey(iso,pid)]; }
 // Heures déficitaires (départ avant fin standard du poste)
 function getDayDeficitH(iso,pid){
   const early=getEarlyDep(iso,pid);
@@ -4710,17 +4287,17 @@ function getDayDeficitH(iso,pid){
 }
 // Heures supplémentaires semaine (zone drag, stockées en minutes entières)
 function weekOtKey(iso,pid){ return `${iso}_${pid}_ot_mins`; }
-function getWeekOtMins(iso,pid){ return parseInt(DATA.slots[weekOtKey(iso,pid)],10)||0; }
-function setWeekOtMins(iso,pid,v){ if(v>0) DATA.slots[weekOtKey(iso,pid)]=v; else delete DATA.slots[weekOtKey(iso,pid)]; }
+function getWeekOtMins(iso,pid){ return parseInt(store.DATA.slots[weekOtKey(iso,pid)],10)||0; }
+function setWeekOtMins(iso,pid,v){ if(v>0) store.DATA.slots[weekOtKey(iso,pid)]=v; else delete store.DATA.slots[weekOtKey(iso,pid)]; }
 function getDayOtH(iso,pid){ return getWeekOtMins(iso,pid)/60; }
 function lunchOtKey(iso,pid){ return `${iso}_${pid}_lunch_ot_mins`; }
-function getLunchOtMins(iso,pid){ return parseInt(DATA.slots[lunchOtKey(iso,pid)],10)||0; }
-function setLunchOtMins(iso,pid,v){ if(v>0) DATA.slots[lunchOtKey(iso,pid)]=v; else delete DATA.slots[lunchOtKey(iso,pid)]; }
+function getLunchOtMins(iso,pid){ return parseInt(store.DATA.slots[lunchOtKey(iso,pid)],10)||0; }
+function setLunchOtMins(iso,pid,v){ if(v>0) store.DATA.slots[lunchOtKey(iso,pid)]=v; else delete store.DATA.slots[lunchOtKey(iso,pid)]; }
 function getDayLunchOtH(iso,pid){ return getLunchOtMins(iso,pid)/60; }
 function getDayAllOtH(iso,pid){ return getDayOtH(iso,pid)+getDayLunchOtH(iso,pid); }
 function dayNoteKey(iso,pid){ return `${iso}_${pid}_day_note`; }
-function getDayNote(iso,pid){ return DATA.slots[dayNoteKey(iso,pid)]||''; }
-function setDayNote(iso,pid,v){ if(v) DATA.slots[dayNoteKey(iso,pid)]=v; else delete DATA.slots[dayNoteKey(iso,pid)]; }
+function getDayNote(iso,pid){ return store.DATA.slots[dayNoteKey(iso,pid)]||''; }
+function setDayNote(iso,pid,v){ if(v) store.DATA.slots[dayNoteKey(iso,pid)]=v; else delete store.DATA.slots[dayNoteKey(iso,pid)]; }
 // Outil de peinture mensuelle ASV : 'opening' | 'closing' | 'repos' | 'conge' | 'maladie'
 let calMonthPaintMode = 'opening';
 // État de navigation de la vue semaine (outil : 'earlyDep' | 'overtime')
@@ -5017,7 +4594,7 @@ function renderDashboardInterviews(){
   const year = dashState.year;
   const cy = getCurrentYear();
 
-  function getInterview(personId){ return INTERVIEWS.find(i=>i.person_id===personId && i.year===year); }
+  function getInterview(personId){ return store.INTERVIEWS.find(i=>i.person_id===personId && i.year===year); }
   function isoToFR(iso){ if(!iso) return ''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
   function statusBadge(itv){
     if(!itv || itv.status==='pending')
@@ -5069,7 +4646,7 @@ function renderDashboardInterviews(){
 
 function openInterviewModal(personId, year){
   const p = personOf(personId);
-  const existing = INTERVIEWS.find(i=>i.person_id===personId && i.year===year) || {};
+  const existing = store.INTERVIEWS.find(i=>i.person_id===personId && i.year===year) || {};
   const itvId = existing.id || null;
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
@@ -5709,17 +5286,17 @@ function getCPTakenDays(personId, startISO, endISO){
   let halfDays = 0;
   const isASV = isASVPerson(personId);
   const labelRe = /cp|cong[eé]/i;
-  for(const key of Object.keys(DATA.slots)){
+  for(const key of Object.keys(store.DATA.slots)){
     const m = key.match(/^(\d{4}-\d{2}-\d{2})_(.+)_(M|AM)$/);
     if(!m) continue;
     const [,iso,pid] = m;
     if(pid !== personId) continue;
     if(iso < startISO || iso > endISO) continue;
-    if(DATA.slots[key] !== 'absent') continue;
+    if(store.DATA.slots[key] !== 'absent') continue;
     if(isASV){
       // ASV : seules les absences avec motif CP/Congé comptent (les autres motifs
       // comme Maladie ou Formation ne consomment pas de CP)
-      const label = DATA.slots[key.replace(/_(M|AM)$/, '_$1_label')] || '';
+      const label = store.DATA.slots[key.replace(/_(M|AM)$/, '_$1_label')] || '';
       if(!labelRe.test(label)) continue;
     }
     // Vétérinaires : toute absence = CP (pas de workflow de demande de congé)
@@ -5753,7 +5330,7 @@ function getCPAcquired(person, referenceYear){
 function renderGroupConges(group, containerId){
   const container = document.getElementById(containerId || `${group}-sub-conges`);
   if(!container) return;
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = store.currentUser?.role === 'admin';
   const cy = getCurrentYear();
   if(!renderGroupConges._year) renderGroupConges._year = {};
   let cpYear = (typeof renderGroupConges._year[group] === 'number') ? renderGroupConges._year[group] : cy;
@@ -5913,7 +5490,7 @@ function getAbsenteeismRate(personId, year, month){ // module absentéisme suppr
     for(let d=1; d<=daysInMonth; d++){
       const iso = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
       const key = `${iso}_${personId}_${slot}`;
-      if(DATA.slots[key] === 'absent'){
+      if(store.DATA.slots[key] === 'absent'){
         // For ASV: only count if decision is not 'rejected' (rejected means not absent)
         if(isASVPerson(personId)){
           const dec = getLeaveDecision(iso, personId, slot);
@@ -5959,7 +5536,7 @@ function getMedicalAlert(visit){
 
 function renderDashboardMedical(){
   const container = document.getElementById('dash-sub-medical');
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = store.currentUser?.role === 'admin';
   container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--color-muted);">Chargement…</div>';
 
   (async ()=>{
@@ -6023,11 +5600,11 @@ function renderDashboardMedical(){
         </table>
       </div>
       ${(()=>{
-        // Visites médicales marquées directement dans le calendrier (état 'medical' dans DATA.slots)
+        // Visites médicales marquées directement dans le calendrier (état 'medical' dans store.DATA.slots)
         const seen = {};
         const calEntries = [];
-        Object.keys(DATA.slots).forEach(key=>{
-          if(DATA.slots[key] !== 'medical') return;
+        Object.keys(store.DATA.slots).forEach(key=>{
+          if(store.DATA.slots[key] !== 'medical') return;
           const m = key.match(/^(\d{4}-\d{2}-\d{2})_([^_]+)_(M|AM)$/);
           if(!m) return;
           const [,iso,pid] = m;
@@ -6087,7 +5664,7 @@ function renderDashboardMedical(){
 }
 
 function openMedicalModal(existingVisit, allVisits, preselectedPid, onSaved){
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = store.currentUser?.role === 'admin';
   if(!isAdmin) return;
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
@@ -6388,20 +5965,20 @@ function renderAnnualViewForGroup(group){
 function renderImpersonationBanner(){
   const banner = document.getElementById('impersonation-banner');
   if(!banner) return;
-  if(currentUser?.role === 'admin' && adminViewMode === 'asv' && adminImpersonatedPersonId){
-    const p = personOf(adminImpersonatedPersonId);
+  if(store.currentUser?.role === 'admin' && store.adminViewMode === 'asv' && store.adminImpersonatedPersonId){
+    const p = personOf(store.adminImpersonatedPersonId);
     banner.classList.remove('hidden');
     banner.innerHTML = `
       <span>👁 Mode aperçu</span>
       <span style="display:inline-flex;align-items:center;gap:6px;">
         <span style="width:10px;height:10px;border-radius:50%;background:${p?.color||'#fff'};display:inline-block;"></span>
-        Vue de <strong>${escapeHTML(p?.short||adminImpersonatedPersonId)}</strong>
+        Vue de <strong>${escapeHTML(p?.short||store.adminImpersonatedPersonId)}</strong>
       </span>
       <button class="imp-back" id="imp-back-btn">← Retour à ma vue</button>
     `;
     document.getElementById('imp-back-btn').onclick = ()=>{
-      adminViewMode = 'vet';
-      adminImpersonatedPersonId = null;
+      store.adminViewMode = 'vet';
+      store.adminImpersonatedPersonId = null;
       applyRoleToDOM();
       initSettingsMenu();
       renderCurrentView();
@@ -6444,14 +6021,14 @@ function openASVImpersonationPicker(){
   backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
   box.querySelectorAll('[data-pick-asv]').forEach(btn=>{
     btn.onclick = ()=>{
-      adminImpersonatedPersonId = btn.dataset.pickAsv;
-      adminViewMode = 'asv';
+      store.adminImpersonatedPersonId = btn.dataset.pickAsv;
+      store.adminViewMode = 'asv';
       close();
       applyRoleToDOM();
       initSettingsMenu();
       if(currentView === 'dashboard') switchView('vets');
       else renderCurrentView();
-      showToast(`Vue ASV : ${personOf(adminImpersonatedPersonId)?.short}`, '👁');
+      showToast(`Vue ASV : ${personOf(store.adminImpersonatedPersonId)?.short}`, '👁');
     };
   });
 }
@@ -6476,8 +6053,8 @@ function initApp(){
   switchView(VIEW_RENDERERS[startView] ? startView : 'vets');
   syncFromSupabase().then(remoteSlots=>{
     if(remoteSlots !== null){
-      DATA = { version:2, slots: remoteSlots };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+      store.DATA = { version:2, slots: remoteSlots };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
       renderCurrentView();
       updateDashboardNavBadge();
     }
@@ -6487,9 +6064,9 @@ function initApp(){
   loadAnnouncements();
   document.getElementById('login-overlay').classList.add('hidden');
   // Ouvrir le modal de confirmation si l'utilisateur vient d'un lien de signature email
-  if(pendingSignToken){
-    const token = pendingSignToken;
-    pendingSignToken = null;
+  if(store.pendingSignToken){
+    const token = store.pendingSignToken;
+    store.pendingSignToken = null;
     openSignConfirmModal(token);
   }
   if(typeof handlePwaShortcutAction === 'function') handlePwaShortcutAction();
@@ -6514,7 +6091,7 @@ async function init(){
   // puis le traiter dans initApp() une fois l'utilisateur identifié.
   const signToken = query.get('sign');
   if(signToken){
-    pendingSignToken = signToken;
+    store.pendingSignToken = signToken;
     const cleanUrl = new URL(window.location.href);
     cleanUrl.searchParams.delete('sign');
     history.replaceState({}, '', cleanUrl.toString());
@@ -6528,233 +6105,17 @@ async function init(){
 }
 document.addEventListener('DOMContentLoaded', init);
 
-/* ----------------------------------------------------------------
-   17. ÉCRANS D'AUTHENTIFICATION
-   ---------------------------------------------------------------- */
-function renderLoginContent(html){ document.getElementById('login-content').innerHTML = html; }
-
-function renderLoginScreen(errorMsg=''){
-  document.getElementById('login-overlay').classList.remove('hidden');
-  renderLoginContent(`
-    <form class="login-form" id="login-form" novalidate>
-      <input type="email" id="login-email" placeholder="Adresse email" required autocomplete="email">
-      <input type="password" id="login-password" placeholder="Mot de passe" required autocomplete="current-password">
-      ${errorMsg ? `<p class="login-error">${escapeHTML(errorMsg)}</p>` : ''}
-      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:2px;">Se connecter</button>
-    </form>
-    <div class="login-footer">
-      <button type="button" class="link-button" id="forgot-btn">Mot de passe oublié ?</button>
-    </div>
-  `);
-  document.getElementById('login-form').onsubmit = async (e)=>{
-    e.preventDefault();
-    const email = document.getElementById('login-email').value.trim();
-    const pwd = document.getElementById('login-password').value;
-    const btn = e.target.querySelector('button[type=submit]');
-    btn.disabled = true; btn.textContent = 'Connexion…';
-    try{
-      await authSignIn(email, pwd);
-      const user = await loadCurrentUser();
-      if(!user) throw new Error('Profil introuvable — contactez un administrateur.');
-      initApp();
-    }catch(err){ renderLoginScreen(err.message || 'Identifiants incorrects.'); }
-  };
-  document.getElementById('forgot-btn').onclick = renderForgotPasswordScreen;
-}
-
-function renderForgotPasswordScreen(){
-  renderLoginContent(`
-    <form class="login-form" id="forgot-form" novalidate>
-      <p style="font-size:13px;color:var(--color-text-muted);margin-bottom:14px;text-align:left;">
-        Saisissez votre adresse email pour recevoir un lien de réinitialisation.
-      </p>
-      <input type="email" id="forgot-email" placeholder="Adresse email" required autocomplete="email">
-      <p id="forgot-msg" style="font-size:12.5px;display:none;margin-bottom:8px;"></p>
-      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">Envoyer le lien</button>
-    </form>
-    <div class="login-footer">
-      <button type="button" class="link-button" id="back-login">← Retour</button>
-    </div>
-  `);
-  document.getElementById('forgot-form').onsubmit = async (e)=>{
-    e.preventDefault();
-    const email = document.getElementById('forgot-email').value.trim();
-    const btn = e.target.querySelector('button[type=submit]');
-    const msg = document.getElementById('forgot-msg');
-    btn.disabled = true; btn.textContent = 'Envoi…';
-    try{
-      await authSendPasswordReset(email);
-      msg.textContent = 'Email envoyé ! Vérifiez votre boîte de réception.';
-      msg.style.color = 'var(--color-primary)'; msg.style.display = 'block';
-    }catch(err){
-      msg.textContent = err.message; msg.style.color = '#B91C1C'; msg.style.display = 'block';
-      btn.disabled = false; btn.textContent = 'Envoyer le lien';
-    }
-  };
-  document.getElementById('back-login').onclick = renderLoginScreen;
-}
-
-function renderSetPasswordScreen(accessToken, isFirstLogin=false){
-  document.getElementById('login-overlay').classList.remove('hidden');
-  renderLoginContent(`
-    <p style="font-size:13px;color:var(--color-text-muted);margin-bottom:14px;text-align:left;">
-      ${isFirstLogin ? 'Bienvenue ! Choisissez votre mot de passe pour activer votre compte.' : 'Choisissez votre nouveau mot de passe.'}
-    </p>
-    <form class="login-form" id="set-pwd-form" novalidate>
-      <input type="password" id="set-pwd-new" placeholder="Nouveau mot de passe (8 car. min.)" autocomplete="new-password">
-      <input type="password" id="set-pwd-confirm" placeholder="Confirmer le mot de passe" autocomplete="new-password">
-      <p id="set-pwd-error" class="login-error" style="display:none;"></p>
-      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">Définir le mot de passe</button>
-    </form>
-  `);
-  document.getElementById('set-pwd-form').onsubmit = async (e)=>{
-    e.preventDefault();
-    const next = document.getElementById('set-pwd-new').value;
-    const conf = document.getElementById('set-pwd-confirm').value;
-    const errEl = document.getElementById('set-pwd-error');
-    const btn = e.target.querySelector('button[type=submit]');
-    if(next.length < 8){ errEl.textContent='Au moins 8 caractères.'; errEl.style.display='block'; return; }
-    if(next !== conf){ errEl.textContent='Les mots de passe ne correspondent pas.'; errEl.style.display='block'; return; }
-    btn.disabled = true; btn.textContent = 'Enregistrement…';
-    try{
-      await authUpdatePassword(accessToken, next);
-      // Nettoyer le hash de l'URL pour éviter de ré-entrer dans ce flux
-      history.replaceState(null,'', window.location.pathname);
-      // La session est maintenant valide, charger l'utilisateur
-      const user = await loadCurrentUser();
-      if(user){ initApp(); }
-      else { renderLoginScreen('Mot de passe défini. Connectez-vous.'); }
-    }catch(err){
-      errEl.textContent = err.message; errEl.style.display='block';
-      btn.disabled=false; btn.textContent='Définir le mot de passe';
-    }
-  };
-}
+/* login.js — renderLoginScreen, renderForgotPasswordScreen, renderSetPasswordScreen */
 
 /* ================================================================
-   PWA — Service Worker, installation, hors-ligne, notifications push
+   PWA — fonctions SW, install, push → src/pwa.js
    ================================================================ */
 
-// Clé PUBLIQUE VAPID uniquement — la clé privée ne vit que dans les secrets Supabase
-// (VAPID_PRIVATE_KEY), jamais ici.
-const VAPID_PUBLIC_KEY = 'BD8PsjUf5CnogfRdI81PvKKHT9C7OGV7tqPQ29Ic8kkcarkqyFRa-YbUQam_OHI8xZWnz1rzkFhicB_UMb5CMHI';
-const PWA_PROMPT_INTERVAL_DAYS = 14;
-const PWA_IOS_PROMPT_KEY = 'pwa_ios_prompt_ts';
-const PWA_ANDROID_PROMPT_KEY = 'pwa_android_prompt_ts';
-
-const PWA = {
-  isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent); },
-  isInstalled(){ return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches; },
-  supportsPush(){ return 'PushManager' in window && 'serviceWorker' in navigator; },
-};
-
-function urlBase64ToUint8Array(base64String){
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for(let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
-  return outputArray;
-}
-
-/* ---------------- Service Worker : enregistrement + bandeau de mise à jour ---------------- */
-let swRegistration = null;
-function showPwaUpdateBanner(){
-  const banner = document.getElementById('pwa-update-banner');
-  if(!banner) return;
-  banner.innerHTML = `Mise à jour disponible <button id="pwa-reload-btn">Recharger</button>`;
-  banner.style.display = 'block';
-  banner.querySelector('#pwa-reload-btn').onclick = ()=> window.location.reload();
-}
-function initServiceWorker(){
-  if(!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('./sw.js', { scope: './' }).then((reg)=>{
-    swRegistration = reg;
-    reg.addEventListener('updatefound', ()=>{
-      const newWorker = reg.installing;
-      if(!newWorker) return;
-      newWorker.addEventListener('statechange', ()=>{
-        if(newWorker.state === 'installed' && navigator.serviceWorker.controller){
-          showPwaUpdateBanner();
-        }
-      });
-    });
-  }).catch((err)=> console.warn('Échec enregistrement Service Worker', err));
-
-  navigator.serviceWorker.addEventListener('message', (event)=>{
-    if(event.data && event.data.type === 'pwa-notification-click'){
-      navigateForNotificationType(event.data.notificationType);
-    }
-  });
-}
-
-/* ---------------- Bandeau d'installation iOS (pas de beforeinstallprompt sur iOS) ---------------- */
-function shouldShowInstallPrompt(key){
-  const last = parseInt(localStorage.getItem(key), 10);
-  if(!Number.isFinite(last)) return true;
-  return (Date.now() - last) / 86400000 >= PWA_PROMPT_INTERVAL_DAYS;
-}
-function markInstallPromptShown(key){ localStorage.setItem(key, String(Date.now())); }
-
-function showIOSInstallTip(){
-  if(!PWA.isIOS() || PWA.isInstalled()) return;
-  if(!shouldShowInstallPrompt(PWA_IOS_PROMPT_KEY)) return;
-  const tip = document.getElementById('pwa-ios-install-tip');
-  if(!tip) return;
-  tip.innerHTML = `
-    <button class="pwa-tip-close" aria-label="Fermer">✕</button>
-    <strong>Installez Amivet RH</strong><br>
-    Appuyez sur <strong>Partager</strong> puis <strong>Sur l'écran d'accueil</strong> pour installer l'app et activer les notifications.
-  `;
-  tip.style.display = 'block';
-  tip.querySelector('.pwa-tip-close').onclick = ()=>{
-    tip.style.display = 'none';
-    markInstallPromptShown(PWA_IOS_PROMPT_KEY);
-  };
-}
-
-/* ---------------- Bandeau d'installation Android ---------------- */
-let deferredInstallPrompt = null;
-window.addEventListener('beforeinstallprompt', (e)=>{
-  e.preventDefault();
-  deferredInstallPrompt = e;
-  if(!shouldShowInstallPrompt(PWA_ANDROID_PROMPT_KEY)) return;
-  const banner = document.getElementById('pwa-android-install-banner');
-  if(!banner) return;
-  banner.innerHTML = `
-    <button class="pwa-tip-close" aria-label="Fermer">✕</button>
-    <strong>Installez Amivet RH</strong><br>
-    Ajoutez l'app à votre écran d'accueil pour un accès rapide et les notifications.
-    <div><button id="pwa-android-install-btn">Installer l'app</button></div>
-  `;
-  banner.style.display = 'block';
-  banner.querySelector('.pwa-tip-close').onclick = ()=>{
-    banner.style.display = 'none';
-    markInstallPromptShown(PWA_ANDROID_PROMPT_KEY);
-  };
-  banner.querySelector('#pwa-android-install-btn').onclick = async ()=>{
-    banner.style.display = 'none';
-    markInstallPromptShown(PWA_ANDROID_PROMPT_KEY);
-    if(deferredInstallPrompt){
-      deferredInstallPrompt.prompt();
-      await deferredInstallPrompt.userChoice;
-      deferredInstallPrompt = null;
-    }
-  };
-});
-
-/* ---------------- Indicateur hors-ligne + resynchronisation ---------------- */
-function updatePwaOfflineBanner(){
-  const banner = document.getElementById('pwa-offline-banner');
-  if(!banner) return;
-  banner.textContent = 'Mode hors-ligne — données du dernier chargement';
-  banner.style.display = navigator.onLine ? 'none' : 'block';
-}
 function refreshAllPwaData(){
   syncFromSupabase().then(remoteSlots=>{
     if(remoteSlots !== null){
-      DATA = { version:2, slots: remoteSlots };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+      store.DATA = { version:2, slots: remoteSlots };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
       renderCurrentView();
       updateDashboardNavBadge();
     }
@@ -6769,7 +6130,7 @@ document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refresh
 
 /* ---------------- Raccourcis manifest + navigation au clic sur une notification ---------------- */
 function navigateForNotificationType(type){
-  if(typeof currentUser === 'undefined' || !currentUser) return;
+  if(typeof store.currentUser === 'undefined' || !store.currentUser) return;
   switch(type){
     case 'leave_request': case 'leave_approved': case 'leave_rejected':
       if(canAccessDashboard()){ switchView('dashboard'); dashSubState.tab = 'requests'; renderDashboard(); }
@@ -6810,126 +6171,12 @@ function handlePwaShortcutAction(){
   }
 }
 
-/* ---------------- Abonnement push ---------------- */
-function currentPushPersonId(){ return currentUser?.person_id || null; }
-
-async function savePushSubscription(sub){
-  const user_name = currentPushPersonId();
-  if(!user_name) return;
-  await fetch(`${SUPABASE_URL}push_subscriptions`, {
-    method: 'POST',
-    headers: supabaseHeaders({
-      'Content-Type': 'application/json',
-      'Prefer': 'resolution=merge-duplicates,return=minimal',
-    }),
-    body: JSON.stringify({
-      user_name,
-      subscription_json: sub.toJSON(),
-      user_agent: navigator.userAgent,
-      updated_at: new Date().toISOString(),
-    }),
-  });
-}
-async function deletePushSubscription(){
-  const user_name = currentPushPersonId();
-  if(!user_name) return;
-  await fetch(`${SUPABASE_URL}push_subscriptions?user_name=eq.${encodeURIComponent(user_name)}`, {
-    method: 'DELETE',
-    headers: supabaseHeaders(),
-  });
-}
-
-async function subscribeToPush(){
-  if(!PWA.supportsPush()) throw new Error('Notifications non supportées sur cet appareil.');
-  const permission = await Notification.requestPermission();
-  if(permission !== 'granted') throw new Error('Permission refusée.');
-  const reg = swRegistration || await navigator.serviceWorker.ready;
-  let sub = await reg.pushManager.getSubscription();
-  if(!sub){
-    sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-    });
-  }
-  await savePushSubscription(sub);
-  return sub;
-}
-async function unsubscribeFromPush(){
-  if(!('serviceWorker' in navigator)) return;
-  const reg = swRegistration || await navigator.serviceWorker.ready;
-  const sub = await reg.pushManager.getSubscription();
-  if(sub) await sub.unsubscribe();
-  await deletePushSubscription();
-}
-
-// Envoi fire-and-forget vers l'Edge Function : ne bloque jamais l'UI sur le résultat.
-function triggerPushNotification({ type, title, body, targetUsers = [], data = {}, requireInteraction = false }){
-  fetch(`${SUPABASE_FUNCTIONS_URL}push-server`, {
-    method: 'POST',
-    headers: supabaseHeaders({ 'Content-Type':'application/json' }),
-    body: JSON.stringify({ type, title, body, targetUsers, data, requireInteraction }),
-  }).catch((e)=> console.warn('Envoi notification push impossible (ignoré)', e));
-}
-
-/* ---------------- Section "Notifications" du menu réglages ---------------- */
-function notificationStatusLabel(){
-  if(!PWA.supportsPush()) return { text:'Non disponible sur cet appareil', tone:'muted' };
-  if(PWA.isIOS() && !PWA.isInstalled()) return { text:'Installez l\'app pour activer les notifications', tone:'muted' };
-  if(Notification.permission === 'granted') return { text:'Activées', tone:'ok' };
-  if(Notification.permission === 'denied') return { text:'Bloquées', tone:'danger' };
-  return { text:'Non configurées', tone:'muted' };
-}
-async function openNotificationSettingsModal(){
-  const backdrop = document.getElementById('modal-backdrop');
-  const box = document.getElementById('modal-box');
-  box.className = 'modal-box';
-
-  const renderBody = ()=>{
-    const status = notificationStatusLabel();
-    const isIOSNotInstalled = PWA.isIOS() && !PWA.isInstalled();
-    const isBlocked = Notification.permission === 'denied';
-    const canOffer = PWA.supportsPush() && !isIOSNotInstalled && Notification.permission !== 'granted';
-    box.innerHTML = `
-      <h3>🔔 Notifications</h3>
-      <p>Statut actuel : <strong>${status.text}</strong></p>
-      ${isIOSNotInstalled ? `<p class="text-muted" style="font-size:12.5px;">Sur iPhone/iPad, les notifications ne fonctionnent que si l'app est installée : Partager → Sur l'écran d'accueil.</p>` : ''}
-      ${isBlocked ? `<p class="text-muted" style="font-size:12.5px;">Les notifications sont bloquées par le navigateur. Autorisez-les dans Réglages &gt; Safari &gt; Amivet RH (ou l'équivalent sur votre navigateur), puis revenez ici.</p>` : ''}
-      ${canOffer ? `<button class="btn btn-primary" id="notif-enable-btn" style="width:100%;justify-content:center;margin-top:10px;">Activer les notifications</button>` : ''}
-      ${status.tone === 'ok' ? `<button class="btn" id="notif-disable-btn" style="width:100%;justify-content:center;margin-top:10px;">Désactiver les notifications</button>` : ''}
-      <div class="modal-actions" style="margin-top:16px;">
-        <button class="btn" id="modal-cancel">Fermer</button>
-      </div>
-    `;
-    const enableBtn = box.querySelector('#notif-enable-btn');
-    if(enableBtn) enableBtn.onclick = async ()=>{
-      enableBtn.disabled = true; enableBtn.textContent = 'Activation…';
-      try{
-        await subscribeToPush();
-        showToast('Notifications activées', '🔔');
-        renderBody();
-      }catch(e){
-        // iOS 17.4+ (UE, DMA) supprime le mode standalone : la souscription échoue
-        // silencieusement côté OS — on l'explique plutôt que de laisser une erreur brute.
-        showToast(e.message || 'Impossible d\'activer les notifications sur cet appareil', '⚠️');
-        renderBody();
-      }
-    };
-    const disableBtn = box.querySelector('#notif-disable-btn');
-    if(disableBtn) disableBtn.onclick = async ()=>{
-      disableBtn.disabled = true;
-      await unsubscribeFromPush();
-      showToast('Notifications désactivées', '🔕');
-      renderBody();
-    };
-    box.querySelector('#modal-cancel').onclick = ()=> backdrop.classList.remove('open');
-  };
-  renderBody();
-  backdrop.classList.add('open');
-  backdrop.onclick = (e)=>{ if(e.target === backdrop) backdrop.classList.remove('open'); };
-}
+/* push subscriptions + notification settings → pwa.js */
 
 /* ---------------- Amorçage ---------------- */
-initServiceWorker();
+setupLogin({ loadCurrentUser, initApp });
+setupSignatures({ onLoaded: renderCurrentView, renderCalendarView });
+initServiceWorker(navigateForNotificationType);
 setTimeout(showIOSInstallTip, 4000);
 updatePwaOfflineBanner();
 
