@@ -125,6 +125,8 @@ GRANT EXECUTE ON FUNCTION verify_calendar_sync_token(TEXT, TEXT) TO anon, authen
 
 -- 5. get_calendar_sync_token_for_display n'a plus de sens : le plain token n'est
 --    plus stocké. Remplacer par une fonction qui indique seulement si un lien est actif.
+-- DROP requis : CREATE OR REPLACE ne peut pas changer le type de retour d'une fonction existante.
+DROP FUNCTION IF EXISTS get_calendar_sync_status(TEXT);
 CREATE OR REPLACE FUNCTION get_calendar_sync_status(p_person_id TEXT)
 RETURNS BOOLEAN
 LANGUAGE sql
