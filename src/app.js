@@ -365,7 +365,7 @@ function openManageUsersModal(){
               });
               if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
               showToast(`${name} supprimé(e) définitivement`, '🗑️');
-              CAL_VIEWS = buildCalViews();
+              store.CAL_VIEWS = buildCalViews();
               renderCalendarView(activeCalendarViewKey()||'asv-current');
               openManageUsersModal();
             }catch(e){ showToast('Erreur purge : '+e.message, '⚠️'); }
@@ -402,7 +402,7 @@ function openManageUsersModal(){
             const asvIdx = ASV_PEOPLE.findIndex(p=> p.id === personId);
             if(asvIdx !== -1){ ASV_PEOPLE.splice(asvIdx,1); reindexPresentShades(); saveASVRoster(); }
             showToast(`${name} retiré(e) du planning`, '🗑️');
-            CAL_VIEWS = buildCalViews();
+            store.CAL_VIEWS = buildCalViews();
             renderCalendarView(activeCalendarViewKey()||'asv-current');
             openManageUsersModal();
           },
@@ -902,35 +902,30 @@ function getCurrentYear(){
 }
 function setCurrentYear(y){ localStorage.setItem(CURRENT_YEAR_KEY, String(y)); }
 
-const calStateCurrent = { month: today.getFullYear() === getCurrentYear() ? today.getMonth() : 0 };
-const calStateForecast = { month: 0 };
-const calStateAsvCurrent = { month: today.getFullYear() === getCurrentYear() ? today.getMonth() : 0 };
-const calStateAsvForecast = { month: 0 };
-
-// Registre central des vues "calendrier mensuel" : chacune sait sur quelle année réelle
-// elle travaille (cfg.year), quelles personnes afficher (cfg.people, en lignes) et quel
-// état de navigation (mois affiché) lui appartient. Reconstruit après chaque bascule
-// d'année (performYearRollover) puisque cfg.year doit alors changer.
+// Cal state + store.CAL_VIEWS → store.js (see initCalState() below)
 function buildCalViews(){
   const cy = getCurrentYear();
   return {
-    'vets-current':  { year:cy,   people:PEOPLE,     navState:calStateCurrent,     todayNav:true,  forecast:false, label:'Vétérinaires', containerId:'vets-sub-calendar', printable:false },
-    'vets-forecast': { year:cy+1, people:PEOPLE,     navState:calStateForecast,    todayNav:false, forecast:true,  label:'Vétérinaires', containerId:'vets-sub-forecast', printable:false },
-    'asv-current':   { year:cy,   people:ASV_PEOPLE, navState:calStateAsvCurrent,  todayNav:true,  forecast:false, label:'ASV',          containerId:'asv-sub-calendar',  printable:true },
-    'asv-forecast':  { year:cy+1, people:ASV_PEOPLE, navState:calStateAsvForecast, todayNav:false, forecast:true,  label:'ASV',           containerId:'asv-sub-forecast',  printable:true },
+    'vets-current':  { year:cy,   people:PEOPLE,     navState:store.calStateCurrent,     todayNav:true,  forecast:false, label:'Vétérinaires', containerId:'vets-sub-calendar', printable:false },
+    'vets-forecast': { year:cy+1, people:PEOPLE,     navState:store.calStateForecast,    todayNav:false, forecast:true,  label:'Vétérinaires', containerId:'vets-sub-forecast', printable:false },
+    'asv-current':   { year:cy,   people:ASV_PEOPLE, navState:store.calStateAsvCurrent,  todayNav:true,  forecast:false, label:'ASV',          containerId:'asv-sub-calendar',  printable:true },
+    'asv-forecast':  { year:cy+1, people:ASV_PEOPLE, navState:store.calStateAsvForecast, todayNav:false, forecast:true,  label:'ASV',          containerId:'asv-sub-forecast',  printable:true },
   };
 }
-let CAL_VIEWS = buildCalViews();
-const dashState = { year: getCurrentYear() };
-
-// Onglets groupés (Vétérinaires / ASV) : chacun a 3 sous-pages (calendrier mensuel / vue
-// annuelle / prévisionnel). subNavState retient la sous-page active de chaque groupe.
-const subNavState = { vets:'calendar', asv:'calendar' };
-const annualYearState = { vets:'current', asv:'current' }; // année affichée dans la sous-page "Vue annuelle"
+function initCalState(){
+  const cy = getCurrentYear();
+  const m = today.getFullYear() === cy ? today.getMonth() : 0;
+  store.calStateCurrent.month = m;
+  store.calStateAsvCurrent.month = m;
+  store.CAL_VIEWS = buildCalViews();
+  store.dashState.year = cy;
+}
 const GROUP_VIEWS = {
   vets: { label:'Vétérinaires', calendarViewKey:'vets-current', forecastViewKey:'vets-forecast', calendarContainer:'vets-sub-calendar', annualContainer:'vets-sub-annual', forecastContainer:'vets-sub-forecast' },
   asv:  { label:'ASV',          calendarViewKey:'asv-current',  forecastViewKey:'asv-forecast',  calendarContainer:'asv-sub-calendar',  annualContainer:'asv-sub-annual',  forecastContainer:'asv-sub-forecast' },
 };
+
+initCalState();
 
 // Verrou par mot de passe (protection légère) des onglets sensibles. Le mot de passe
 // lui-même n'existe nulle part dans ce code source (public sur GitHub) : il est stocké
@@ -945,11 +940,11 @@ function performYearRollover(){
   const fromYear = getCurrentYear();
   const toYear = fromYear + 1;
   setCurrentYear(toYear);
-  CAL_VIEWS = buildCalViews();
-  calStateCurrent.month = 0;
-  calStateAsvCurrent.month = 0;
-  calStateForecast.month = 0;
-  calStateAsvForecast.month = 0;
+  store.CAL_VIEWS = buildCalViews();
+  store.calStateCurrent.month = 0;
+  store.calStateAsvCurrent.month = 0;
+  store.calStateForecast.month = 0;
+  store.calStateAsvForecast.month = 0;
   document.getElementById('rollover-banner')?.remove();
   renderCurrentView();
   showToast(`Calendrier basculé sur ${toYear}`, '🔄');
@@ -973,24 +968,22 @@ function renderRolloverBanner(){
   bar.querySelector('#rollover-dismiss').onclick = ()=> bar.remove();
 }
 
-// État global d'annulation (undo) — pile de snapshots de store.DATA.slots avant chaque action
-const UNDO_STACK = [];
 const UNDO_MAX = 30;
 function snapshotBeforeChange(){
-  UNDO_STACK.push(JSON.stringify(store.DATA.slots));
-  if(UNDO_STACK.length > UNDO_MAX) UNDO_STACK.shift();
+  store.UNDO_STACK.push(JSON.stringify(store.DATA.slots));
+  if(store.UNDO_STACK.length > UNDO_MAX) store.UNDO_STACK.shift();
   updateUndoButtons();
 }
 function undoLastAction(){
-  if(UNDO_STACK.length === 0) return;
-  store.DATA.slots = JSON.parse(UNDO_STACK.pop());
+  if(store.UNDO_STACK.length === 0) return;
+  store.DATA.slots = JSON.parse(store.UNDO_STACK.pop());
   saveData(false);
   renderCurrentView();
   updateUndoButtons();
   showToast('Dernière action annulée', '↩️');
 }
 function updateUndoButtons(){
-  document.querySelectorAll('.undo-btn').forEach(btn=>{ btn.disabled = UNDO_STACK.length === 0; });
+  document.querySelectorAll('.undo-btn').forEach(btn=>{ btn.disabled = store.UNDO_STACK.length === 0; });
 }
 
 
@@ -1836,7 +1829,7 @@ function switchView(viewId){
 // Renvoie l'id du conteneur DOM de la sous-page actuellement sélectionnée pour ce groupe.
 function activeSubContainer(group){
   const g = GROUP_VIEWS[group];
-  const sub = subNavState[group];
+  const sub = store.subNavState[group];
   if(sub === 'calendar') return g.calendarContainer;
   if(sub === 'forecast') return g.forecastContainer;
   return g.annualContainer;
@@ -1847,7 +1840,7 @@ function activeSubContainer(group){
 // détruire la sous-navigation (sub-nav) ni les autres sous-pages masquées.
 function renderCurrentView(){
   renderRolloverBanner();
-  const isForecastSubPage = (currentView === 'vets' && subNavState.vets === 'forecast') || (currentView === 'asv' && subNavState.asv === 'forecast');
+  const isForecastSubPage = (currentView === 'vets' && store.subNavState.vets === 'forecast') || (currentView === 'asv' && store.subNavState.asv === 'forecast');
   document.body.classList.toggle('forecast-theme', isForecastSubPage);
   if(currentView === 'dashboard' && !canAccessDashboard()){
     switchView('vets');
@@ -1862,7 +1855,7 @@ function renderCurrentView(){
 // directement quand le groupe est protégé et verrouillé).
 function renderGroupSubPage(group){
   const g = GROUP_VIEWS[group];
-  const sub = subNavState[group];
+  const sub = store.subNavState[group];
   if(sub === 'calendar') renderCalendarView(g.calendarViewKey);
   else if(sub === 'forecast') renderCalendarView(g.forecastViewKey);
   else if(sub === 'week' && group === 'asv') renderWeekViewASV();
@@ -1870,7 +1863,7 @@ function renderGroupSubPage(group){
 }
 function switchSubPage(group, subKey){
   const g = GROUP_VIEWS[group];
-  subNavState[group] = subKey;
+  store.subNavState[group] = subKey;
   document.querySelectorAll(`#${group}-sub-nav .sub-tab`).forEach(btn=>{
     btn.classList.toggle('active', btn.dataset.sub === subKey);
   });
@@ -2114,7 +2107,7 @@ function openMonthPrintWindow(pids, year, month){
 
 // Popup de sélection ASV avant impression mensuelle
 function openMonthPrintPopup(viewKey){
-  const cfg=CAL_VIEWS[viewKey];
+  const cfg=store.CAL_VIEWS[viewKey];
   const year=cfg.year, month=cfg.navState.month;
   const monthLabel=`${MONTH_NAMES[month]} ${year}`;
   const people=ASV_PEOPLE.filter(p=>!p.archived);
@@ -2307,8 +2300,8 @@ function saveViewState(){
   try{
     localStorage.setItem(VIEW_STATE_KEY, JSON.stringify({
       currentView,
-      subNavState,
-      annualYearState,
+      subNavState: store.subNavState,
+      annualYearState: store.annualYearState,
       dashSubTab: (typeof dashSubState !== 'undefined') ? dashSubState.tab : undefined,
     }));
   }catch(e){ /* stockage indisponible : tant pis, on retombera sur la vue par défaut */ }
@@ -2320,8 +2313,8 @@ function loadViewState(){
     const raw = localStorage.getItem(VIEW_STATE_KEY);
     if(!raw) return null;
     const saved = JSON.parse(raw);
-    if(saved.subNavState) Object.assign(subNavState, saved.subNavState);
-    if(saved.annualYearState) Object.assign(annualYearState, saved.annualYearState);
+    if(saved.subNavState) Object.assign(store.subNavState, saved.subNavState);
+    if(saved.annualYearState) Object.assign(store.annualYearState, saved.annualYearState);
     if(saved.dashSubTab && typeof dashSubState !== 'undefined') dashSubState.tab = saved.dashSubTab;
     return saved.currentView || null;
   }catch(e){ return null; }
@@ -2343,12 +2336,12 @@ function initNav(){
 /* ----------------------------------------------------------------
    10. RACCOURCIS CLAVIER
    ---------------------------------------------------------------- */
-// Renvoie la clé CAL_VIEWS du calendrier mensuel actuellement affiché, ou null si la vue
+// Renvoie la clé store.CAL_VIEWS du calendrier mensuel actuellement affiché, ou null si la vue
 // courante n'est pas un calendrier (ex. tableau de bord, sous-page "Vue annuelle"...).
 function activeCalendarViewKey(){
   const g = GROUP_VIEWS[currentView];
   if(!g) return null;
-  const sub = subNavState[currentView];
+  const sub = store.subNavState[currentView];
   if(sub === 'calendar') return g.calendarViewKey;
   if(sub === 'forecast') return g.forecastViewKey;
   return null;
@@ -2365,7 +2358,7 @@ function initKeyboardShortcuts(){
     if(!viewKey) return;
     if(e.key === 'ArrowLeft'){ changeMonth(viewKey, -1); }
     else if(e.key === 'ArrowRight'){ changeMonth(viewKey, 1); }
-    else if(e.key.toLowerCase() === 't' && CAL_VIEWS[viewKey].todayNav){ goToToday(viewKey); }
+    else if(e.key.toLowerCase() === 't' && store.CAL_VIEWS[viewKey].todayNav){ goToToday(viewKey); }
   });
 }
 
@@ -2378,13 +2371,13 @@ function personOf(id){ return PEOPLE.find(p=>p.id===id) || ASV_PEOPLE.find(p=>p.
    12. VUE CALENDRIER (moteur partagé 2026 / 2027)
    ================================================================ */
 function changeMonth(viewKey, delta){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   const m = cfg.navState.month + delta;
   cfg.navState.month = ((m % 12) + 12) % 12;
   renderCalendarView(viewKey);
 }
 function goToToday(viewKey){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   cfg.navState.month = (today.getFullYear() === cfg.year) ? today.getMonth() : 0;
   renderCalendarView(viewKey);
 }
@@ -2507,7 +2500,7 @@ function updateHalfDOM(halfEl){
 }
 
 function buildCalendarToolbar(viewKey){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   const monthLabel = `${MONTH_NAMES[cfg.navState.month]} ${cfg.year}`;
   const todayBtn = cfg.todayNav ? `<button class="btn btn-sm" id="cal-today-${viewKey}" aria-label="Revenir au mois actuel">📍 Aujourd'hui</button>` : '';
   const hasASV = cfg.people && cfg.people.some(p=>isASVPerson(p.id));
@@ -2530,7 +2523,7 @@ function buildCalendarToolbar(viewKey){
         ${todayBtn}
       </div>
       <div class="cal-toolbar-actions">
-        <button class="btn-icon undo-btn" id="cal-undo-${viewKey}" aria-label="Annuler la dernière action" title="Annuler la dernière action (Cmd/Ctrl+Z)" ${UNDO_STACK.length===0?'disabled':''}>↩️</button>
+        <button class="btn-icon undo-btn" id="cal-undo-${viewKey}" aria-label="Annuler la dernière action" title="Annuler la dernière action (Cmd/Ctrl+Z)" ${store.UNDO_STACK.length===0?'disabled':''}>↩️</button>
         <button class="btn btn-sm btn-danger" id="cal-clear-month-${viewKey}" aria-label="Vider le mois affiché">🗑️ Vider le mois</button>
         ${cfg.printable ? `<button class="btn btn-sm" id="cal-print-${viewKey}" title="Imprimer les fiches mensuelles ASV">🖨️ Imprimer</button>` : ''}
       </div>
@@ -2543,7 +2536,7 @@ function buildCalendarToolbar(viewKey){
 // tout le groupe affiché si personId est omis (dans ce cas, les commentaires de journée
 // sont aussi effacés).
 function clearMonth(viewKey, month, personId){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   snapshotBeforeChange();
   const nbDays = daysInMonth(cfg.year, month);
   const targets = personId ? cfg.people.filter(p=>p.id===personId) : cfg.people;
@@ -2565,7 +2558,7 @@ function clearMonth(viewKey, month, personId){
   saveData();
   renderCalendarView(viewKey);
   // Si la vue hebdomadaire est affichée, la rafraîchir aussi pour refléter la suppression des TE
-  if(subNavState.asv === 'week') renderWeekViewASV();
+  if(store.subNavState.asv === 'week') renderWeekViewASV();
   const who = personId ? personOf(personId).short : cfg.people.map(p=>p.short).join(' et ');
   showToast(`${MONTH_NAMES[month]} ${cfg.year} vidé (${who})`, '🗑️');
 }
@@ -2574,7 +2567,7 @@ function clearMonth(viewKey, month, personId){
 // partir de cfg.people, donc le même code sert le calendrier à 2 personnes (vétérinaires)
 // comme celui à 3 (ASV).
 function openClearMonthModal(viewKey, month){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   const label = `${MONTH_NAMES[month]} ${cfg.year}`;
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
@@ -2697,7 +2690,7 @@ function blockIfOver42h(pid, isoDate){
   const mon = getWeekMondayDate(new Date(isoDate + 'T00:00:00'));
   const weekH = computeWeekTotalHours(pid, mon);
   if(weekH > WEEKLY_MAX_HOURS){
-    if(UNDO_STACK.length > 0){ store.DATA.slots = JSON.parse(UNDO_STACK.pop()); updateUndoButtons(); }
+    if(store.UNDO_STACK.length > 0){ store.DATA.slots = JSON.parse(store.UNDO_STACK.pop()); updateUndoButtons(); }
     saveData(false);
     showToast(`Plafond 42h dépassé (${formatHHMM(weekH)}) — saisie annulée`, '🚫');
     return true;
@@ -3136,7 +3129,7 @@ function buildHalfTable(year, month, days, people){
 }
 
 function buildCalendarGrid(viewKey){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   const month = cfg.navState.month;
   return buildWeekGrid(cfg.year, month, cfg.people);
 }
@@ -3190,7 +3183,7 @@ function buildLegend(people = PEOPLE){
 // le calendrier réel de l'année en cours, jamais sur le prévisionnel (données spéculatives,
 // rien à certifier) ni côté vétérinaires (pas de feuille de présence pour eux ici).
 function buildSignaturePanelHtml(viewKey){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   if(viewKey !== 'asv-current') return '';
   const month = cfg.navState.month;
   const monthLabel = `${MONTH_NAMES[month]} ${cfg.year}`;
@@ -3228,7 +3221,7 @@ function buildSignaturePanelHtml(viewKey){
 // Ligne visible uniquement à l'impression (la version écran a déjà le 🔒 dans l'en-tête de
 // ligne, mais sur papier ce repère seul ne suffit pas à prouver qui a signé et quand).
 function buildPrintSignatureStatusHtml(viewKey){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   if(viewKey !== 'asv-current') return '';
   const month = cfg.navState.month;
   const parts = cfg.people.map(p=>{
@@ -3241,7 +3234,7 @@ function buildPrintSignatureStatusHtml(viewKey){
 }
 // Admin/vet demande la signature d'une ASV : envoie l'email à son compte.
 async function adminRequestSignature(viewKey, personId){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   const month = cfg.navState.month;
   const btn = document.querySelector(`[data-admin-request-sign="${personId}"]`);
   if(btn){ btn.disabled = true; btn.textContent = 'Envoi…'; }
@@ -3271,7 +3264,7 @@ async function adminRequestSignature(viewKey, personId){
 // Demande de signature : envoie un email à l'ASV avec le récap du mois + lien unique.
 // La vraie signature n'est enregistrée que lorsqu'elle clique ce lien (confirm-signature).
 async function requestSignatureEmail(viewKey, personId){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   const month = cfg.navState.month;
   const btn = document.querySelector(`[data-sign-person="${personId}"]`);
   if(btn){ btn.disabled = true; btn.textContent = 'Envoi…'; }
@@ -3298,7 +3291,7 @@ async function requestSignatureEmail(viewKey, personId){
 }
 
 function renderCalendarView(viewKey){
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   const container = document.getElementById(cfg.containerId);
   if(!container || !cfg) return;
   const banner = cfg.forecast ? `
@@ -3732,7 +3725,7 @@ function sidebarPersonBlock(iso, person){
   `;
 }
 function openDaySidebar(iso, viewKey){
-  const people = CAL_VIEWS[viewKey].people;
+  const people = store.CAL_VIEWS[viewKey].people;
   const overlay = document.getElementById('sidebar-overlay');
   const sidebar = document.getElementById('day-sidebar');
   const closeSidebar = ()=>{ overlay.classList.remove('open'); sidebar.classList.remove('open'); };
@@ -3827,7 +3820,7 @@ function initCalendarInteractions(){
   document.addEventListener('dblclick', (e)=>{
     // Vue hebdomadaire : colonne-jour entière
     const dayCol = e.target.closest('.cal-wg-day[data-date]');
-    if(dayCol && currentView === 'asv' && subNavState.asv !== 'week'){
+    if(dayCol && currentView === 'asv' && store.subNavState.asv !== 'week'){
       if(!dayCol.classList.contains('cal-wg-day-we')){
         const iso = dayCol.dataset.date;
         if(iso){ weekNavState.mondayISO = fmtISO(getWeekMondayDate(new Date(iso+'T00:00:00'))); switchSubPage('asv','week'); }
@@ -3836,7 +3829,7 @@ function initCalendarInteractions(){
     }
     // Vue mensuelle : cellule individuelle avec data-date
     const monthCell = e.target.closest('.cal-cell[data-date]');
-    if(monthCell && currentView === 'asv' && (subNavState.asv === 'calendar' || subNavState.asv === 'forecast')){
+    if(monthCell && currentView === 'asv' && (store.subNavState.asv === 'calendar' || store.subNavState.asv === 'forecast')){
       if(monthCell.classList.contains('sunday-cell')) return;
       const iso = monthCell.dataset.date;
       if(!iso) return;
@@ -3967,7 +3960,7 @@ function initCalendarInteractions(){
     if(e.target.id === `cal-next-${viewKey}`) return changeMonth(viewKey, 1);
     if(e.target.id === `cal-today-${viewKey}`) return goToToday(viewKey);
     if(e.target.id === `cal-clear-month-${viewKey}`){
-      openClearMonthModal(viewKey, CAL_VIEWS[viewKey].navState.month);
+      openClearMonthModal(viewKey, store.CAL_VIEWS[viewKey].navState.month);
       return;
     }
     if(e.target.id === `cal-undo-${viewKey}`) return undoLastAction();
@@ -3980,7 +3973,7 @@ function initCalendarInteractions(){
     if(editBtn){ openDaySidebar(editBtn.dataset.date, viewKey); return; }
 
     const overtimeBtn = e.target.closest('[data-action="overtime-day"]');
-    if(overtimeBtn){ openOvertimeDayPopover(overtimeBtn.dataset.date, CAL_VIEWS[viewKey].people, viewKey); return; }
+    if(overtimeBtn){ openOvertimeDayPopover(overtimeBtn.dataset.date, store.CAL_VIEWS[viewKey].people, viewKey); return; }
   });
 }
 
@@ -4506,7 +4499,7 @@ VIEW_RENDERERS['dashboard'] = renderDashboard;
 
 function renderDashboardStats(){
   const container = document.getElementById('dash-sub-stats');
-  const year = dashState.year;
+  const year = store.dashState.year;
   const cy = getCurrentYear();
   container.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:0;">
@@ -4540,7 +4533,7 @@ function renderDashboardStats(){
   container.querySelector('#dash-year-toggle').addEventListener('click', (e)=>{
     const btn = e.target.closest('button');
     if(!btn) return;
-    dashState.year = parseInt(btn.dataset.year, 10);
+    store.dashState.year = parseInt(btn.dataset.year, 10);
     renderDashboardStats();
   });
   container.querySelector('#dash-reset-current').onclick = ()=> openResetYearModal(cy, false);
@@ -4552,7 +4545,7 @@ function renderDashboardStats(){
 // annulation possible (rouvre le mois correspondant pour la personne concernée). ---
 function renderDashboardSignatures(){
   const container = document.getElementById('dash-sub-signatures');
-  const year = dashState.year;
+  const year = store.dashState.year;
   const cy = getCurrentYear();
   container.innerHTML = `
     <div class="year-toggle" id="dash-sig-year-toggle">
@@ -4583,7 +4576,7 @@ function renderDashboardSignatures(){
   container.querySelector('#dash-sig-year-toggle').addEventListener('click', (e)=>{
     const btn = e.target.closest('button');
     if(!btn) return;
-    dashState.year = parseInt(btn.dataset.year, 10);
+    store.dashState.year = parseInt(btn.dataset.year, 10);
     renderDashboardSignatures();
   });
 }
@@ -4591,7 +4584,7 @@ function renderDashboardSignatures(){
 // --- Sous-page "Entretiens annuels" : suivi des entretiens annuels des ASV ---
 function renderDashboardInterviews(){
   const container = document.getElementById('dash-sub-interviews');
-  const year = dashState.year;
+  const year = store.dashState.year;
   const cy = getCurrentYear();
 
   function getInterview(personId){ return store.INTERVIEWS.find(i=>i.person_id===personId && i.year===year); }
@@ -4637,7 +4630,7 @@ function renderDashboardInterviews(){
   `;
   container.querySelector('#dash-itv-year-toggle').addEventListener('click', (e)=>{
     const btn=e.target.closest('button'); if(!btn) return;
-    dashState.year=parseInt(btn.dataset.year,10); renderDashboardInterviews();
+    store.dashState.year=parseInt(btn.dataset.year,10); renderDashboardInterviews();
   });
   container.querySelectorAll('[data-itv-open]').forEach(btn=>{
     btn.onclick=()=> openInterviewModal(btn.dataset.itvOpen, year);
@@ -5092,7 +5085,7 @@ function buildASVMonthlyTable(year){
 
 function renderDashboardHours(){
   const container = document.getElementById('dash-sub-hours');
-  const year = dashState.year;
+  const year = store.dashState.year;
   const cy   = getCurrentYear();
   if(!weekNavState.mondayISO) weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
   container.innerHTML = `
@@ -5108,7 +5101,7 @@ function renderDashboardHours(){
   `;
   container.querySelector('#dash-hours-year-toggle').addEventListener('click', e => {
     const btn = e.target.closest('button'); if(!btn) return;
-    dashState.year = parseInt(btn.dataset.year, 10); renderDashboardHours();
+    store.dashState.year = parseInt(btn.dataset.year, 10); renderDashboardHours();
   });
   renderGroupConges('asv', 'dash-asv-cp');
 }
@@ -5892,7 +5885,7 @@ function buildHeatmap(year, people = PEOPLE){
 
 // Popover de détail jour, partagé par la vue annuelle vétérinaires et la vue annuelle
 // ASV : affiche le statut de chaque personne de `people`, et le bouton « Éditer ce jour »
-// saute dans le calendrier mensuel correspondant à viewKey (clé de CAL_VIEWS).
+// saute dans le calendrier mensuel correspondant à viewKey (clé de store.CAL_VIEWS).
 function openAnnualDayDetail(iso, people, viewKey){
   const backdrop = document.getElementById('popover-backdrop');
   const box = document.getElementById('popover-box');
@@ -5916,7 +5909,7 @@ function openAnnualDayDetail(iso, people, viewKey){
   box.querySelector('#popover-edit').onclick = ()=>{
     close();
     const month = parseInt(iso.split('-')[1], 10) - 1;
-    CAL_VIEWS[viewKey].navState.month = month;
+    store.CAL_VIEWS[viewKey].navState.month = month;
     const group = viewKey.startsWith('asv') ? 'asv' : 'vets';
     switchSubPage(group, viewKey.endsWith('forecast') ? 'forecast' : 'calendar');
     switchView(group);
@@ -5930,15 +5923,15 @@ function openAnnualDayDetail(iso, people, viewKey){
 function renderAnnualViewForGroup(group){
   const g = GROUP_VIEWS[group];
   const container = document.getElementById(g.annualContainer);
-  const mode = annualYearState[group];
+  const mode = store.annualYearState[group];
   const viewKey = mode === 'current' ? g.calendarViewKey : g.forecastViewKey;
-  const cfg = CAL_VIEWS[viewKey];
+  const cfg = store.CAL_VIEWS[viewKey];
   container.innerHTML = `
     <h2 class="section-title">Vue Annuelle ${cfg.year} — ${g.label}</h2>
     <p class="section-desc" style="margin-bottom:12px;">Heatmap de présence — cliquez une cellule pour voir le détail du jour.</p>
     <div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
-      <button data-mode="current" class="${mode==='current'?'active':''}">${CAL_VIEWS[g.calendarViewKey].year}</button>
-      <button data-mode="forecast" class="${mode==='forecast'?'active':''}">${CAL_VIEWS[g.forecastViewKey].year}</button>
+      <button data-mode="current" class="${mode==='current'?'active':''}">${store.CAL_VIEWS[g.calendarViewKey].year}</button>
+      <button data-mode="forecast" class="${mode==='forecast'?'active':''}">${store.CAL_VIEWS[g.forecastViewKey].year}</button>
     </div>
     <div class="card" style="padding:14px;">${buildHeatmap(cfg.year, cfg.people)}</div>
     <div class="legend" style="margin-top:12px;padding:10px 16px;">${buildLegendColors(cfg.people)}</div>
@@ -5946,7 +5939,7 @@ function renderAnnualViewForGroup(group){
   container.querySelector(`#${group}-annual-year-toggle`).addEventListener('click', (e)=>{
     const btn = e.target.closest('button');
     if(!btn) return;
-    annualYearState[group] = btn.dataset.mode;
+    store.annualYearState[group] = btn.dataset.mode;
     renderAnnualViewForGroup(group);
     saveViewState();
   });
@@ -6047,8 +6040,8 @@ function initApp(){
   initCalendarInteractions();
   updateDashboardNavBadge();
   const restoredView = loadViewState();
-  switchSubPage('vets', subNavState.vets);
-  switchSubPage('asv', subNavState.asv);
+  switchSubPage('vets', store.subNavState.vets);
+  switchSubPage('asv', store.subNavState.asv);
   const startView = !canAccessDashboard() && restoredView === 'dashboard' ? 'vets' : restoredView;
   switchView(VIEW_RENDERERS[startView] ? startView : 'vets');
   syncFromSupabase().then(remoteSlots=>{
