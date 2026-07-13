@@ -2940,6 +2940,9 @@ function buildWeekGrid(year, month, people){
         const blocked = locked || noEdit;
         const blockTitle = locked ? 'Feuille de présence signée — verrouillée' : noEdit ? 'Lecture seule' : '';
         const archived = person.archived === true;
+        if(isASVPerson(person.id) && !isPersonWorkingDay(person.id, date)){
+          return `<div class="cal-wg-pstrip${archived?' pstrip-archived':''}" data-person="${person.id}"><div class="cal-wg-half cal-wg-half-nonworking" aria-hidden="true"></div><div class="cal-wg-half cal-wg-half-nonworking" aria-hidden="true"></div></div>`;
+        }
         const halves = SLOTS.map(slot=>{
           const info = cellRenderInfo(iso, person.id, slot);
           const lockCls = locked ? ' cal-wg-half-locked' : noEdit ? ' cal-wg-half-readonly' : '';

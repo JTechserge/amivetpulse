@@ -430,6 +430,8 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-wg-half-locked:hover{filter:grayscale(35%);}
 .cal-wg-half-readonly{cursor:default;opacity:0.70;filter:grayscale(20%);}
 .cal-wg-half-readonly:hover{filter:grayscale(20%);}
+.cal-wg-half-nonworking{background:repeating-linear-gradient(135deg,#f1f5f9 0 4px,#e8edf2 4px 8px);cursor:default;pointer-events:none;}
+.cal-wg-half-nonworking:hover{background:repeating-linear-gradient(135deg,#f1f5f9 0 4px,#e8edf2 4px 8px);}
 .pstrip-archived .cal-wg-half{opacity:0.40;filter:grayscale(60%);cursor:default;}
 .pstrip-archived .cal-wg-half:hover{filter:grayscale(60%);}
 
