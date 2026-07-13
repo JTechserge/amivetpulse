@@ -10,7 +10,7 @@ const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!;
 
 const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://jtechserge.github.io',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };

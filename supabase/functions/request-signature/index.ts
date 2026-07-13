@@ -12,7 +12,7 @@ const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY')!;
 const TOKEN_VALID_DAYS = 7;
 
 const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://jtechserge.github.io',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };

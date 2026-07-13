@@ -16,10 +16,12 @@
 <link rel="apple-touch-startup-image" href="/icons/splash/splash-1242x2688.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3)">
 <link rel="apple-touch-startup-image" href="/icons/splash/splash-828x1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)">
 <link rel="apple-touch-startup-image" href="/icons/splash/splash-2048x2732.png" media="(min-device-width: 1024px) and (min-device-height: 1366px)">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
+<!-- CSP : aucun accès externe autorisé hors Supabase.
+     frame-ancestors ne fonctionne pas en meta-CSP (limite GitHub Pages — documentée).
+     object-src 'none' bloque Flash/plugins obsolètes.
+     base-uri 'self' empêche une injection de base href.
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://ubowqtowyqmpraoxbaoo.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self';">
 <script type="module" src="./main.js"></script>
 </head>
 <body>

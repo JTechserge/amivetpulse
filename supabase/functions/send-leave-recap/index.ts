@@ -13,7 +13,7 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!;
 const FREQUENCY_DAYS: Record<string, number> = { weekly: 7, monthly: 30 };
 
 const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://jtechserge.github.io',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
