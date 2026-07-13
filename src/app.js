@@ -78,7 +78,7 @@ function reindexPresentShades(){
   ASV_PEOPLE.forEach((p,i)=> p.present = PRESENT_SHADES[i % PRESENT_SHADES.length]);
 }
 function saveASVRoster(){
-  localStorage.setItem(ASV_ROSTER_KEY, JSON.stringify(ASV_PEOPLE.map(p=>({ id:p.id, name:p.name, short:p.short, initial:p.initial, color:p.color, timeFraction:p.timeFraction ?? 1.0, archived:p.archived ?? false, saturdayOnly:p.saturdayOnly ?? false }))));
+  localStorage.setItem(ASV_ROSTER_KEY, JSON.stringify(ASV_PEOPLE.map(p=>({ id:p.id, name:p.name, short:p.short, initial:p.initial, color:p.color, timeFraction:p.timeFraction ?? 1.0, archived:p.archived ?? false, saturdayOnly:p.saturdayOnly ?? false, workingDays:p.workingDays ?? null }))));
 }
 function loadASVRoster(){
   try{
@@ -87,7 +87,7 @@ function loadASVRoster(){
       const saved = JSON.parse(raw);
       if(Array.isArray(saved) && saved.length){
         ASV_PEOPLE.length = 0;
-        saved.forEach(p=> ASV_PEOPLE.push({ id:p.id, name:p.name, short:p.short, initial:p.initial, color:p.color, present:null, timeFraction:p.timeFraction ?? 1.0, archived:p.archived ?? false, saturdayOnly:p.saturdayOnly ?? false }));
+        saved.forEach(p=> ASV_PEOPLE.push({ id:p.id, name:p.name, short:p.short, initial:p.initial, color:p.color, present:null, timeFraction:p.timeFraction ?? 1.0, archived:p.archived ?? false, saturdayOnly:p.saturdayOnly ?? false, workingDays:p.workingDays ?? null }));
         // Fusionner Carla si absente des données sauvegardées (migration)
         if(!ASV_PEOPLE.find(p=>p.id==='carla')){
           ASV_PEOPLE.push({ id:'carla', name:'Carla', short:'Carla', color:'#0EA5E9', initial:'Ca', present:null, timeFraction:7.25/35, saturdayOnly:true });
@@ -388,6 +388,19 @@ function openManageUsersModal(){
             <option value="admin">Admin</option>
           </select>
         </div>
+        <div id="invite-tf-row" style="display:none;margin-bottom:8px;">
+          <label class="text-muted" style="font-size:12px;display:block;margin-bottom:6px;">Temps de travail contractuel</label>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            <button type="button" class="invite-tf-btn active" data-tf="full" style="padding:5px 11px;border-radius:6px;border:1px solid var(--color-primary);font-size:12.5px;cursor:pointer;background:var(--color-primary);color:#fff;">Temps plein (100%)</button>
+            <button type="button" class="invite-tf-btn" data-tf="three_quarter" style="padding:5px 11px;border-radius:6px;border:1px solid var(--color-border);font-size:12.5px;cursor:pointer;background:var(--color-card);">3/4 temps (75%)</button>
+            <button type="button" class="invite-tf-btn" data-tf="half" style="padding:5px 11px;border-radius:6px;border:1px solid var(--color-border);font-size:12.5px;cursor:pointer;background:var(--color-card);">Mi-temps (50%)</button>
+            <button type="button" class="invite-tf-btn" data-tf="days" style="padding:5px 11px;border-radius:6px;border:1px solid var(--color-border);font-size:12.5px;cursor:pointer;background:var(--color-card);">Certains jours</button>
+          </div>
+          <div id="invite-tf-days" style="display:none;flex-wrap:wrap;gap:10px;margin-top:8px;">
+            ${['Lun','Mar','Mer','Jeu','Ven','Sam'].map((l,i)=>`<label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="invite-day-cb" data-day="${i+1}"> ${l}</label>`).join('')}
+          </div>
+          <p id="invite-tf-summary" class="text-muted" style="font-size:12px;margin:4px 0 0;">${_tfSummaryText(1.0)}</p>
+        </div>
         <p id="invite-error" style="color:#B91C1C;font-size:12px;display:none;margin:4px 0 0;"></p>
         <div class="modal-actions" style="margin-top:12px;">
           <button class="btn" id="modal-cancel">Fermer</button>
@@ -398,6 +411,33 @@ function openManageUsersModal(){
 
     box.querySelector('#modal-cancel').onclick = close;
     backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
+
+    // Wire invite role → show/hide time fraction row
+    const inviteRoleSel = box.querySelector('#invite-role');
+    const inviteTfRow = box.querySelector('#invite-tf-row');
+    const inviteTfSummary = box.querySelector('#invite-tf-summary');
+    const updateInviteTf = ()=>{
+      const isAsv = inviteRoleSel.value === 'asv';
+      inviteTfRow.style.display = isAsv ? 'block' : 'none';
+    };
+    inviteRoleSel.addEventListener('change', updateInviteTf);
+    updateInviteTf();
+    // Wire invite TF preset buttons
+    box.querySelectorAll('.invite-tf-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        box.querySelectorAll('.invite-tf-btn').forEach(b=>{ b.classList.remove('active'); b.style.background='var(--color-card)'; b.style.color=''; b.style.borderColor='var(--color-border)'; });
+        btn.classList.add('active'); btn.style.background='var(--color-primary)'; btn.style.color='#fff'; btn.style.borderColor='var(--color-primary)';
+        const tf = btn.dataset.tf;
+        box.querySelector('#invite-tf-days').style.display = tf==='days'?'flex':'none';
+        let fraction = {full:1.0,three_quarter:0.75,half:0.5}[tf];
+        if(tf==='days') fraction = _computeTfFromDays(box).fraction;
+        if(inviteTfSummary) inviteTfSummary.textContent = _tfSummaryText(fraction||1.0);
+      });
+    });
+    box.querySelectorAll('.invite-day-cb').forEach(cb=> cb.addEventListener('change', ()=>{
+      const r = _computeTfFromDays(box);
+      if(inviteTfSummary) inviteTfSummary.textContent = _tfSummaryText(r.fraction);
+    }));
 
     box.querySelectorAll('[data-edit-user]').forEach(btn=>{
       btn.onclick = ()=> openEditUserModal(btn.dataset.editUser, users, ()=> openManageUsersModal());
@@ -523,6 +563,24 @@ function openManageUsersModal(){
             const existing = ASV_PEOPLE.find(p=> p.name.trim().toLowerCase() === name.trim().toLowerCase() && !linkedPersonIds.has(p.id));
             const asvPerson = existing || addASVPerson(name);
             personId = asvPerson?.id || null;
+            // Appliquer le temps de travail choisi
+            if(asvPerson){
+              const activeBtn = box.querySelector('.invite-tf-btn.active');
+              if(activeBtn){
+                const PRESET_VALUES = { full:1.0, three_quarter:0.75, half:0.5 };
+                const tf = activeBtn.dataset.tf;
+                let tfResult;
+                if(tf === 'days'){
+                  const r = _computeTfFromDays(box);
+                  tfResult = { fraction: r.fraction, workingDays: r.days };
+                } else {
+                  tfResult = { fraction: PRESET_VALUES[tf] ?? 1.0, workingDays: null };
+                }
+                asvPerson.timeFraction = tfResult.fraction;
+                asvPerson.workingDays = tfResult.workingDays;
+                saveASVRoster();
+              }
+            }
           }
           if(personId){
             await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
@@ -548,12 +606,105 @@ function openManageUsersModal(){
   });
 }
 
+function buildTimeFractionUI(personId, forRole){
+  if(forRole !== 'asv') return '';
+  const p = personOf(personId);
+  const cur = p?.timeFraction ?? 1.0;
+  const workingDays = p?.workingDays || null;
+  const DAY_LABELS = ['Lun','Mar','Mer','Jeu','Ven','Sam'];
+  // Determine current preset
+  let preset = 'custom';
+  if(Math.abs(cur - 1.0) < 0.01) preset = 'full';
+  else if(Math.abs(cur - 0.75) < 0.01) preset = 'three_quarter';
+  else if(Math.abs(cur - 0.5) < 0.01) preset = 'half';
+  else if(workingDays) preset = 'days';
+  const dayChecks = DAY_LABELS.map((l,i)=> {
+    const checked = workingDays ? workingDays.includes(i+1) : false;
+    return `<label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="edit-day-cb" data-day="${i+1}" ${checked?'checked':''}> ${l}</label>`;
+  }).join('');
+  const customPct = Math.round(cur * 100);
+  return `
+    <div id="edit-tf-block" style="border-top:1px solid var(--color-border);padding-top:12px;">
+      <label class="text-muted" style="font-size:12px;display:block;margin-bottom:8px;">Temps de travail contractuel</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;" id="edit-tf-presets">
+        <button type="button" class="edit-tf-btn ${preset==='full'?'active':''}" data-tf="full" style="padding:5px 11px;border-radius:6px;border:1px solid var(--color-border);font-size:12.5px;cursor:pointer;${preset==='full'?'background:var(--color-primary);color:#fff;border-color:var(--color-primary);':'background:var(--color-card);'}">Temps plein (100%)</button>
+        <button type="button" class="edit-tf-btn ${preset==='three_quarter'?'active':''}" data-tf="three_quarter" style="padding:5px 11px;border-radius:6px;border:1px solid var(--color-border);font-size:12.5px;cursor:pointer;${preset==='three_quarter'?'background:var(--color-primary);color:#fff;border-color:var(--color-primary);':'background:var(--color-card);'}">3/4 temps (75%)</button>
+        <button type="button" class="edit-tf-btn ${preset==='half'?'active':''}" data-tf="half" style="padding:5px 11px;border-radius:6px;border:1px solid var(--color-border);font-size:12.5px;cursor:pointer;${preset==='half'?'background:var(--color-primary);color:#fff;border-color:var(--color-primary);':'background:var(--color-card);'}">Mi-temps (50%)</button>
+        <button type="button" class="edit-tf-btn ${preset==='days'?'active':''}" data-tf="days" style="padding:5px 11px;border-radius:6px;border:1px solid var(--color-border);font-size:12.5px;cursor:pointer;${preset==='days'?'background:var(--color-primary);color:#fff;border-color:var(--color-primary);':'background:var(--color-card);'}">Certains jours</button>
+        <button type="button" class="edit-tf-btn ${preset==='custom'?'active':''}" data-tf="custom" style="padding:5px 11px;border-radius:6px;border:1px solid var(--color-border);font-size:12.5px;cursor:pointer;${preset==='custom'?'background:var(--color-primary);color:#fff;border-color:var(--color-primary);':'background:var(--color-card);'}">Personnalisé</button>
+      </div>
+      <div id="edit-tf-days" style="display:${preset==='days'?'flex':'none'};flex-wrap:wrap;gap:10px;margin-bottom:8px;">${dayChecks}</div>
+      <div id="edit-tf-custom" style="display:${preset==='custom'?'flex':'none'};align-items:center;gap:8px;margin-bottom:4px;">
+        <input type="number" id="edit-tf-pct" min="10" max="100" step="5" value="${customPct}" style="width:80px;padding:6px 8px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;">
+        <span style="font-size:13px;">% du temps plein</span>
+      </div>
+      <p id="edit-tf-summary" class="text-muted" style="font-size:12px;margin:2px 0 0;">${_tfSummaryText(cur)}</p>
+    </div>`;
+}
+function _tfSummaryText(fraction){
+  const q = { weekly: Math.round(35*fraction*100)/100, annual: Math.round(1607*fraction*10)/10 };
+  return `→ ${formatHHMM(q.weekly)}/semaine · ${formatNum(q.annual)}h/an`;
+}
+function _computeTfFromDays(box){
+  const checked = [...box.querySelectorAll('.edit-day-cb:checked')].map(cb=>parseInt(cb.dataset.day));
+  // Mon-Fri avg = (8.5+8.25)/2 = 8.375h, Sat = 7.0h
+  const weekly = checked.reduce((s,d)=> s + (d===6?7.0:8.375), 0);
+  return { fraction: Math.round(weekly/35*1000)/1000, weekly, days: checked };
+}
+function wireTimeFractionUI(box, personId){
+  if(!box.querySelector('#edit-tf-block')) return;
+  const PRESET_VALUES = { full:1.0, three_quarter:0.75, half:0.5 };
+  const updateSummary = ()=>{
+    const active = box.querySelector('.edit-tf-btn.active');
+    if(!active) return;
+    const tf = active.dataset.tf;
+    let fraction;
+    if(tf === 'days'){
+      const r = _computeTfFromDays(box);
+      fraction = r.fraction;
+    } else if(tf === 'custom'){
+      fraction = (parseInt(box.querySelector('#edit-tf-pct').value)||100)/100;
+    } else {
+      fraction = PRESET_VALUES[tf] || 1.0;
+    }
+    box.querySelector('#edit-tf-summary').textContent = _tfSummaryText(fraction);
+  };
+  box.querySelectorAll('.edit-tf-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      box.querySelectorAll('.edit-tf-btn').forEach(b=>{ b.classList.remove('active'); b.style.background='var(--color-card)'; b.style.color=''; b.style.borderColor='var(--color-border)'; });
+      btn.classList.add('active'); btn.style.background='var(--color-primary)'; btn.style.color='#fff'; btn.style.borderColor='var(--color-primary)';
+      const tf = btn.dataset.tf;
+      box.querySelector('#edit-tf-days').style.display = tf==='days'?'flex':'none';
+      box.querySelector('#edit-tf-custom').style.display = tf==='custom'?'flex':'none';
+      updateSummary();
+    });
+  });
+  box.querySelectorAll('.edit-day-cb').forEach(cb=> cb.addEventListener('change', updateSummary));
+  box.querySelector('#edit-tf-pct')?.addEventListener('input', updateSummary);
+}
+function getTimeFractionFromUI(box){
+  const active = box.querySelector('.edit-tf-btn.active');
+  if(!active) return null;
+  const tf = active.dataset.tf;
+  const PRESET_VALUES = { full:1.0, three_quarter:0.75, half:0.5 };
+  if(tf === 'days'){
+    const r = _computeTfFromDays(box);
+    return { fraction: r.fraction, workingDays: r.days };
+  } else if(tf === 'custom'){
+    return { fraction: (parseInt(box.querySelector('#edit-tf-pct').value)||100)/100, workingDays: null };
+  } else {
+    return { fraction: PRESET_VALUES[tf] ?? 1.0, workingDays: null };
+  }
+}
+
 function openEditUserModal(userId, users, onBack){
   const user = users.find(u=>u.id===userId);
   if(!user) return;
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
+  const isAdmin = currentUser?.role === 'admin';
+  const personId = user.person_id;
 
   box.innerHTML = `
     <h3>Modifier ${escapeHTML(user.display_name||user.email||'collaborateur')}</h3>
@@ -585,11 +736,13 @@ function openEditUserModal(userId, users, onBack){
           Peut modifier toutes les lignes ASV
         </label>
       </div>
+      ${buildTimeFractionUI(personId, user.role)}
       <div style="border-top:1px solid var(--color-border);padding-top:12px;">
         <label class="text-muted" style="font-size:12px;display:block;margin-bottom:8px;">Accès au compte</label>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn" id="edit-send-invite" style="font-size:12px;">📧 Renvoyer l'invitation</button>
           <button class="btn" id="edit-send-reset" style="font-size:12px;">🔑 Réinitialiser le mot de passe</button>
+          ${isAdmin && personId ? `<button class="btn" id="edit-reset-profile" style="font-size:12px;color:#B91C1C;border-color:#FCA5A5;" title="Vider les données de planning de ce profil (admin uniquement)">🗑️ Réinitialiser le profil</button>` : ''}
         </div>
         <p id="edit-access-msg" style="font-size:12px;margin:6px 0 0;display:none;"></p>
       </div>
@@ -600,6 +753,8 @@ function openEditUserModal(userId, users, onBack){
       <button class="btn btn-primary" id="edit-save">Enregistrer</button>
     </div>
   `;
+
+  wireTimeFractionUI(box, personId);
 
   box.querySelector('#edit-back').onclick = ()=> onBack();
   box.querySelector('#edit-save').onclick = async ()=>{
@@ -623,6 +778,14 @@ function openEditUserModal(userId, users, onBack){
         body:JSON.stringify(payload),
       });
       if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
+      // Mettre à jour le temps de travail contractuel en local (ASV uniquement)
+      if(role === 'asv' && personId){
+        const tfResult = getTimeFractionFromUI(box);
+        if(tfResult){
+          const p = personOf(personId);
+          if(p){ p.timeFraction = tfResult.fraction; p.workingDays = tfResult.workingDays; saveASVRoster(); }
+        }
+      }
       showToast('Collaborateur mis à jour', '✅');
       onBack();
     }catch(e){
@@ -630,6 +793,26 @@ function openEditUserModal(userId, users, onBack){
       box.querySelector('#edit-save').disabled = false;
     }
   };
+
+  // Réinitialisation du profil (admin uniquement) — vide les slots de planning
+  box.querySelector('#edit-reset-profile')?.addEventListener('click', ()=>{
+    openConfirmModal({
+      title:`Réinitialiser le profil de ${escapeHTML(user.display_name||user.email||'ce collaborateur')} ?`,
+      message:`Toutes les données de planning saisies pour ce profil seront effacées (présences, absences, H.supp., départs anticipés, commentaires). Le compte et les accès restent intacts.\n\nCette action est irréversible.`,
+      confirmLabel:'Réinitialiser le planning',
+      danger: true,
+      onConfirm: ()=>{
+        if(!personId){ showToast('Aucun profil planning lié à ce compte', '⚠️'); return; }
+        snapshotBeforeChange();
+        Object.keys(DATA.slots).filter(k=> k.startsWith(`${personId}_`) || k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
+          .forEach(k=> delete DATA.slots[k]);
+        saveData();
+        showToast(`Planning de ${escapeHTML(user.display_name||user.email||'ce profil')} réinitialisé`, '🗑️');
+        renderCalendarView(currentCalViewKey||'asv-current');
+        onBack();
+      },
+    });
+  });
 
   const sendAccessEmail = async (type)=>{
     const msgEl = box.querySelector('#edit-access-msg');
@@ -3498,6 +3681,7 @@ function openAnnouncementModal(annId){
           headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=representation' }),
           body: JSON.stringify({ title, content, category, target_roles, pinned, expires_at }),
         });
+        if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.message||`Erreur ${res.status}`); }
         [ann] = await res.json();
         announcementsCache.list = announcementsCache.list.map(a => a.id===ann.id?ann:a);
       } else {
@@ -3506,6 +3690,7 @@ function openAnnouncementModal(annId){
           headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=representation' }),
           body: JSON.stringify({ title, content, category, target_roles, pinned, expires_at, author_id }),
         });
+        if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.message||`Erreur ${res.status}`); }
         [ann] = await res.json();
         if(pinned) announcementsCache.list = [ann, ...announcementsCache.list];
         else announcementsCache.list = [ann, ...announcementsCache.list].sort((a,b) => (b.pinned?1:0)-(a.pinned?1:0));
@@ -4022,15 +4207,30 @@ function initCalendarInteractions(){
   }, { passive:true });
   document.addEventListener('touchend', endDrag);
 
-  // Double-clic sur une colonne-jour du calendrier ASV → vue hebdomadaire
+  // Double-clic sur une colonne-jour (vue hebdomadaire) ou une cellule mensuelle ASV → vue semaine
   document.addEventListener('dblclick', (e)=>{
+    // Vue hebdomadaire : colonne-jour entière
     const dayCol = e.target.closest('.cal-wg-day[data-date]');
-    if(!dayCol || currentView !== 'asv' || subNavState.asv === 'week') return;
-    if(dayCol.classList.contains('cal-wg-day-we')) return; // SA/DI : pas de vue semaine
-    const iso = dayCol.dataset.date;
-    if(!iso) return;
-    weekNavState.mondayISO = fmtISO(getWeekMondayDate(new Date(iso+'T00:00:00')));
-    switchSubPage('asv', 'week');
+    if(dayCol && currentView === 'asv' && subNavState.asv !== 'week'){
+      if(!dayCol.classList.contains('cal-wg-day-we')){
+        const iso = dayCol.dataset.date;
+        if(iso){ weekNavState.mondayISO = fmtISO(getWeekMondayDate(new Date(iso+'T00:00:00'))); switchSubPage('asv','week'); }
+      }
+      return;
+    }
+    // Vue mensuelle : cellule individuelle avec data-date
+    const monthCell = e.target.closest('.cal-cell[data-date]');
+    if(monthCell && currentView === 'asv' && (subNavState.asv === 'calendar' || subNavState.asv === 'forecast')){
+      if(monthCell.classList.contains('sunday-cell')) return;
+      const iso = monthCell.dataset.date;
+      if(!iso) return;
+      const d = new Date(iso+'T00:00:00');
+      if(d.getDay() === 0) return; // dimanche
+      const personId = monthCell.dataset.person;
+      if(personId) weekNavState.personId = personId;
+      weekNavState.mondayISO = fmtISO(getWeekMondayDate(d));
+      switchSubPage('asv', 'week');
+    }
   });
 
   document.addEventListener('contextmenu', (e)=>{
@@ -4572,9 +4772,10 @@ function computeASVWorkedHoursWeek(personId, weekStartDate){
   for(let d = 0; d < 7; d++){
     const date = new Date(weekStartDate);
     date.setDate(date.getDate() + d);
+    if(date.getDay() === 0) continue; // dimanche
     const iso = fmtISO(date);
-    if(getSlotState(iso, personId, 'M')  === 'present') total += HALFDAY_HOURS;
-    if(getSlotState(iso, personId, 'AM') === 'present') total += HALFDAY_HOURS;
+    const isPresent = getSlotState(iso, personId, 'M')==='present' || getSlotState(iso, personId, 'AM')==='present';
+    if(isPresent) total += getDayNominal(iso, personId) + getDayAllOtH(iso, personId) - getDayDeficitH(iso, personId);
     total += getOvertimeHours(iso, personId);
   }
   return Math.round(total * 10) / 10;
@@ -4641,7 +4842,7 @@ function buildHoursControlCard(year){
   return `
     <div class="card" style="margin-bottom:24px;" id="dash-hours-control-card">
       <h3 style="font-size:16px;margin-bottom:4px;">Contrôle du temps de travail ${year}</h3>
-      <p class="text-muted" style="font-size:12.5px;margin-bottom:14px;">Base légale : ${formatNum(ANNUAL_FULLTIME_HOURS)}h/an temps plein (35h/semaine). Chaque demi-journée de présence = ${formatNum(HALFDAY_HOURS)}h + ajustements saisis.</p>
+      <p class="text-muted" style="font-size:12.5px;margin-bottom:14px;">Base légale : ${formatNum(ANNUAL_FULLTIME_HOURS)}h/an temps plein (35h/semaine). Heures calculées par poste (O = 8h30, F = 8h15, samedi = 7h00) + H.supp. − départs anticipés.</p>
       <div class="hours-control-grid">${rows}</div>
     </div>
   `;

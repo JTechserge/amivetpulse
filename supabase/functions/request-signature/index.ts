@@ -35,6 +35,39 @@ function halfDaysToJ(hd: number): string {
   const j = hd / 2;
   return Number.isInteger(j) ? `${j} j.` : `${j.toFixed(1)} j.`;
 }
+// Calcul des heures — miroir de app.js (nouvelles clés depuis la refacto semaine ASV)
+function timeToMins(t: string): number {
+  const [h,m] = t.split(':').map(Number);
+  return (h||0)*60+(m||0);
+}
+function getShiftType(slots: Record<string,string>, iso: string, pid: string): 'O'|'F' {
+  return (slots[`${iso}_${pid}_shift`] as 'O'|'F') || 'O';
+}
+function getDayNominalH(slots: Record<string,string>, iso: string, pid: string, wd: number): number {
+  if(wd === 6) return 7.0;
+  return getShiftType(slots, iso, pid) === 'F' ? 8.25 : 8.5;
+}
+function getDayAllOtH(slots: Record<string,string>, iso: string, pid: string): number {
+  const eveningMins = parseInt(slots[`${iso}_${pid}_ot_mins`]) || 0;
+  const lunchMins   = parseInt(slots[`${iso}_${pid}_lunch_ot_mins`]) || 0;
+  return (eveningMins + lunchMins) / 60;
+}
+function getDayEveningOtH(slots: Record<string,string>, iso: string, pid: string): number {
+  return (parseInt(slots[`${iso}_${pid}_ot_mins`]) || 0) / 60;
+}
+function getDayLunchOtH(slots: Record<string,string>, iso: string, pid: string): number {
+  return (parseInt(slots[`${iso}_${pid}_lunch_ot_mins`]) || 0) / 60;
+}
+function getDayDeficitH(slots: Record<string,string>, iso: string, pid: string): number {
+  const early = slots[`${iso}_${pid}_early_dep`] || '';
+  if(!early) return 0;
+  const stdEnd = getShiftType(slots, iso, pid) === 'F' ? 19*60+15 : 19*60;
+  return Math.max(0, (stdEnd - timeToMins(early)) / 60);
+}
+// Rétrocompatibilité : ancienne clé _overtime (données antérieures à la refacto)
+function getLegacyOtH(slots: Record<string,string>, iso: string, pid: string): number {
+  return parseFloat(slots[`${iso}_${pid}_overtime`]) || 0;
+}
 
 
 Deno.serve(async (req) => {
@@ -151,7 +184,9 @@ Deno.serve(async (req) => {
     let presentHalfDays = 0;
     let approvedLeaveHalfDays = 0;
     let pendingHalfDaysTotal = 0;
-    let totalOvertimeHours = 0;
+    let totalOtH = 0;       // H.supp. brutes (soirée + midi)
+    let totalDeficitH = 0;  // H. déficitaires (départs anticipés)
+    let totalWorkedH = 0;   // heures réellement effectuées (nominal + OT - déficit)
     const approvedByLabel: Record<string, number> = {};
     const pendingByLabel:  Record<string, number> = {};
 
@@ -169,7 +204,7 @@ Deno.serve(async (req) => {
       const iso = `${year}-${padZ(month + 1)}-${padZ(day)}`;
       const date = new Date(year, month, day);
       const wd = date.getDay();
-      if(wd === 0) continue; // dimanche uniquement — clinique ouverte le samedi
+      if(wd === 0) continue; // dimanche — clinique ouverte le samedi
 
       const mState    = slots[`${iso}_${personId}_M`]           || 'empty';
       const amState   = slots[`${iso}_${personId}_AM`]          || 'empty';
@@ -190,9 +225,22 @@ Deno.serve(async (req) => {
       approvedLeaveHalfDays += approvedDay;
       pendingHalfDaysTotal  += pendingDay;
 
-      // Heures sup/déficit : valeur saisie manuellement dans la ligne du calendrier ASV
-      const dayOvertimeH = Math.round((parseFloat(slots[`${iso}_${personId}_overtime`]) || 0) * 10) / 10;
-      totalOvertimeHours += dayOvertimeH;
+      // Calcul heures avec nouvelles clés (vue semaine ASV)
+      const isPresent = mState === 'present' || amState === 'present';
+      const nominal   = isPresent ? getDayNominalH(slots, iso, personId, wd) : 0;
+      const dayOtH    = getDayAllOtH(slots, iso, personId);
+      const dayDefH   = getDayDeficitH(slots, iso, personId);
+      // Rétrocompatibilité : ancienne clé _overtime (si nouvelles clés absentes)
+      const legacyOt  = (dayOtH === 0 && dayDefH === 0) ? getLegacyOtH(slots, iso, personId) : 0;
+      const dayNetH   = isPresent ? Math.round((nominal + dayOtH + legacyOt - dayDefH) * 100) / 100 : legacyOt;
+
+      if(isPresent){
+        totalOtH      += dayOtH;
+        totalDeficitH += dayDefH;
+        totalWorkedH  += dayNetH;
+      } else {
+        totalWorkedH += legacyOt;
+      }
 
       if(mState === 'absent' && mLabel && mLabel !== 'Absence non précisée'){
         if(mDecision === 'approved') approvedByLabel[mLabel] = (approvedByLabel[mLabel]||0)+1;
@@ -203,16 +251,25 @@ Deno.serve(async (req) => {
         else pendingByLabel[amLabel] = (pendingByLabel[amLabel]||0)+1;
       }
 
-      const otCellColor = dayOvertimeH > 0 ? '#16A34A' : '#DC2626';
-      const otCell = dayOvertimeH === 0
-        ? `<span style="color:#94A3B8;">—</span>`
-        : `<span style="color:${otCellColor};">${signedHHMM(dayOvertimeH)}</span>`;
+      // Colonnes de la ligne : H.supp. et départ anticipé séparés
+      const otCellHtml = dayOtH > 0
+        ? `<span style="color:#16A34A;">+${formatHHMM(dayOtH)}</span>`
+        : legacyOt > 0 ? `<span style="color:#16A34A;">${signedHHMM(legacyOt)}</span>`
+        : `<span style="color:#94A3B8;">—</span>`;
+      const defCellHtml = dayDefH > 0
+        ? `<span style="color:#DC2626;">−${formatHHMM(dayDefH)}</span>`
+        : `<span style="color:#94A3B8;">—</span>`;
+      const totalCellHtml = isPresent
+        ? `<span style="font-weight:600;color:${COLORS.text};">${formatHHMM(dayNetH)}</span>`
+        : `<span style="color:#94A3B8;">—</span>`;
 
       dayRows.push(`<tr style="background:${day%2===0?'#F8FAFC':'#FFFFFF'};">
         <td style="padding:5px 10px;font-size:12px;color:#0F172A;white-space:nowrap;">${WEEKDAYS_FR[wd]} ${day}</td>
         <td style="padding:5px 10px;font-size:12px;">${cellHtml(mState, mLabel, mDecision)}</td>
         <td style="padding:5px 10px;font-size:12px;">${cellHtml(amState, amLabel, amDecision)}</td>
-        <td style="padding:5px 10px;font-size:12px;text-align:right;">${otCell}</td>
+        <td style="padding:5px 10px;font-size:12px;text-align:right;">${otCellHtml}</td>
+        <td style="padding:5px 10px;font-size:12px;text-align:right;">${defCellHtml}</td>
+        <td style="padding:5px 10px;font-size:12px;text-align:right;">${totalCellHtml}</td>
       </tr>`);
     }
 
@@ -220,22 +277,30 @@ Deno.serve(async (req) => {
     const signingLink = `${APP_URL}?sign=${encodeURIComponent(tokenId)}`;
     const expiryLabel = `${TOKEN_VALID_DAYS} jours`;
 
-    totalOvertimeHours = Math.round(totalOvertimeHours * 10) / 10;
-    const otColor = totalOvertimeHours > 0 ? '#16A34A' : totalOvertimeHours < 0 ? '#DC2626' : '#94A3B8';
+    totalOtH      = Math.round(totalOtH * 100) / 100;
+    totalDeficitH = Math.round(totalDeficitH * 100) / 100;
+    totalWorkedH  = Math.round(totalWorkedH * 100) / 100;
+    const netBalance = Math.round((totalOtH - totalDeficitH) * 100) / 100;
+    const otColor    = netBalance > 0 ? '#16A34A' : netBalance < 0 ? '#DC2626' : '#94A3B8';
 
     function labelRows(map: Record<string, number>, icon: string, color: string): string {
       return Object.entries(map).sort((a,b)=>b[1]-a[1])
-        .map(([lbl, cnt]) => `<tr><td style="padding:3px 10px 3px 22px;font-size:11.5px;color:${color};">${icon} ${lbl}</td><td style="padding:3px 10px;font-size:11.5px;color:${color};text-align:right;">${halfDaysToJ(cnt)}</td></tr>`).join('');
+        .map(([lbl, cnt]) => `<tr><td style="padding:3px 10px 3px 22px;font-size:11.5px;color:${color};">${icon} ${lbl}</td><td colspan="2" style="padding:3px 10px;font-size:11.5px;color:${color};text-align:right;">${halfDaysToJ(cnt)}</td></tr>`).join('');
     }
     const approvedRows = labelRows(approvedByLabel, '✅', COLORS.text);
     const pendingRows  = labelRows(pendingByLabel,  '⏳', '#DC2626');
 
-    const summaryHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${COLORS.border};border-radius:10px;overflow:hidden;margin-bottom:20px;"><thead><tr style="background:${COLORS.secondary};"><th colspan="2" style="padding:8px 12px;font-size:12px;color:${COLORS.textMuted};text-align:left;font-weight:600;letter-spacing:.04em;">RÉCAPITULATIF DU MOIS</th></tr></thead><tbody>
+    const summaryHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${COLORS.border};border-radius:10px;overflow:hidden;margin-bottom:20px;">
+<thead><tr style="background:${COLORS.secondary};"><th colspan="2" style="padding:8px 12px;font-size:12px;color:${COLORS.textMuted};text-align:left;font-weight:600;letter-spacing:.04em;">RÉCAPITULATIF DU MOIS</th></tr></thead>
+<tbody>
 <tr style="background:#FFF;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Jours ouvrés</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${workingDays} j.</td></tr>
 <tr style="background:#F8FAFC;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Jours travaillés</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${halfDaysToJ(presentHalfDays)}</td></tr>
-${approvedLeaveHalfDays > 0 ? `<tr style="background:#FFF;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Congés approuvés ✅</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${halfDaysToJ(approvedLeaveHalfDays)}</td></tr>${approvedRows}` : ''}
-<tr style="background:#F8FAFC;"><td style="padding:5px 10px;font-size:12px;color:#DC2626;">Congés en attente ⏳</td><td style="padding:5px 10px;font-size:12px;color:#DC2626;text-align:right;">${halfDaysToJ(pendingHalfDaysTotal)}</td></tr>${pendingRows}
-<tr style="background:#FFF;border-top:2px solid ${COLORS.border};"><td style="padding:7px 10px;font-size:12px;color:${COLORS.text};">Heures supp. / déficit</td><td style="padding:7px 10px;font-size:12px;color:${otColor};text-align:right;">${signedHHMM(totalOvertimeHours)}</td></tr>
+<tr style="background:#FFF;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Heures effectuées</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;font-weight:600;">${formatHHMM(totalWorkedH)}</td></tr>
+${approvedLeaveHalfDays > 0 ? `<tr style="background:#F8FAFC;"><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};">Congés approuvés ✅</td><td style="padding:5px 10px;font-size:12px;color:${COLORS.text};text-align:right;">${halfDaysToJ(approvedLeaveHalfDays)}</td></tr>${approvedRows}` : ''}
+${pendingHalfDaysTotal > 0 ? `<tr style="background:#FFF;"><td style="padding:5px 10px;font-size:12px;color:#DC2626;">Congés en attente ⏳</td><td style="padding:5px 10px;font-size:12px;color:#DC2626;text-align:right;">${halfDaysToJ(pendingHalfDaysTotal)}</td></tr>${pendingRows}` : ''}
+<tr style="background:#F8FAFC;"><td style="padding:5px 10px;font-size:12px;color:#16A34A;">H. supplémentaires</td><td style="padding:5px 10px;font-size:12px;color:#16A34A;text-align:right;">${totalOtH > 0 ? '+'+formatHHMM(totalOtH) : '—'}</td></tr>
+<tr style="background:#FFF;"><td style="padding:5px 10px;font-size:12px;color:#DC2626;">Départs anticipés</td><td style="padding:5px 10px;font-size:12px;color:#DC2626;text-align:right;">${totalDeficitH > 0 ? '−'+formatHHMM(totalDeficitH) : '—'}</td></tr>
+<tr style="background:#F8FAFC;border-top:2px solid ${COLORS.border};"><td style="padding:7px 10px;font-size:12px;font-weight:700;color:${COLORS.text};">Solde net H.supp.</td><td style="padding:7px 10px;font-size:12px;font-weight:700;color:${otColor};text-align:right;">${signedHHMM(netBalance)}</td></tr>
 </tbody></table>`;
 
     const recapTable = hasAnyData
@@ -246,7 +311,9 @@ ${approvedLeaveHalfDays > 0 ? `<tr style="background:#FFF;"><td style="padding:5
                <th style="padding:8px 10px;font-size:12px;color:#FFF;text-align:left;font-weight:600;">Jour</th>
                <th style="padding:8px 10px;font-size:12px;color:#FFF;text-align:left;font-weight:600;">Matin</th>
                <th style="padding:8px 10px;font-size:12px;color:#FFF;text-align:left;font-weight:600;">Après-midi</th>
-               <th style="padding:8px 10px;font-size:12px;color:#FFF;text-align:right;font-weight:600;">+/− h</th>
+               <th style="padding:8px 10px;font-size:12px;color:#FFF;text-align:right;font-weight:600;">H.supp.</th>
+               <th style="padding:8px 10px;font-size:12px;color:#FFF;text-align:right;font-weight:600;">Départ antic.</th>
+               <th style="padding:8px 10px;font-size:12px;color:#FFF;text-align:right;font-weight:600;">Total h</th>
              </tr>
            </thead>
            <tbody>${dayRows.join('')}</tbody>
