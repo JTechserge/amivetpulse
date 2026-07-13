@@ -2878,12 +2878,12 @@ function buildWeekGrid(year, month, people){
   const labelColHtml = `<div class="cal-wg-label-col" aria-hidden="true">
     <div class="cal-wg-label-spacer"></div>
     <div class="cal-wg-label-persons">
-      ${people.map(p=>`<div class="cal-wg-plabel${p.archived?' plabel-archived':''}" style="background:${p.present.bg};color:${p.present.text};" title="${escapeHTML(p.short)}">${escapeHTML(p.short)}</div>`).join('')}
+      ${people.map(p=>`<div class="cal-wg-plabel${p.archived?' plabel-archived':''}" style="background:${hexToRgba(p.color,0.15)};color:${p.color};border-left:3px solid ${p.color};" title="${escapeHTML(p.short)}">${escapeHTML(p.short)}</div>`).join('')}
     </div>
   </div>`;
 
   const legendHtml = isASV ? '' : `<div class="cal-wg-person-legend">
-    ${people.map(p=>`<span class="cal-wg-person-tag" style="background:${p.present.bg};color:${p.present.text};border-color:${p.present.border};">${p.short}</span>`).join('')}
+    ${people.map(p=>`<span class="cal-wg-person-tag" style="background:${hexToRgba(p.color,0.13)};color:${p.color};border-color:${hexToRgba(p.color,0.4)};">${p.short}</span>`).join('')}
     <span class="cal-wg-status-tag cal-wg-status-absent">Absent</span>
   </div>`;
 
