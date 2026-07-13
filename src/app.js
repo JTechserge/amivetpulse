@@ -497,7 +497,7 @@ function openManageUsersModal(){
               if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
               showToast(`${name} supprimé(e) définitivement`, '🗑️');
               CAL_VIEWS = buildCalViews();
-              renderCalendarView(currentCalViewKey||'asv-current');
+              renderCalendarView(activeCalendarViewKey()||'asv-current');
               openManageUsersModal();
             }catch(e){ showToast('Erreur purge : '+e.message, '⚠️'); }
           },
@@ -534,7 +534,7 @@ function openManageUsersModal(){
             if(asvIdx !== -1){ ASV_PEOPLE.splice(asvIdx,1); reindexPresentShades(); saveASVRoster(); }
             showToast(`${name} retiré(e) du planning`, '🗑️');
             CAL_VIEWS = buildCalViews();
-            renderCalendarView(currentCalViewKey||'asv-current');
+            renderCalendarView(activeCalendarViewKey()||'asv-current');
             openManageUsersModal();
           },
         });
@@ -3460,7 +3460,7 @@ function buildWeekGrid(year, month, people){
         if(!e.h) return null;
         const over = !e.person.saturdayOnly && e.h >= WEEKLY_MAX_HOURS;
         return `<span class="${over?'ot-neg':'ot-pos'}" title="${escapeHTML(e.person.short)} — ${formatHHMM(e.h)} cette semaine${over?' ⚠️ Plafond 42h':''}">` +
-          `${escapeHTML(e.person.short)} ${formatHHMM(e.h)}${over?' ⚠️':''}</span>`;
+          `${escapeHTML(e.person.short)} ${formatHHMM(e.h)}${over?' ⚠️':''}</span>`;
       }).filter(Boolean);
       const weekHHtml = weekHLine.length ? `<div class="cal-wg-week-ot" style="opacity:0.85;font-size:11px;">` +
         `<span style="color:var(--color-text-muted);font-weight:600;margin-right:6px;">Total</span>` +
@@ -6980,7 +6980,7 @@ const PWA_PROMPT_INTERVAL_DAYS = 14;
 const PWA_IOS_PROMPT_KEY = 'pwa_ios_prompt_ts';
 const PWA_ANDROID_PROMPT_KEY = 'pwa_android_prompt_ts';
 
-window.PWA = {
+const PWA = {
   isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent); },
   isInstalled(){ return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches; },
   supportsPush(){ return 'PushManager' in window && 'serviceWorker' in navigator; },
