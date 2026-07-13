@@ -1761,9 +1761,17 @@ function buildSettingsMenuHtml(){
     <button id="action-logout" class="danger" role="menuitem">🚪 Se déconnecter</button>
   `;
 }
+function updateHeaderUsername(){
+  const el = document.getElementById('header-username');
+  if(!el) return;
+  const name = currentUser?.display_name || currentUser?.email || '';
+  el.textContent = name ? name : '';
+  el.style.display = name ? 'inline' : 'none';
+}
 function initSettingsMenu(){
   const toggle = document.getElementById('settings-toggle');
   const menu = document.getElementById('settings-menu');
+  updateHeaderUsername();
   menu.innerHTML = buildSettingsMenuHtml();
 
   toggle.addEventListener('click', (e)=>{
