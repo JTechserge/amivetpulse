@@ -4,6 +4,7 @@
 // La vraie signature n'est enregistrée que lorsque l'ASV clique ce lien et confirme
 // dans l'app — en étant authentifiée, ce qui lie la signature à son compte Supabase.
 import { wrapEmailHtml, buttonHtml, APP_URL, COLORS } from '../_shared/email-template.ts';
+import { getDayNominalH, getDayAllOtH, getDayDeficitH, getLegacyOtH } from '../_shared/asv-hours.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -35,40 +36,6 @@ function halfDaysToJ(hd: number): string {
   const j = hd / 2;
   return Number.isInteger(j) ? `${j} j.` : `${j.toFixed(1)} j.`;
 }
-// Calcul des heures — miroir de app.js (nouvelles clés depuis la refacto semaine ASV)
-function timeToMins(t: string): number {
-  const [h,m] = t.split(':').map(Number);
-  return (h||0)*60+(m||0);
-}
-function getShiftType(slots: Record<string,string>, iso: string, pid: string): 'O'|'F' {
-  return (slots[`${iso}_${pid}_shift`] as 'O'|'F') || 'O';
-}
-function getDayNominalH(slots: Record<string,string>, iso: string, pid: string, wd: number): number {
-  if(wd === 6) return 7.0;
-  return getShiftType(slots, iso, pid) === 'F' ? 8.25 : 8.5;
-}
-function getDayAllOtH(slots: Record<string,string>, iso: string, pid: string): number {
-  const eveningMins = parseInt(slots[`${iso}_${pid}_ot_mins`]) || 0;
-  const lunchMins   = parseInt(slots[`${iso}_${pid}_lunch_ot_mins`]) || 0;
-  return (eveningMins + lunchMins) / 60;
-}
-function getDayEveningOtH(slots: Record<string,string>, iso: string, pid: string): number {
-  return (parseInt(slots[`${iso}_${pid}_ot_mins`]) || 0) / 60;
-}
-function getDayLunchOtH(slots: Record<string,string>, iso: string, pid: string): number {
-  return (parseInt(slots[`${iso}_${pid}_lunch_ot_mins`]) || 0) / 60;
-}
-function getDayDeficitH(slots: Record<string,string>, iso: string, pid: string): number {
-  const early = slots[`${iso}_${pid}_early_dep`] || '';
-  if(!early) return 0;
-  const stdEnd = getShiftType(slots, iso, pid) === 'F' ? 19*60+15 : 19*60;
-  return Math.max(0, (stdEnd - timeToMins(early)) / 60);
-}
-// Rétrocompatibilité : ancienne clé _overtime (données antérieures à la refacto)
-function getLegacyOtH(slots: Record<string,string>, iso: string, pid: string): number {
-  return parseFloat(slots[`${iso}_${pid}_overtime`]) || 0;
-}
-
 
 Deno.serve(async (req) => {
   if(req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
