@@ -16,6 +16,8 @@ import {
   holidaysFor, holidayName,
   formatHHMM, signedHHMM, roundTo15min,
 } from './utils.js';
+import { getAuthSession, saveAuthSession, supabaseHeaders, authSignIn, authUpdatePassword, authSendPasswordReset } from './auth.js';
+import { pushDataToSupabase, syncFromSupabase, fetchSignatures, apiSignMonth, apiRevokeSignature } from './api.js';
 /* ================================================================
    AMIVET PLANNING — Application JS (vanilla ES2022, sans dépendance)
    ================================================================ */
@@ -1072,35 +1074,11 @@ let announcementsCache = {
 };
 let adminImpersonatedPersonId = null; // quelle ASV l'admin imite en mode ASV
 
-function getAuthSession(){
-  try{ return JSON.parse(sessionStorage.getItem(AUTH_SESSION_KEY)); }catch{ return null; }
-}
-function saveAuthSession(s){ sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(s)); }
 function clearAuthSession(){ sessionStorage.removeItem(AUTH_SESSION_KEY); currentUser = null; }
-
-function supabaseHeaders(extra){
-  const session = getAuthSession();
-  const token = session?.access_token || SUPABASE_ANON_KEY;
-  return Object.assign({ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${token}` }, extra || {});
-}
 
 // ----------------------------------------------------------------
 // Fonctions d'authentification (Supabase Auth REST)
 // ----------------------------------------------------------------
-async function authSignIn(email, password){
-  const res = await fetch(`${SUPABASE_AUTH_URL}token?grant_type=password`, {
-    method:'POST',
-    headers:{ apikey:SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
-    body:JSON.stringify({ email, password }),
-  });
-  if(!res.ok){
-    const err = await res.json().catch(()=>({}));
-    throw new Error(err.error_description || err.message || `Erreur ${res.status}`);
-  }
-  const session = await res.json();
-  saveAuthSession(session);
-  return session;
-}
 async function authSignOut(){
   const s = getAuthSession();
   if(s?.access_token){
@@ -1123,22 +1101,6 @@ async function authRefreshSession(){
   const session = await res.json();
   saveAuthSession(session);
   return session;
-}
-async function authUpdatePassword(accessToken, newPassword){
-  const res = await fetch(`${SUPABASE_AUTH_URL}user`, {
-    method:'PUT',
-    headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
-    body:JSON.stringify({ password:newPassword }),
-  });
-  if(!res.ok) throw new Error('Erreur lors de la mise à jour du mot de passe.');
-}
-async function authSendPasswordReset(email){
-  const res = await fetch(`${SUPABASE_AUTH_URL}recover`, {
-    method:'POST',
-    headers:{ apikey:SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
-    body:JSON.stringify({ email, redirectTo:'https://jtechserge.github.io/amivetpulse/' }),
-  });
-  if(!res.ok) throw new Error('Impossible d\'envoyer l\'email de réinitialisation.');
 }
 async function loadCurrentUser(){
   const s = getAuthSession();
@@ -1229,38 +1191,7 @@ function scheduleSupabasePush(){
   clearTimeout(_supabasePushTimer);
   // Attend une courte pause après la dernière modification (ex. fin d'un glisser-peindre)
   // pour grouper les écritures plutôt que d'envoyer une requête à chaque case cochée.
-  _supabasePushTimer = setTimeout(pushDataToSupabase, 900);
-}
-function pushDataToSupabase(){
-  fetch(`${SUPABASE_URL}planning_data?id=eq.singleton`, {
-    method:'PATCH',
-    headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=minimal' }),
-    body: JSON.stringify({ data: DATA.slots, updated_at: new Date().toISOString() }),
-  }).catch(e=> console.warn('Synchronisation Supabase impossible (hors ligne ?), données conservées en local.', e));
-}
-// Appelé une fois au démarrage, après le premier affichage instantané (local) : si la base
-// partagée contient déjà des données, elles font foi et remplacent la copie locale. Si elle
-// est vide (tout premier branchement), on y pousse la copie locale au lieu d'écraser les
-// données existantes avec du vide.
-async function syncFromSupabase(){
-  try{
-    const res = await fetch(`${SUPABASE_URL}planning_data?id=eq.singleton&select=data`, { headers: supabaseHeaders() });
-    if(!res.ok) return;
-    const rows = await res.json();
-    const remoteSlots = rows[0] && rows[0].data;
-    if(remoteSlots && Object.keys(remoteSlots).length > 0){
-      DATA = { version:2, slots: remoteSlots };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
-      renderCurrentView();
-      updateDashboardNavBadge();
-    } else if(remoteSlots !== null && remoteSlots !== undefined){
-      // Supabase est vide (purge ou première utilisation) : vider aussi le cache local
-      DATA = { version:2, slots:{} };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
-      renderCurrentView();
-      updateDashboardNavBadge();
-    }
-  }catch(e){ console.warn('Supabase inaccessible, données locales conservées.', e); }
+  _supabasePushTimer = setTimeout(()=> pushDataToSupabase(DATA.slots), 900);
 }
 // Signatures électroniques mensuelles (feuille de présence ASV) : un cache local simple
 // (clé "personId|year|month") rechargé au démarrage et après chaque signature/annulation —
@@ -1274,35 +1205,23 @@ function isMonthSigned(personId, year, month){ return SIGNATURES.has(signatureKe
 const signatureDetails = new Map();
 function getSignatureDetail(personId, year, month){ return signatureDetails.get(signatureKey(personId, year, month)) || null; }
 async function loadSignatures(){
-  try{
-    const res = await fetch(`${SUPABASE_URL}monthly_signatures?select=*`, { headers: supabaseHeaders() });
-    if(!res.ok) return;
-    const rows = await res.json();
-    SIGNATURES.clear();
-    signatureDetails.clear();
-    rows.forEach(r=>{
-      const key = signatureKey(r.person_id, r.year, r.month);
-      SIGNATURES.add(key);
-      signatureDetails.set(key, { signedName:r.signed_name, signedAt:r.signed_at });
-    });
-    renderCurrentView();
-  }catch(e){ console.warn('Signatures inaccessibles (hors ligne ?).', e); }
+  const rows = await fetchSignatures();
+  if(!rows) return;
+  SIGNATURES.clear();
+  signatureDetails.clear();
+  rows.forEach(r=>{
+    const key = signatureKey(r.person_id, r.year, r.month);
+    SIGNATURES.add(key);
+    signatureDetails.set(key, { signedName:r.signed_name, signedAt:r.signed_at });
+  });
+  renderCurrentView();
 }
 async function signMonth(personId, year, month, signedName){
-  const res = await fetch(`${SUPABASE_URL}monthly_signatures`, {
-    method:'POST',
-    headers: supabaseHeaders({ 'Content-Type':'application/json', 'Prefer':'return=minimal' }),
-    body: JSON.stringify({ person_id:personId, year, month, signed_name:signedName }),
-  });
-  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  await apiSignMonth(personId, year, month, signedName);
   await loadSignatures();
 }
 async function revokeSignature(personId, year, month){
-  const res = await fetch(`${SUPABASE_URL}monthly_signatures?person_id=eq.${encodeURIComponent(personId)}&year=eq.${year}&month=eq.${month}`, {
-    method:'DELETE',
-    headers: supabaseHeaders({ Prefer:'return=minimal' }),
-  });
-  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  await apiRevokeSignature(personId, year, month);
   await loadSignatures();
 }
 
@@ -6650,7 +6569,14 @@ function initApp(){
   switchSubPage('asv', subNavState.asv);
   const startView = !canAccessDashboard() && restoredView === 'dashboard' ? 'vets' : restoredView;
   switchView(VIEW_RENDERERS[startView] ? startView : 'vets');
-  syncFromSupabase();
+  syncFromSupabase().then(remoteSlots=>{
+    if(remoteSlots !== null){
+      DATA = { version:2, slots: remoteSlots };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+      renderCurrentView();
+      updateDashboardNavBadge();
+    }
+  });
   loadSignatures();
   loadInterviews();
   loadAnnouncements();
@@ -6920,8 +6846,15 @@ function updatePwaOfflineBanner(){
   banner.style.display = navigator.onLine ? 'none' : 'block';
 }
 function refreshAllPwaData(){
-  if(typeof syncFromSupabase === 'function') syncFromSupabase();
-  if(typeof loadSignatures === 'function') loadSignatures();
+  syncFromSupabase().then(remoteSlots=>{
+    if(remoteSlots !== null){
+      DATA = { version:2, slots: remoteSlots };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+      renderCurrentView();
+      updateDashboardNavBadge();
+    }
+  });
+  loadSignatures();
   if(typeof loadInterviews === 'function') loadInterviews();
   if(typeof loadAnnouncements === 'function') loadAnnouncements();
 }
