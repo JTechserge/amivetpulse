@@ -26,6 +26,15 @@ import { setupLogin, renderLoginScreen, renderSetPasswordScreen } from './login.
 import { PWA, initServiceWorker, showIOSInstallTip, updatePwaOfflineBanner, triggerPushNotification, openNotificationSettingsModal, notificationStatusLabel } from './pwa.js';
 import { loadAnnouncements, renderAnnounces, updateAnnouncementBadge } from './announcements.js';
 import { setupSignatures, signatureKey, isMonthSigned, getSignatureDetail, loadSignatures, signMonth, revokeSignature, openSigningLinkModal, openSignConfirmModal } from './signatures.js';
+import {
+  slotKey, labelKey, commentKey, decisionKey, decisionCommentKey, changeKey, overtimeKey,
+  isASVPerson, isWithinNextTwoWeeks,
+  getLeaveDecision, setLeaveDecision, getLeaveDecisionComment, setLeaveDecisionComment,
+  getChangeDecision, setChangeDecision,
+  getOvertimeHours, setOvertimeHours,
+  getSlotState, setSlotState, getSlotLabel, setSlotLabel,
+  getDayComment, setDayComment, cycleState,
+} from './slots.js';
 /* ================================================================
    AMIVET PLANNING — Application JS (vanilla ES2022, sans dépendance)
    ================================================================ */
@@ -1147,93 +1156,7 @@ function updateDashboardNavBadge(){
 // ----------------------------------------------------------------
 /* announcements.js — annonceViewerId, loadAnnouncements, renderAnnounces, etc. */
 
-function slotKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}`; }
-function labelKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}_label`; }
-function commentKey(isoDate){ return `${isoDate}_comment`; }
-function isASVPerson(personId){ return ASV_PEOPLE.some(p=>p.id===personId); }
-
-// ----------------------------------------------------------------
-// Demandes de congé ASV — statut de décision rattaché à chaque demi-journée plutôt qu'à
-// une entité "demande" séparée : ça réutilise directement la logique de fusion des
-// absences contiguës déjà en place (mêmes clés store.DATA.slots, même date ISO réelle), sans
-// avoir à synchroniser deux structures de données en parallèle.
-function decisionKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}_decision`; }
-function decisionCommentKey(isoDate, personId, slot){ return `${isoDate}_${personId}_${slot}_decision_comment`; }
-function getLeaveDecision(isoDate, personId, slot){ return store.DATA.slots[decisionKey(isoDate,personId,slot)] || null; }
-function setLeaveDecision(isoDate, personId, slot, decision){
-  const key = decisionKey(isoDate,personId,slot);
-  if(decision) store.DATA.slots[key] = decision; else delete store.DATA.slots[key];
-}
-function getLeaveDecisionComment(isoDate, personId, slot){ return store.DATA.slots[decisionCommentKey(isoDate,personId,slot)] || ''; }
-function setLeaveDecisionComment(isoDate, personId, slot, text){
-  const key = decisionCommentKey(isoDate,personId,slot);
-  if(text) store.DATA.slots[key] = text; else delete store.DATA.slots[key];
-}
-// Modifications urgentes dans les 14 jours à venir (vue mensuelle ASV uniquement)
-function changeKey(iso, pid, slot){ return `${iso}_${pid}_${slot}_chg`; }
-function getChangeDecision(iso, pid, slot){ return store.DATA.slots[changeKey(iso,pid,slot)] || null; }
-function setChangeDecision(iso, pid, slot, dec){
-  const k = changeKey(iso,pid,slot);
-  if(dec) store.DATA.slots[k] = dec; else delete store.DATA.slots[k];
-}
-// Retourne true si la date ISO est dans les 14 prochains jours (aujourd'hui inclus)
-function isWithinNextTwoWeeks(iso){
-  const d = new Date(iso+'T00:00:00');
-  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  return d.getTime() >= t0 && d.getTime() <= t0 + 14*24*60*60*1000;
-}
-
-// Heures supplémentaires ASV — un nombre d'heures par personne et par jour (pas par
-// demi-journée : une ASV peut faire 1h30 de plus sans que ça corresponde à un créneau M/AM).
-function overtimeKey(isoDate, personId){ return `${isoDate}_${personId}_overtime`; }
-function getOvertimeHours(isoDate, personId){ return parseFloat(store.DATA.slots[overtimeKey(isoDate,personId)]) || 0; }
-function setOvertimeHours(isoDate, personId, hours){
-  const key = overtimeKey(isoDate, personId);
-  const n = parseFloat(hours);
-  if(!isNaN(n) && n !== 0) store.DATA.slots[key] = n; else delete store.DATA.slots[key];
-}
-
-function getSlotState(isoDate, personId, slot){ return store.DATA.slots[slotKey(isoDate,personId,slot)] || 'empty'; }
-function setSlotState(isoDate, personId, slot, state){
-  const key = slotKey(isoDate,personId,slot);
-  const wasAbsent = store.DATA.slots[key] === 'absent';
-  if(state === 'empty'){
-    delete store.DATA.slots[key];
-    delete store.DATA.slots[labelKey(isoDate,personId,slot)];
-  } else {
-    store.DATA.slots[key] = state;
-    if(state !== 'absent') delete store.DATA.slots[labelKey(isoDate,personId,slot)];
-  }
-  if(isASVPerson(personId)){
-    if(state === 'absent' && !wasAbsent){
-      // Nouvelle absence ASV : demande de congé automatiquement créée en attente de
-      // validation vétérinaire (sauf si une décision existait déjà sur cette demi-journée,
-      // ex. ré-application du même état pendant un glisser-peindre).
-      if(!getLeaveDecision(isoDate, personId, slot)) setLeaveDecision(isoDate, personId, slot, 'pending');
-      // Des heures sup n'ont plus de sens un jour de congé : on les efface automatiquement.
-      setOvertimeHours(isoDate, personId, 0);
-    } else if(state !== 'absent' && wasAbsent){
-      setLeaveDecision(isoDate, personId, slot, null);
-      setLeaveDecisionComment(isoDate, personId, slot, '');
-    }
-  }
-}
-function getSlotLabel(isoDate, personId, slot){ return store.DATA.slots[labelKey(isoDate,personId,slot)] || ''; }
-function setSlotLabel(isoDate, personId, slot, label){
-  const key = labelKey(isoDate,personId,slot);
-  if(label) store.DATA.slots[key] = label; else delete store.DATA.slots[key];
-}
-function getDayComment(isoDate){ return store.DATA.slots[commentKey(isoDate)] || ''; }
-function setDayComment(isoDate, text){
-  const key = commentKey(isoDate);
-  if(text) store.DATA.slots[key] = text; else delete store.DATA.slots[key];
-}
-// Cycle d'état d'une demi-journée : vide -> présent -> absent -> vide
-function cycleState(state){
-  if(state === 'empty') return 'present';
-  if(state === 'present') return 'absent';
-  return 'empty';
-}
+/* slots.js — slotKey, labelKey, getSlotState/setSlotState, etc. */
 
 /* ----------------------------------------------------------------
    5. DONNÉES DE DÉMONSTRATION
