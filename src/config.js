@@ -88,3 +88,8 @@ export const ASV_STD_WEEKDAY_AVG   = 8.375;
 export const CLINIC_HOURS = { mStart:'08:30', mEnd:'13:00', amStart:'15:00', amEnd:'20:00' };
 export const CLINIC_M_H  = 4.5;   // 8h30→13h00
 export const CLINIC_AM_H = 4.25;  // 15h00→19h15
+
+export const MONTH_NAMES  = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+export const MONTH_SHORT  = ['Janv','Févr','Mars','Avr','Mai','Juin','Juil','Août','Sept','Oct','Nov','Déc'];
+export const WEEKDAY_NAMES = ['Lu','Ma','Me','Je','Ve','Sa','Di']; // lundi = 0
+export const WEEKDAY_FULL  = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];

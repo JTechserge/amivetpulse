@@ -9,6 +9,7 @@ import {
   ANNUAL_FULLTIME_HOURS, HALFDAY_HOURS, WEEKLY_MAX_HOURS,
   ASV_STD_SAT_CARLA, ASV_STD_SAT_SECOND, ASV_STD_WEEKDAY_AVG,
   CLINIC_HOURS, CLINIC_M_H, CLINIC_AM_H,
+  MONTH_NAMES, MONTH_SHORT, WEEKDAY_NAMES, WEEKDAY_FULL,
 } from './config.js';
 import {
   escapeHTML, slugifyName, hexToHsl, hexToRgba, colorRejectReason,
@@ -882,10 +883,6 @@ function openCalendarSyncModal(){
     });
   });
 }
-
-const MONTH_NAMES = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-const MONTH_SHORT = ['Janv','Févr','Mars','Avr','Mai','Juin','Juil','Août','Sept','Oct','Nov','Déc'];
-const WEEKDAY_NAMES = ['Lu','Ma','Me','Je','Ve','Sa','Di']; // lundi = 0
 
 // État de navigation par vue calendrier (mois affiché courant par année)
 const today = new Date();
@@ -3325,7 +3322,6 @@ VIEW_RENDERERS['annonces'] = renderAnnounces;
 /* ----------------------------------------------------------------
    13. INTERACTIONS CALENDRIER (clic, glisser-peindre, popovers, sidebar)
    ---------------------------------------------------------------- */
-const WEEKDAY_FULL = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
 function formatFR(iso){
   const [y,m,d] = iso.split('-').map(Number);
   const date = new Date(y, m-1, d);
