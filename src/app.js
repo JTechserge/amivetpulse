@@ -232,8 +232,11 @@ function openManageUsersModal(){
       ...localOnlyASV.map(p=>({ ...p, localRole:'asv', roleLabel:'ASV' })),
     ];
 
-    const rows = users.map(u=>`<tr>
-        <td style="font-weight:600;">${escapeHTML(u.display_name||'—')}</td>
+    const rows = users.map(u=>{
+      const cp = u.person_id ? personOf(u.person_id) : null;
+      const swatch = cp ? `<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${cp.color};margin-right:6px;vertical-align:middle;flex-shrink:0;"></span>` : '';
+      return `<tr>
+        <td style="font-weight:600;">${swatch}${escapeHTML(u.display_name||'—')}</td>
         <td style="font-size:12px;color:var(--color-text-muted);">${roleLabels[u.role]||u.role||'—'}</td>
         <td style="font-size:12px;color:var(--color-text-muted);">${escapeHTML(u.email||'—')}</td>
         <td style="font-size:12px;text-align:center;">${u.can_edit_vet_calendar ? '✅' : '—'}</td>
@@ -243,7 +246,8 @@ function openManageUsersModal(){
           <button class="btn btn-sm" data-delete-user="${u.id}" data-delete-name="${escapeHTML(u.display_name||u.email||u.id)}" style="font-size:11.5px;padding:4px 8px;color:#B91C1C;border-color:#FCA5A5;" title="Supprimer le compte uniquement">🗑️</button>
           ${isAdmin ? `<button class="btn btn-sm" data-purge-user="${u.id}" data-purge-person="${u.person_id||''}" data-purge-name="${escapeHTML(u.display_name||u.email||u.id)}" style="font-size:11.5px;padding:4px 8px;margin-left:4px;color:#FFFFFF;background:#B91C1C;border-color:#B91C1C;" title="Suppression définitive — efface toutes les données">💣</button>` : ''}
         </td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
 
     const localASVRows = localOnlyPeople.map(p=>`<tr>
         <td style="font-weight:600;color:var(--color-text-muted);">${escapeHTML(p.short)}</td>
@@ -632,6 +636,15 @@ function openEditUserModal(userId, users, onBack){
         </label>
       </div>
       ${buildTimeFractionUI(personId, user.role)}
+      ${personId ? `<div>
+        <label class="text-muted" style="font-size:12px;display:block;margin-bottom:8px;">Couleur dans le planning</label>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <input type="color" id="edit-person-color" value="${escapeHTML(personOf(personId)?.color||'#888888')}"
+            style="width:48px;height:32px;border:1px solid var(--color-border);border-radius:6px;cursor:pointer;padding:2px;background:none;">
+          <span style="font-size:12px;color:var(--color-text-muted);">Éviter le vert, rouge, bleu foncé, jaune et blanc (réservés aux statuts)</span>
+        </div>
+        <p id="edit-color-error" style="color:#B91C1C;font-size:12px;display:none;margin:4px 0 0;"></p>
+      </div>` : ''}
       <div style="border-top:1px solid var(--color-border);padding-top:12px;">
         <label class="text-muted" style="font-size:12px;display:block;margin-bottom:8px;">Accès au compte</label>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -660,6 +673,13 @@ function openEditUserModal(userId, users, onBack){
     const canAsv = box.querySelector('#edit-all-asv').checked;
     const errEl = box.querySelector('#edit-error');
     if(!displayName){ errEl.textContent='Le nom est requis.'; errEl.style.display='block'; return; }
+    // Valider la couleur avant d'envoyer
+    const colorInput = box.querySelector('#edit-person-color');
+    const colorErrEl = box.querySelector('#edit-color-error');
+    if(colorInput && personId){
+      const reason = colorRejectReason(colorInput.value);
+      if(reason){ if(colorErrEl){ colorErrEl.textContent=reason; colorErrEl.style.display='block'; } return; }
+    }
     box.querySelector('#edit-save').disabled = true;
     try{
       const payload = {
@@ -673,6 +693,11 @@ function openEditUserModal(userId, users, onBack){
         body:JSON.stringify(payload),
       });
       if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`Erreur ${res.status}`); }
+      // Mettre à jour la couleur en local
+      if(colorInput && personId){
+        const p = personOf(personId);
+        if(p){ p.color = colorInput.value; savePersonColors(); applyPersonColorVars(); }
+      }
       // Mettre à jour le temps de travail contractuel en local (ASV uniquement)
       if(role === 'asv' && personId){
         const tfResult = getTimeFractionFromUI(box);
