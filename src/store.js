@@ -51,4 +51,8 @@ export const store = {
 
   // Vue semaine ASV
   weekNavState: { mondayISO: null, personId: null, weekTool: 'paint' },
+
+  // Outil de peinture actif dans la vue calendrier mensuel ASV
+  // Valeurs possibles : 'opening' | 'closing' | 'repos' | 'conge' | 'maladie' | 'erase'
+  calMonthPaintMode: 'opening',
 };
