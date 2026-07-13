@@ -1,0 +1,63 @@
+name: Security
+
+on:
+  push:
+    branches: [main, 'hardening/**']
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 3 * * 1'  # Lundi 03h00 UTC
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  # ── 1. Analyse statique CodeQL (JS/TS) ──────────────────────────────────────
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialiser CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+
+      - name: Analyse CodeQL
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:javascript-typescript
+
+  # ── 2. Détection de secrets (gitleaks) ──────────────────────────────────────
+  gitleaks:
+    name: Gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # historique complet pour scanner tous les commits
+
+      - name: Scanner les secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── 3. Audit des dépendances npm ────────────────────────────────────────────
+  npm-audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Audit (critique + haute sévérité)
+        run: npm audit --audit-level=high
