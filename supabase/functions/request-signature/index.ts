@@ -335,10 +335,10 @@ ${pendingHalfDaysTotal > 0 ? `<tr style="background:#FFF;"><td style="padding:5p
         Ce lien est à usage unique et valable ${expiryLabel}.
       </p>
       ${buttonHtml(signingLink, '✍️ Je certifie et signe ma feuille de présence')}
+      <div style="display:none;overflow:hidden;max-height:0;font-size:0;line-height:0;" aria-hidden="true">${' '.repeat(30000)}</div>
       <p style="font-size:12px;color:${COLORS.textFaint};margin:0 0 20px;">
         Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.
       </p>
-      <div style="display:none;overflow:hidden;max-height:0;font-size:0;line-height:0;" aria-hidden="true">${' '.repeat(30000)}</div>
     `);
 
     const text = [
