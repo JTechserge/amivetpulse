@@ -45,4 +45,7 @@ export const store = {
 
   // Undo stack (snapshots of DATA.slots before each user action)
   UNDO_STACK: [],
+
+  // Dashboard sub-tab navigation (tab actif dans le tableau de bord)
+  dashSubState: { tab: 'stats' },
 };
