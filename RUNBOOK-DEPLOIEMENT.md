@@ -1,4 +1,4 @@
-# Runbook de déploiement — Amivet PULSE (Phase 6 + 7)
+# Runbook de déploiement — Amivet PULSE (Phase 6 + 7 + 8)
 
 Procédure ordonnée pour passer l'ensemble des correctifs de sécurité en production.
 Durée estimée : **20–30 minutes** (hors communication aux vétérinaires).
@@ -31,6 +31,48 @@ Durée estimée : **20–30 minutes** (hors communication aux vétérinaires).
 - [ ] Accès au Supabase Dashboard (projet `ubowqtowyqmpraoxbaoo`)
 - [ ] Accès GitHub (pour le merge final)
 - [ ] Prévenir les vétérinaires : **leurs liens de synchronisation calendrier seront invalidés** à l'étape 2b (ils devront régénérer un lien dans ⚙️ Paramètres)
+
+---
+
+## Étape 0 — Rejouer `20260714000001` corrigée (Phase 8) ⚠️ CRITIQUE
+
+**Contexte** : la version initiale de `20260714000001_lock_planning_writes.sql` contenait `CREATE POLICY IF NOT EXISTS`, syntaxe invalide en PostgreSQL. La policy `block direct writes` peut ne pas être présente en base. Phase 8 corrige le fichier (idempotent : `DROP POLICY IF EXISTS` + `CREATE POLICY`).
+
+**Procédure** :
+1. Supabase Dashboard → SQL Editor → New query
+2. Coller le contenu corrigé de `supabase/migrations/20260714000001_lock_planning_writes.sql`
+3. Cliquer **Run** → vérifier qu'aucune erreur ne s'affiche
+
+**Vérification pg_policies** (à coller immédiatement après) :
+```sql
+select policyname, cmd, permissive, qual, with_check
+from pg_policies
+where tablename = 'planning_data';
+```
+Résultat attendu : deux lignes —
+- `auth read planning_data` / `PERMISSIVE` / qual = `true` / with_check = null
+- `block direct writes` / `RESTRICTIVE` / qual = `true` / **with_check = `false`**
+
+Si `block direct writes` est absent : la policy n'était pas en base, le rejeu l'a créée. ✅
+Si elle est présente avant le rejeu : le `DROP + CREATE` l'a recréée proprement. ✅
+
+**Test de preuve (compte ASV de test)** :
+```js
+// Dans la console DevTools, connecté en tant qu'ASV (non admin) :
+const session = JSON.parse(sessionStorage.getItem('amivet_auth_session'));
+const SUPABASE_URL = 'https://ubowqtowyqmpraoxbaoo.supabase.co/rest/v1';
+const ANON_KEY = '<clé anon depuis src/config.js>';
+await fetch(`${SUPABASE_URL}/planning_data?id=eq.singleton`, {
+  method: 'PATCH',
+  headers: { apikey: ANON_KEY, Authorization: `Bearer ${session.access_token}`,
+             'Content-Type': 'application/json', Prefer: 'return=minimal' },
+  body: JSON.stringify({ data: { __MARQUEUR_TEST__: true } }),
+});
+const r = await fetch(`${SUPABASE_URL}/planning_data?id=eq.singleton&select=data`,
+  { headers: { apikey: ANON_KEY, Authorization: `Bearer ${session.access_token}` } });
+console.log(!!(await r.json())[0]?.data?.__MARQUEUR_TEST__); // doit afficher false
+```
+→ `false` = verrou actif. Écriture via l'app (admin/ASV selon droits) doit continuer à fonctionner (passe par `save-planning`).
 
 ---
 

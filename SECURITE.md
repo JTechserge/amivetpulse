@@ -1,6 +1,6 @@
 # Sécurité — Amivet PULSE
 
-Document de référence unique. Dernière mise à jour : Phase 7 (juillet 2026).
+Document de référence unique. Dernière mise à jour : Phase 8 (juillet 2026).
 
 ---
 
@@ -19,7 +19,8 @@ Document de référence unique. Dernière mise à jour : Phase 7 (juillet 2026).
 
 ### 1. Contrôle d'accès (RLS)
 
-- **`planning_data`** : lecture publique (anon), écriture bloquée côté REST — toutes les écritures passent par `save-planning` (service_role vérifié côté Edge Function). Migration `20260714000001`.
+- **`planning_data`** : lecture publique (anon), écriture bloquée côté REST — toutes les écritures passent par `save-planning` (service_role vérifié côté Edge Function). Migration `20260714000001` (corrigée Phase 8 : `CREATE POLICY IF NOT EXISTS` invalide → `DROP + CREATE`).
+  - **Vérification requise** : après tout rejeu de `20260714000001`, confirmer la présence de la policy via `select policyname, cmd, permissive, qual, with_check from pg_policies where tablename = 'planning_data';` — doit afficher `block direct writes`, type RESTRICTIVE, `with_check = false`. ☐ *Vérifié le _______ via pg_policies*
 - **8 tables sensibles** (`monthly_signatures`, `email_settings`, `cp_adjustments`, `announcements`, `announcement_reads`, `push_subscriptions`, `medical_visits`, `app_security`) : RLS restrictive — accès en lecture limité à l'utilisateur concerné ou aux admins. Migration `20260713000001`.
 
 > **Piège critique** : ne **jamais** référencer `user_profiles` dans ses propres politiques RLS. Cela provoque une récursion infinie qui bloque toutes les connexions. Voir migration `20240515000001_fix_rls_recursion.sql`.
@@ -71,22 +72,16 @@ Stockage SHA-256 uniquement depuis la migration `20260713000002`. Le plain text 
 
 ---
 
-## Migrations en attente de déploiement Supabase
+## État des migrations (Phase 6–8)
 
-> Ces migrations sont commitées mais **pas encore appliquées en production** au moment de la rédaction de ce document.
+Toutes les migrations sont déployées en production. Voir `supabase/README.md` pour l'inventaire complet.
 
-| Fichier | Statut | Impact |
-|---|---|---|
-| `20260713000001_tighten_rls.sql` | ⏳ À déployer | RLS restrictive sur 8 tables |
-| `20260713000002_rate_limits_and_token_hash.sql` | ⏳ À déployer | Rate limiting + hash token calendar-feed (**invalide tokens existants**) |
-
-**Procédure** : Supabase Dashboard → SQL Editor → coller le contenu du fichier → Run.
-
-**Vérifications post-déploiement `20260713000001`** : se connecter en ASV (non admin) et tenter de modifier les réglages email → doit retourner une erreur RLS.
-
-**Vérifications post-déploiement `20260713000002`** :
-1. Régénérer un token calendar-feed → vérifier que le lien iCal fonctionne dans Apple Calendrier
-2. Appeler `manage-users?action=invite` 11 fois en 1h → 11e appel doit retourner HTTP 429
+| Fichier | Statut |
+|---|---|
+| `20260713000001_tighten_rls.sql` | ✅ Déployé |
+| `20260713000002_rate_limits_and_token_hash.sql` | ✅ Déployé |
+| `20260714000001_lock_planning_writes.sql` | ✅ Déployé — **à rejouer** (correction Phase 8 : `IF NOT EXISTS` invalide supprimé) |
+| `20260714000002_fix_calendar_hash_functions.sql` | ✅ Déployé |
 
 ---
 
