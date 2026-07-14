@@ -32,7 +32,10 @@ DROP POLICY IF EXISTS "allow anon write" ON planning_data;
 -- USING (true) laisse le SELECT intact.
 -- WITH CHECK (false) refuse tout INSERT et UPDATE pour authenticated.
 -- service_role contourne toujours RLS → save-planning n'est pas affecté.
-CREATE POLICY IF NOT EXISTS "block direct writes" ON planning_data
+-- Note : CREATE POLICY ne supporte pas IF NOT EXISTS en PostgreSQL (aucune version).
+-- On fait précéder d'un DROP pour rendre la migration idempotente.
+DROP POLICY IF EXISTS "block direct writes" ON planning_data;
+CREATE POLICY "block direct writes" ON planning_data
   AS RESTRICTIVE
   FOR ALL
   TO authenticated
