@@ -112,16 +112,28 @@ HTML et composants communs (boutons, couleurs, wrapper) pour les emails envoyés
 | `20240701000001_announcements.sql` | Table `announcements` + catégories |
 | `20240715000001_push_notifications.sql` | Table `push_subscriptions` |
 
-### Migrations Phase 6–7 (à déployer)
+### Migrations Phase 6–8 (déployées)
 
 | Fichier | Statut | Description |
 |---|---|---|
 | `20260713000001_tighten_rls.sql` | ✅ Déployé | RLS restrictive sur 8 tables sensibles |
-| `20260713000002_rate_limits_and_token_hash.sql` | ✅ Déployé | Rate limiting + hash tokens calendar-feed (**tokens existants invalidés**) |
-| `20260714000001_lock_planning_writes.sql` | ✅ Déployé | Verrouillage PATCH direct sur `planning_data` — toutes les écritures via `save-planning` |
-| `20260714000002_fix_calendar_hash_functions.sql` | ✅ Déployé | Corrige `get_calendar_feed_access` + `get_calendar_sync_status` + `generate/revoke` pour utiliser `token_hash` |
+| `20260713000002_rate_limits_and_token_hash.sql` | ✅ Déployé — **référence** | Rate limiting + hash SHA-256 tokens calendar-feed (**invalide tokens existants**) |
+| `20260714000001_lock_planning_writes.sql` | ✅ Déployé (corrigé Phase 8) | Verrouillage PATCH direct sur `planning_data` — toutes les écritures via `save-planning` |
+| `20260714000002_fix_calendar_hash_functions.sql` | ✅ Déployé | Corrige `get_calendar_feed_access` + `get_calendar_sync_status` + `generate/revoke` pour `token_hash` |
 
-> Toutes les migrations Phase 6–7 sont déployées. Voir [RUNBOOK-DEPLOIEMENT.md](../RUNBOOK-DEPLOIEMENT.md).
+> Toutes les migrations Phase 6–8 sont déployées. Voir [RUNBOOK-DEPLOIEMENT.md](../RUNBOOK-DEPLOIEMENT.md).
+
+#### Fichiers auxiliaires de `20260713000002` (ne pas rejouer sur une base vierge)
+
+Trois fichiers partagent le préfixe `20260713000002` — traces des rejeux successifs lors du déploiement initial (timeout réseau) :
+
+| Fichier | Rôle |
+|---|---|
+| `20260713000002_rate_limits_and_token_hash.sql` | **Version de référence** — à appliquer sur une base vierge |
+| `20260713000002_complement_partie1.sql` | Complément ponctuel : ne crée que `rate_limit_log` + `check_rate_limit` + fonctions Partie 2 (rejoué après timeout de la Partie 1) |
+| `20260713000002_check_and_replay.sql` | Requête de vérification uniquement (4 SELECT EXISTS) — ne modifie rien |
+
+Sur une base vierge, **jouer uniquement `_rate_limits_and_token_hash.sql`**. Les deux autres ne sont utiles que si ce fichier a planté en cours d'exécution.
 
 ---
 
