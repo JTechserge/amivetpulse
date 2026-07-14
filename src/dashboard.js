@@ -202,6 +202,7 @@ export async function renderDashboardSignatures(){
         try{
           const url = await fetchSignedStorageUrl(path);
           window.open(url, '_blank', 'noopener');
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
         }catch(e){
           showToast('Impossible d\'ouvrir le PDF — ' + (e.message||'erreur'), '❌');
         }finally{

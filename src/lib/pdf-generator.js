@@ -235,19 +235,6 @@ export async function generateSignaturePdf({ personId, year, month, signedAt, si
     const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
     pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
 
-    // Filigrane : ID de signature en diagonale, gris très clair
-    if (signatureId) {
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(8);
-      pdf.setTextColor(215, 215, 215);
-      const watermark = `ID: ${signatureId}`;
-      for (let row = 0; row < 8; row++) {
-        for (let col = -1; col < 4; col++) {
-          pdf.text(watermark, col * 90 - 10, row * 38 + 20, { angle: 45 });
-        }
-      }
-    }
-
     return pdf.output('datauristring').split(',')[1];
   } finally {
     document.body.removeChild(wrapper);

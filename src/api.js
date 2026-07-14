@@ -80,8 +80,8 @@ export async function fetchSignatureArchive(year){
   }
 }
 
-// Génère une URL signée temporaire (1h) via l'Edge Function get-signed-pdf-url
-// (contourne le bug auth.jwt() ->> 'role' des policies RLS Storage).
+// Télécharge le PDF via l'EF get-signed-pdf-url (proxy service_role)
+// et retourne un object URL local utilisable dans window.open.
 export async function fetchSignedStorageUrl(pdfPath){
   const res = await fetch(
     `${SUPABASE_FUNCTIONS_URL}get-signed-pdf-url`,
@@ -91,9 +91,8 @@ export async function fetchSignedStorageUrl(pdfPath){
       body: JSON.stringify({ pdf_path: pdfPath }),
     });
   if(!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
-  if(!data.ok) throw new Error(data.error || 'Erreur URL signée');
-  return data.url;
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }
 
 // Rejette une signature (soft-delete : status → 'rejected', conservé en historique).

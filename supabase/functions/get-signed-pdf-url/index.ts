@@ -48,25 +48,24 @@ Deno.serve(async (req) => {
         { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
     }
 
-    // Générer l'URL signée avec service_role (bypasse la RLS Storage).
-    // POST /object/sign/{bucket}/{key} → { signedURL: '/storage/v1/object/sign/...?token=...' }
-    const signRes = await fetch(
-      `${SUPABASE_URL}/storage/v1/object/sign/signed-sheets/${pdf_path}`,
-      {
-        method: 'POST',
-        headers: { ...SVC, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ expiresIn: 3600 }),
-      });
-    if (!signRes.ok) {
-      const errBody = await signRes.text();
-      throw new Error(`Storage HTTP ${signRes.status} — ${errBody}`);
+    // Télécharge le PDF directement avec service_role (bypasse la RLS Storage)
+    // et le renvoie en proxy au navigateur — évite tout problème de path sur les signed URLs.
+    const fileRes = await fetch(
+      `${SUPABASE_URL}/storage/v1/object/signed-sheets/${pdf_path}`,
+      { headers: SVC });
+    if (!fileRes.ok) {
+      throw new Error(`Storage fetch HTTP ${fileRes.status} — ${await fileRes.text()}`);
     }
-    const body = await signRes.json();
-    const signedURL: string = body.signedURL ?? body.signedUrl ?? '';
-    if (!signedURL) throw new Error(`Réponse Storage inattendue : ${JSON.stringify(body)}`);
+    const pdfBytes = await fileRes.arrayBuffer();
 
-    return new Response(JSON.stringify({ ok: true, url: `${SUPABASE_URL}${signedURL}` }),
-      { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+    return new Response(pdfBytes, {
+      headers: {
+        ...CORS_HEADERS,
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': 'inline',
+        'Cache-Control': 'private, max-age=3600',
+      },
+    });
 
   } catch (e) {
     console.error(e);
