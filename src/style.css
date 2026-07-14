@@ -1,4 +1,24 @@
 /* ============================================================
+   AMIVET PLANNING — Caveat manuscrite auto-hébergée (latin)
+   Source : @fontsource/caveat v5, licence SIL OFL 1.1
+   Utilisée pour les zones de signature dans les PDF de feuilles signées.
+   ============================================================ */
+@font-face {
+  font-family: 'Caveat';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/caveat-regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Caveat';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/caveat-semibold.woff2') format('woff2');
+}
+
+/* ============================================================
    AMIVET PLANNING — Inter auto-hébergé (latin + latin-ext)
    Source : Google Fonts Inter v20, téléchargé dans public/fonts/
    Couvre tout le français (U+00C0-00FF : é è ê à ç î œ…)
