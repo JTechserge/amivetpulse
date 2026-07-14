@@ -119,6 +119,7 @@ HTML et composants communs (boutons, couleurs, wrapper) pour les emails envoyés
 | `20260713000001_tighten_rls.sql` | ✅ Déployé | RLS restrictive sur 8 tables sensibles |
 | `20260713000002_rate_limits_and_token_hash.sql` | ✅ Déployé | Rate limiting + hash tokens calendar-feed (**tokens existants invalidés**) |
 | `20260714000001_lock_planning_writes.sql` | ✅ Déployé | Verrouillage PATCH direct sur `planning_data` — toutes les écritures via `save-planning` |
+| `20260714000002_fix_calendar_hash_functions.sql` | ✅ Déployé | Corrige `get_calendar_feed_access` + `get_calendar_sync_status` + `generate/revoke` pour utiliser `token_hash` |
 
 > Toutes les migrations Phase 6–7 sont déployées. Voir [RUNBOOK-DEPLOIEMENT.md](../RUNBOOK-DEPLOIEMENT.md).
 
