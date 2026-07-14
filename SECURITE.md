@@ -72,6 +72,22 @@ Stockage SHA-256 uniquement depuis la migration `20260713000002`. Le plain text 
 
 ---
 
+## Vérification post-déploiement
+
+Après tout déploiement SQL ou Edge Function, lancer :
+```bash
+SUPABASE_SERVICE_ROLE_KEY="..." node scripts/verify-prod.mjs
+```
+Ou depuis GitHub → Actions → **"Vérification invariants de sécurité (prod)"** → Run workflow.
+
+Le script appelle `rpc/verify_security_invariants()` (migration `20260714000003`) et vérifie :
+- ✅ Policy `block direct writes` présente et RESTRICTIVE sur `planning_data`
+- ✅ Fonction `check_rate_limit` présente
+- ✅ Fonction `get_calendar_feed_access` présente
+- ✅ `calendar_sync_tokens.token = NULL` partout
+
+---
+
 ## État des migrations (Phase 6–8)
 
 Toutes les migrations sont déployées en production. Voir `supabase/README.md` pour l'inventaire complet.
