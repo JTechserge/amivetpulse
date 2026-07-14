@@ -4,6 +4,8 @@
 // Garder les deux gabarits d'email synchronisés.
 const SUPABASE_BASE = 'https://ubowqtowyqmpraoxbaoo.supabase.co';
 const SUPABASE_URL = `${SUPABASE_BASE}/rest/v1/`;
+// Clé anon volontairement en dur : publique par design (protégée par RLS), présente
+// dans le bundle frontend — pas un secret. Cohérent avec src/config.js.
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVib3dxdG93eXFtcHJhb3hiYW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MzkzNjksImV4cCI6MjA5ODIxNTM2OX0.cC7vTWrK-Ykii5dtlg_6lA5quHe6rv78IRxZT-ArV_8';
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -11,8 +13,8 @@ const WINDOW_DAYS = 7; // semaine écoulée (lundi → samedi)
 const HEADERS = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` };
 const SVC_HEADERS = { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` };
 
-const LOGO_URL = 'https://jtechserge.github.io/planningamivet/logo.png';
-const APP_URL = 'https://jtechserge.github.io/planningamivet/amivet-planning.html';
+const LOGO_URL = 'https://jtechserge.github.io/amivetpulse/logo.png';
+const APP_URL = 'https://jtechserge.github.io/amivetpulse/';
 const COLORS = {
   primary: '#0F766E', secondary: '#F0FDF9', surface: '#FFFFFF', border: '#E2E8F0',
   text: '#0F172A', textMuted: '#64748B',
