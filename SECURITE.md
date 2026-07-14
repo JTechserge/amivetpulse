@@ -1,6 +1,6 @@
 # Sécurité — Amivet PULSE
 
-Document de référence unique. Dernière mise à jour : Phase 8 (juillet 2026).
+Document de référence unique. Dernière mise à jour : Phase PDF (juillet 2026).
 
 ---
 
@@ -22,6 +22,8 @@ Document de référence unique. Dernière mise à jour : Phase 8 (juillet 2026).
 - **`planning_data`** : lecture publique (anon), écriture bloquée côté REST — toutes les écritures passent par `save-planning` (service_role vérifié côté Edge Function). Migration `20260714000001` (corrigée Phase 8 : `CREATE POLICY IF NOT EXISTS` invalide → `DROP + CREATE`).
   - **Vérification requise** : après tout rejeu de `20260714000001`, confirmer la présence de la policy via `select policyname, cmd, permissive, qual, with_check from pg_policies where tablename = 'planning_data';` — doit afficher `block direct writes`, type RESTRICTIVE, `with_check = false`. ✅ *Vérifié le 2026-07-14 via pg_policies — `block direct writes` RESTRICTIVE, with_check = false. PATCH direct ASV → `Marqueur écrit ? false` confirmé.*
 - **8 tables sensibles** (`monthly_signatures`, `email_settings`, `cp_adjustments`, `announcements`, `announcement_reads`, `push_subscriptions`, `medical_visits`, `app_security`) : RLS restrictive — accès en lecture limité à l'utilisateur concerné ou aux admins. Migration `20260713000001`.
+- **`monthly_signatures` (Phase PDF)** : migration `20260714000004` — PK `id uuid`, index unique partiel `(person_id, year, month) WHERE status='signed'`. **INSERT / UPDATE / DELETE** réservés exclusivement au `service_role` (Edge Functions `confirm-signature`, `upload-signed-pdf`, `reject-signature`) — aucune policy client pour ces opérations. Soft-delete : les feuilles rejetées (`status='rejected'`) sont conservées en historique.
+- **Bucket Storage `signed-sheets`** (Phase PDF) : privé, PDF uniquement (5 Mo max). Lecture : vétérinaires et admins uniquement via `auth.jwt() ->> 'role' IN ('vet', 'admin')`. Upload : `service_role` exclusivement (Edge Function `upload-signed-pdf`).
 
 > **Piège critique** : ne **jamais** référencer `user_profiles` dans ses propres politiques RLS. Cela provoque une récursion infinie qui bloque toutes les connexions. Voir migration `20240515000001_fix_rls_recursion.sql`.
 
@@ -98,22 +100,29 @@ Toutes les migrations sont déployées en production. Voir `supabase/README.md` 
 | `20260713000002_rate_limits_and_token_hash.sql` | ✅ Déployé |
 | `20260714000001_lock_planning_writes.sql` | ✅ Déployé — **à rejouer** (correction Phase 8 : `IF NOT EXISTS` invalide supprimé) |
 | `20260714000002_fix_calendar_hash_functions.sql` | ✅ Déployé |
+| `20260714000004_monthly_signatures_v2.sql` | ✅ Déployé (Phase PDF) |
 
 ---
 
-## Edge Functions à redéployer (CORS)
+## Edge Functions (état Phase PDF)
 
-Ces 5 fonctions ont été modifiées (CORS `*` → `https://jtechserge.github.io`) et doivent être redéployées :
+| Fonction | Rôle | Déployée |
+|---|---|---|
+| `manage-users` | Gestion utilisateurs (admin) | ✅ |
+| `confirm-signature` | Valide le token, insère la signature, renvoie `signature_id` | ✅ |
+| `upload-signed-pdf` | Reçoit le PDF base64, upload dans `signed-sheets`, stocke `pdf_path` | ✅ |
+| `reject-signature` | Soft-delete d'une signature (vet/admin) — status → `rejected` | ✅ |
+| `request-signature` | Génère le lien d'email de signature | ✅ |
+| `send-leave-recap` | Récapitulatif congés hebdomadaire | ✅ |
+| `push-server` | Notifications push PWA | ✅ |
+| `save-planning` | Sauvegarde le planning (service_role) | ✅ |
 
+Toutes les fonctions retournent `Access-Control-Allow-Origin: https://jtechserge.github.io` (jamais `*`).
+
+Pour redéployer une fonction :
 ```bash
-supabase functions deploy manage-users        --project-ref ubowqtowyqmpraoxbaoo
-supabase functions deploy confirm-signature   --project-ref ubowqtowyqmpraoxbaoo
-supabase functions deploy send-leave-recap    --project-ref ubowqtowyqmpraoxbaoo
-supabase functions deploy request-signature   --project-ref ubowqtowyqmpraoxbaoo
-supabase functions deploy push-server         --project-ref ubowqtowyqmpraoxbaoo
+npx supabase functions deploy <nom> --project-ref ubowqtowyqmpraoxbaoo
 ```
-
-**Vérification** : depuis un autre domaine, une requête OPTIONS doit retourner `Access-Control-Allow-Origin: https://jtechserge.github.io` (non `*`).
 
 ---
 

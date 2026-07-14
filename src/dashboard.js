@@ -7,11 +7,12 @@ import { supabaseHeaders } from './auth.js';
 import { store } from './store.js';
 import { showToast, openConfirmModal } from './ui.js';
 import { revokeSignature } from './signatures.js';
+import { fetchSignatureArchive, fetchSignedStorageUrl } from './api.js';
 import { triggerPushNotification } from './pwa.js';
 
 import {
   buildPersonCard, buildBarChartSVG, buildRecapTable,
-  buildSignaturesTableASV,
+  buildSignaturesTableASV, buildPdfArchiveSection,
   buildASVModulationCard, buildASVWeeklyCapCard, buildASVSaturdayEquityCard,
   buildASVMonthlyTable,
 } from './dashboard-stats.js';
@@ -140,10 +141,12 @@ export function renderDashboardStats(){
   renderGroupConges('vets', 'dash-vets-cp');
 }
 
-export function renderDashboardSignatures(){
+export async function renderDashboardSignatures(){
   const container = document.getElementById('dash-sub-signatures');
   const year = store.dashState.year;
   const cy = getCurrentYear();
+
+  // Squelette immédiat (pas de flash blanc)
   // eslint-disable-next-line no-unsanitized/property
   container.innerHTML = `
     <div class="year-toggle" id="dash-sig-year-toggle">
@@ -155,7 +158,14 @@ export function renderDashboardSignatures(){
       <p class="text-muted" style="font-size:12.5px;margin-bottom:10px;">Suivi des signatures électroniques mensuelles des ASV.</p>
       ${buildSignaturesTableASV(year)}
     </div>
+    <div class="card" id="dash-pdf-archive-card" style="margin-top:18px;">
+      <h3 style="font-size:16px;margin-bottom:4px;">Archives PDF ${year}</h3>
+      <p class="text-muted" style="font-size:12.5px;margin-bottom:10px;">Feuilles signées et rejetées — cliquez sur "📄 PDF" pour ouvrir.</p>
+      <p class="text-muted" style="font-size:12px;">Chargement…</p>
+    </div>
   `;
+
+  // Handlers : annulation de signature
   container.querySelectorAll('[data-revoke-signature]').forEach(btn=>{
     btn.onclick = async ()=>{
       const [personId, y, m] = btn.dataset.revokeSignature.split('|');
@@ -171,12 +181,42 @@ export function renderDashboardSignatures(){
       });
     };
   });
+
+  // Toggle année
   container.querySelector('#dash-sig-year-toggle').addEventListener('click', (e)=>{
     const btn = e.target.closest('button');
     if(!btn) return;
     store.dashState.year = parseInt(btn.dataset.year, 10);
     renderDashboardSignatures();
   });
+
+  // Charger l'archive PDF puis injecter dans la card dédiée
+  const archiveRows = await fetchSignatureArchive(year);
+  const archiveCard = container.querySelector('#dash-pdf-archive-card');
+  if(archiveCard){
+    // eslint-disable-next-line no-unsanitized/property
+    archiveCard.querySelector('p.text-muted:last-child').outerHTML =
+      buildPdfArchiveSection(year, archiveRows);
+
+    // Handlers : ouverture PDF (signed URL temporaire 1h)
+    archiveCard.querySelectorAll('.pdf-open-btn').forEach(btn=>{
+      btn.onclick = async ()=>{
+        const path = btn.dataset.pdfPath;
+        btn.disabled = true;
+        const orig = btn.textContent;
+        btn.textContent = '⌛';
+        try{
+          const url = await fetchSignedStorageUrl(path);
+          window.open(url, '_blank', 'noopener');
+        }catch(e){
+          showToast('Impossible d\'ouvrir le PDF — ' + (e.message||'erreur'), '❌');
+        }finally{
+          btn.disabled = false;
+          btn.textContent = orig;
+        }
+      };
+    });
+  }
 }
 
 export function renderDashboardInterviews(){

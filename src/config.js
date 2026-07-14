@@ -75,6 +75,7 @@ export const AUTH_SESSION_KEY = 'amivet_auth_session';
 export const SUPABASE_URL          = 'https://ubowqtowyqmpraoxbaoo.supabase.co/rest/v1/';
 export const SUPABASE_AUTH_URL     = 'https://ubowqtowyqmpraoxbaoo.supabase.co/auth/v1/';
 export const SUPABASE_FUNCTIONS_URL = 'https://ubowqtowyqmpraoxbaoo.supabase.co/functions/v1/';
+export const SUPABASE_STORAGE_URL  = 'https://ubowqtowyqmpraoxbaoo.supabase.co/storage/v1';
 export const CALENDAR_FEED_URL     = `${SUPABASE_FUNCTIONS_URL}calendar-feed`;
 export const SUPABASE_ANON_KEY     = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVib3dxdG93eXFtcHJhb3hiYW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MzkzNjksImV4cCI6MjA5ODIxNTM2OX0.cC7vTWrK-Ykii5dtlg_6lA5quHe6rv78IRxZT-ArV_8';
 

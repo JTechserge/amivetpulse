@@ -56,7 +56,7 @@ function _setASVTimeFraction(personId, fraction){
   if(p){ p.timeFraction = fraction; saveASVRoster(); }
 }
 
-function addASVPerson(name){
+function addASVPerson(name, lastName=''){
   name = (name || '').trim();
   if(!name) return null;
   const person = {
@@ -65,6 +65,7 @@ function addASVPerson(name){
     initial: name.slice(0,2).toUpperCase(),
     color: pickDefaultASVColor(),
     present: null,
+    ...(lastName ? { lastName: lastName.trim() } : {}),
   };
   ASV_PEOPLE.push(person);
   reindexPresentShades();
@@ -261,13 +262,16 @@ function openManageUsersModal(){
       <div style="border-top:1px solid var(--color-border);padding-top:14px;">
         <h4 style="font-size:14px;margin-bottom:10px;">Inviter un collaborateur</h4>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end;margin-bottom:8px;">
-          <input type="text" id="invite-name" placeholder="Nom affiché" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
+          <input type="text" id="invite-name" placeholder="Prénom (affiché)" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
           <input type="email" id="invite-email" placeholder="Email" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
           <select id="invite-role" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
             <option value="vet">Vétérinaire</option>
             <option value="asv">ASV</option>
             <option value="admin">Admin</option>
           </select>
+        </div>
+        <div id="invite-lastname-row" style="display:none;margin-bottom:8px;">
+          <input type="text" id="invite-lastname" placeholder="Nom de famille (facultatif — pour les PDF signés)" style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;box-sizing:border-box;">
         </div>
         <div id="invite-tf-row" style="display:none;margin-bottom:8px;">
           <label class="text-muted" style="font-size:12px;display:block;margin-bottom:6px;">Temps de travail contractuel</label>
@@ -297,9 +301,11 @@ function openManageUsersModal(){
     const inviteRoleSel = box.querySelector('#invite-role');
     const inviteTfRow = box.querySelector('#invite-tf-row');
     const inviteTfSummary = box.querySelector('#invite-tf-summary');
+    const inviteLastnameRow = box.querySelector('#invite-lastname-row');
     const updateInviteTf = ()=>{
       const isAsv = inviteRoleSel.value === 'asv';
       inviteTfRow.style.display = isAsv ? 'block' : 'none';
+      inviteLastnameRow.style.display = isAsv ? 'block' : 'none';
     };
     inviteRoleSel.addEventListener('change', updateInviteTf);
     updateInviteTf();
@@ -441,8 +447,10 @@ function openManageUsersModal(){
             const vetLocal = PEOPLE.find(p=> name.trim().toLowerCase().includes(p.short.toLowerCase()));
             personId = vetLocal?.id || null;
           } else if(role === 'asv'){
+            const inviteLastName = (box.querySelector('#invite-lastname')?.value || '').trim();
             const existing = ASV_PEOPLE.find(p=> p.name.trim().toLowerCase() === name.trim().toLowerCase() && !linkedPersonIds.has(p.id));
-            const asvPerson = existing || addASVPerson(name);
+            const asvPerson = existing || addASVPerson(name, inviteLastName);
+            if(existing && inviteLastName){ existing.lastName = inviteLastName; saveASVRoster(); }
             personId = asvPerson?.id || null;
             // Appliquer le temps de travail choisi
             if(asvPerson){
@@ -623,6 +631,12 @@ function openEditUserModal(userId, users, onBack){
         </label>
       </div>
       ${buildTimeFractionUI(personId, user.role)}
+      ${personId && user.role === 'asv' ? `<div>
+        <label class="text-muted" style="font-size:12px;display:block;margin-bottom:4px;">Nom de famille (facultatif — pour les PDF signés)</label>
+        <input type="text" id="edit-lastname" value="${escapeHTML(personOf(personId)?.lastName||'')}"
+          placeholder="ex. Martin"
+          style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;box-sizing:border-box;">
+      </div>` : ''}
       ${personId ? `<div>
         <label class="text-muted" style="font-size:12px;display:block;margin-bottom:8px;">Couleur dans le planning</label>
         <div style="display:flex;align-items:center;gap:12px;">
@@ -687,10 +701,13 @@ function openEditUserModal(userId, users, onBack){
       }
       // Mettre à jour le temps de travail contractuel en local (ASV uniquement)
       if(role === 'asv' && personId){
+        const lastNameInput = box.querySelector('#edit-lastname');
         const tfResult = getTimeFractionFromUI(box);
-        if(tfResult){
-          const p = personOf(personId);
-          if(p){ p.timeFraction = tfResult.fraction; p.workingDays = tfResult.workingDays; saveASVRoster(); }
+        const p = personOf(personId);
+        if(p){
+          if(lastNameInput !== null) p.lastName = lastNameInput.value.trim() || undefined;
+          if(tfResult){ p.timeFraction = tfResult.fraction; p.workingDays = tfResult.workingDays; }
+          saveASVRoster();
         }
       }
       showToast('Collaborateur mis à jour', '✅');

@@ -1,11 +1,13 @@
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import {
   escapeHTML, slugifyName,
   hexToHsl, hexToRgba, colorRejectReason,
   fmtISO, daysInMonth, isoWeekday, isSunday, isSaturday,
   getFrenchHolidays, holidaysFor, holidayName,
   formatHHMM, signedHHMM, roundTo15min,
+  asvFullName,
 } from '../../src/utils.js';
+import { ASV_PEOPLE } from '../../src/config.js';
 
 // ================================================================
 // escapeHTML
@@ -170,4 +172,37 @@ describe('roundTo15min', () => {
   test('8.5 reste 8.5', () => expect(roundTo15min(8.5)).toBe(8.5));
   test('8.4 → 8.5 (arrondi à 30min)', () => expect(roundTo15min(8.4)).toBe(8.5));
   test('1.8 → 1.75 (arrondi à 45min)', () => expect(roundTo15min(1.8)).toBe(1.75));
+});
+
+// ================================================================
+// asvFullName
+// ================================================================
+describe('asvFullName', () => {
+  let savedMarie;
+  beforeEach(() => {
+    savedMarie = { ...ASV_PEOPLE.find(p => p.id === 'marie') };
+  });
+  afterEach(() => {
+    const p = ASV_PEOPLE.find(p => p.id === 'marie');
+    if(p){ p.lastName = savedMarie.lastName; }
+  });
+
+  test('sans nom de famille → prénom seul', () => {
+    const p = ASV_PEOPLE.find(x => x.id === 'marie');
+    if(p) delete p.lastName;
+    expect(asvFullName('marie')).toBe('Marie');
+  });
+  test('avec nom de famille → "Prénom Nom"', () => {
+    const p = ASV_PEOPLE.find(x => x.id === 'marie');
+    if(p) p.lastName = 'Dupont';
+    expect(asvFullName('marie')).toBe('Marie Dupont');
+  });
+  test('personId inconnu → renvoie le personId', () => {
+    expect(asvFullName('inconnu')).toBe('inconnu');
+  });
+  test('lastName vide → prénom seul', () => {
+    const p = ASV_PEOPLE.find(x => x.id === 'marie');
+    if(p) p.lastName = '';
+    expect(asvFullName('marie')).toBe('Marie');
+  });
 });

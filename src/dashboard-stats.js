@@ -371,6 +371,72 @@ export function buildSignaturesTableASV(year){
   `;
 }
 
+// Archive PDF : grille mois × ASV avec statut (signed/rejected) et lien PDF.
+// archiveRows : tableau brut de monthly_signatures (toutes statuts confondus).
+export function buildPdfArchiveSection(year, archiveRows){
+  if(!archiveRows?.length){
+    return `<p class="text-muted" style="font-size:13px;">Aucune feuille archivée pour ${year}.</p>`;
+  }
+
+  // Index (personId|month) → row
+  const idx = new Map();
+  archiveRows.forEach(r => idx.set(`${r.person_id}|${r.month}`, r));
+
+  let rows = '';
+  for(let m = 0; m < 12; m++){
+    const cells = ASV_PEOPLE.map(p => {
+      const r = idx.get(`${p.id}|${m}`);
+      if(!r) return '<td class="text-muted" style="text-align:center;">—</td>';
+
+      const signedDate = r.signed_at
+        ? new Date(r.signed_at).toLocaleDateString('fr-FR', { day:'numeric', month:'short' })
+        : '';
+      const rejDate = r.rejected_at
+        ? new Date(r.rejected_at).toLocaleDateString('fr-FR', { day:'numeric', month:'short' })
+        : '';
+
+      const pdfBtn = r.pdf_path
+        ? `<button class="btn btn-sm pdf-open-btn" data-pdf-path="${escapeHTML(r.pdf_path)}"
+             style="font-size:11px;padding:2px 7px;margin-left:4px;">📄 PDF</button>`
+        : '';
+
+      if(r.status === 'signed'){
+        return `<td>
+          <span style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+            <span class="signed-pill" style="flex-shrink:0;">✅ ${escapeHTML(r.signed_name||'')}
+              <span class="signed-pill-date">(${signedDate})</span>
+            </span>
+            ${pdfBtn}
+          </span>
+        </td>`;
+      }
+      // rejected
+      return `<td>
+        <span style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+          <span style="display:inline-flex;align-items:center;gap:4px;background:#FEE2E2;color:#B91C1C;
+              border:1px solid #FECACA;border-radius:12px;padding:2px 8px;font-size:12px;white-space:nowrap;">
+            🔴 Rejetée${rejDate?` (${rejDate})`:''}
+          </span>
+          ${pdfBtn}
+        </span>
+      </td>`;
+    });
+    rows += `<tr><td>${MONTH_NAMES[m]}</td>${cells.join('')}</tr>`;
+  }
+
+  return `
+    <div style="overflow-x:auto;">
+      <table class="recap-table">
+        <thead><tr>
+          <th>Mois</th>
+          ${ASV_PEOPLE.map(p=>`<th>${escapeHTML(p.short)}</th>`).join('')}
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
 // --- Sous-page "Heures ASV" : suivi mensuel/annuel du temps de travail vs quota 1607h ---
 export function buildDashWeeklyMonthCard(year, month){
   if(!ASV_PEOPLE.length) return '';

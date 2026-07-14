@@ -2,13 +2,20 @@
    AMIVET PLANNING — Utilitaires purs
    Importé par app.js et testable par Vitest sans mock.
    ================================================================ */
-import { WEEKDAY_FULL, MONTH_NAMES } from './config.js';
+import { WEEKDAY_FULL, MONTH_NAMES, ASV_PEOPLE } from './config.js';
 
 // ----------------------------------------------------------------
 // Chaînes
 // ----------------------------------------------------------------
 export function escapeHTML(str){
   return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Renvoie « Prénom Nom » si l'ASV a un nom de famille, sinon le prénom seul.
+export function asvFullName(personId){
+  const p = ASV_PEOPLE.find(x => x.id === personId);
+  if(!p) return personId;
+  return p.lastName ? `${p.name} ${p.lastName}` : p.name;
 }
 
 // Transforme un nom en identifiant slug ASCII (sans accents, sans espaces)
