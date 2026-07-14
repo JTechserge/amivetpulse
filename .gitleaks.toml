@@ -1,0 +1,11 @@
+# Configuration gitleaks — Amivet PULSE
+# Doc : https://github.com/gitleaks/gitleaks#configuration
+
+[allowlist]
+  description = "Clé anon Supabase publique par design (protégée par RLS côté serveur)"
+  # La clé anon est intentionnellement dans src/config.js : elle est présente dans
+  # tout bundle frontend Supabase et ne donne accès qu'aux données autorisées par RLS.
+  # Ce qui est secret (service_role, BREVO_API_KEY…) n'est jamais dans le code.
+  paths = [
+    '''src/config\.js''',
+  ]
