@@ -1,7 +1,9 @@
 // Reçoit le PDF base64 généré côté client après confirmation de signature,
 // vérifie que l'appelant est bien le propriétaire de la signature, upload dans
 // le bucket Storage signed-sheets, stocke le chemin dans monthly_signatures,
-// puis envoie le PDF en pièce jointe à l'ASV par email.
+// puis envoie UN email de confirmation (avec PDF en pièce jointe) à l'ASV.
+// Cet email remplace les deux anciens : "Confirmation de signature" + "Copie PDF".
+import { wrapEmailHtml, COLORS } from '../_shared/email-template.ts';
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANON_KEY         = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -67,7 +69,7 @@ Deno.serve(async (req) => {
 
     // Récupérer la signature et vérifier l'appartenance
     const sigRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/monthly_signatures?id=eq.${encodeURIComponent(signature_id)}&select=id,person_id,year,month,status,signed_name,signed_at`,
+      `${SUPABASE_URL}/rest/v1/monthly_signatures?id=eq.${encodeURIComponent(signature_id)}&select=id,person_id,year,month,status,signed_name,signed_at,signed_by_email,token_id`,
       { headers: SVC });
     const [sig] = await sigRes.json();
     if (!sig) {
@@ -114,31 +116,82 @@ Deno.serve(async (req) => {
         body: JSON.stringify({ pdf_path: pdfPath, ...(pdfHmac ? { pdf_hmac: pdfHmac } : {}) }),
       });
 
-    // Envoyer le PDF en pièce jointe à l'ASV (best-effort, n'empêche pas la réponse)
+    // Email unique de confirmation avec PDF en pièce jointe (remplace les deux anciens emails)
     const monthLabel = `${MONTH_NAMES_FR[sig.month]} ${sig.year}`;
     const signedDateFR = new Date(sig.signed_at).toLocaleString('fr-FR', {
       day: 'numeric', month: 'long', year: 'numeric',
       hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris',
     });
+    const subjectDate = new Intl.DateTimeFormat('fr-FR', {
+      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris',
+    }).format(new Date(sig.signed_at)).replace(',', '');
     const displayName: string = sig.signed_name || authUser.email;
+    const recipientEmail: string = sig.signed_by_email || authUser.email;
     const filename = `feuille-presence-${sig.person_id}-${sig.year}-${mm}.pdf`;
+    const tokenId: string = sig.token_id || signature_id;
+
+    const htmlContent = wrapEmailHtml(`
+      <h1 style="font-size:18px;color:${COLORS.text};margin:0 0 4px;">✅ Feuille de présence signée</h1>
+      <p style="font-size:14px;color:${COLORS.textMuted};margin:0 0 20px;">
+        Bonjour <strong>${displayName}</strong>,<br>
+        Votre feuille de présence pour <strong>${monthLabel}</strong> a été signée électroniquement.
+        Vous trouverez le PDF en pièce jointe. Conservez cet email comme preuve de signature.
+      </p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+        style="border:1px solid ${COLORS.border};border-radius:10px;overflow:hidden;margin-bottom:20px;">
+        <tr><td style="padding:12px 16px;border-bottom:1px solid ${COLORS.border};">
+          <div style="font-size:11.5px;color:${COLORS.textMuted};margin-bottom:3px;">Signataire</div>
+          <div style="font-size:13.5px;font-weight:700;color:${COLORS.text};">${displayName}</div>
+          <div style="font-size:12px;color:${COLORS.textMuted};">${recipientEmail}</div>
+        </td></tr>
+        <tr><td style="padding:12px 16px;border-bottom:1px solid ${COLORS.border};">
+          <div style="font-size:11.5px;color:${COLORS.textMuted};margin-bottom:3px;">Période certifiée</div>
+          <div style="font-size:13.5px;font-weight:700;color:${COLORS.text};">${monthLabel}</div>
+        </td></tr>
+        <tr><td style="padding:12px 16px;border-bottom:1px solid ${COLORS.border};">
+          <div style="font-size:11.5px;color:${COLORS.textMuted};margin-bottom:3px;">Date et heure de signature</div>
+          <div style="font-size:13.5px;font-weight:700;color:${COLORS.text};">${signedDateFR} (heure de Paris)</div>
+        </td></tr>
+        <tr><td style="padding:12px 16px;">
+          <div style="font-size:11.5px;color:${COLORS.textMuted};margin-bottom:3px;">Identifiant de signature</div>
+          <div style="font-size:11px;color:${COLORS.textFaint};font-family:monospace;word-break:break-all;">${tokenId}</div>
+        </td></tr>
+      </table>
+      <p style="font-size:11.5px;color:${COLORS.textFaint};margin:0;">
+        Signature électronique simple (SES) au sens du règlement eIDAS (UE n°910/2014).
+      </p>
+    `);
+
+    const textContent = [
+      `Bonjour ${displayName},`,
+      '',
+      `Votre feuille de présence pour ${monthLabel} a été signée électroniquement.`,
+      `Le PDF est joint à cet email.`,
+      '',
+      `Signataire : ${displayName} (${recipientEmail})`,
+      `Période    : ${monthLabel}`,
+      `Date       : ${signedDateFR} (heure de Paris)`,
+      `Identifiant: ${tokenId}`,
+      '',
+      'Conservez cet email comme preuve de votre signature électronique (SES — règlement eIDAS).',
+      '',
+      '— Amivet PULSE',
+    ].join('\n');
 
     fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         sender: { name: 'Amivet PULSE', email: 'jeremie.pvt@gmail.com' },
-        to: [{ email: authUser.email, name: displayName }],
-        subject: `Amivet PULSE — Feuille de présence ${monthLabel} — Copie PDF`,
-        htmlContent: `<p>Bonjour <strong>${displayName}</strong>,</p>
-               <p>Veuillez trouver en pièce jointe votre feuille de présence pour <strong>${monthLabel}</strong>, signée électroniquement le ${signedDateFR} (heure de Paris).</p>
-               <p style="font-size:12px;color:#888;">Amivet PULSE · Signature électronique simple (SES) au sens du règlement eIDAS (UE n°910/2014)</p>`,
-        textContent: `Bonjour ${displayName},\n\nVeuillez trouver en pièce jointe votre feuille de présence pour ${monthLabel}, signée électroniquement le ${signedDateFR} (heure de Paris).\n\n— Amivet PULSE`,
+        to: [{ email: recipientEmail, name: displayName }],
+        subject: `Amivet PULSE — Confirmation de signature — feuille de présence ${monthLabel} — ${subjectDate}`,
+        htmlContent,
+        textContent,
         attachment: [{ name: filename, content: pdf_base64 }],
         trackClicks: false,
         trackOpens: false,
       }),
-    }).catch(e => console.warn('Email PDF non envoyé :', e));
+    }).catch(e => console.warn('Email confirmation non envoyé :', e));
 
     return new Response(JSON.stringify({ ok: true, pdf_path: pdfPath }),
       { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });

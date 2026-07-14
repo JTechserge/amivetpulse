@@ -1,21 +1,17 @@
 // Appelée quand l'ASV clique "Confirmer ma signature" dans l'app après avoir ouvert
 // le lien reçu par email. Vérifie le token, enregistre la signature avec l'auth.uid()
 // et l'email du compte connecté (preuve d'identité SES eIDAS), marque le token comme
-// utilisé (anti-rejeu), et envoie un email de confirmation valant reçu de signature.
-import { wrapEmailHtml, APP_URL, COLORS } from '../_shared/email-template.ts';
+// utilisé (anti-rejeu). L'email de confirmation (avec PDF) est envoyé par upload-signed-pdf.
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
-const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY')!;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': 'https://jtechserge.github.io',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
-
-const MONTH_NAMES_FR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 
 Deno.serve(async (req) => {
   if(req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
@@ -69,12 +65,7 @@ Deno.serve(async (req) => {
 
     const { year, month, person_id } = tokenRow;
     const displayName: string = profile.display_name || authUser.email;
-    const monthLabel = `${MONTH_NAMES_FR[month]} ${year}`;
     const signedAt = new Date().toISOString();
-    const signedDateFR = new Date(signedAt).toLocaleDateString('fr-FR', {
-      day: 'numeric', month: 'long', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris',
-    });
 
     // Enregistrer la signature avec les preuves d'identité
     const sigRes = await fetch(`${SUPABASE_URL}/rest/v1/monthly_signatures`, {
@@ -103,76 +94,6 @@ Deno.serve(async (req) => {
     await fetch(`${SUPABASE_URL}/rest/v1/signature_tokens?id=eq.${encodeURIComponent(token_id)}`, {
       method: 'DELETE',
       headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
-    });
-
-    // Email de confirmation — vaut reçu de signature électronique
-    const confirmHtml = wrapEmailHtml(`
-      <h1 style="font-size:18px;color:${COLORS.text};margin:0 0 4px;">✅ Feuille de présence signée</h1>
-      <p style="font-size:14px;color:${COLORS.textMuted};margin:0 0 20px;">
-        Bonjour <strong>${displayName}</strong>,<br>
-        Votre feuille de présence pour <strong>${monthLabel}</strong> a été signée électroniquement.
-        Conservez cet email comme preuve de signature.
-      </p>
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-        style="border:1px solid ${COLORS.border};border-radius:10px;overflow:hidden;margin-bottom:20px;">
-        <tr>
-          <td style="padding:12px 16px;border-bottom:1px solid ${COLORS.border};">
-            <div style="font-size:11.5px;color:${COLORS.textMuted};margin-bottom:3px;">Signataire</div>
-            <div style="font-size:13.5px;font-weight:700;color:${COLORS.text};">${displayName}</div>
-            <div style="font-size:12px;color:${COLORS.textMuted};">${authUser.email}</div>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:12px 16px;border-bottom:1px solid ${COLORS.border};">
-            <div style="font-size:11.5px;color:${COLORS.textMuted};margin-bottom:3px;">Période certifiée</div>
-            <div style="font-size:13.5px;font-weight:700;color:${COLORS.text};">${monthLabel}</div>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:12px 16px;border-bottom:1px solid ${COLORS.border};">
-            <div style="font-size:11.5px;color:${COLORS.textMuted};margin-bottom:3px;">Date et heure de signature</div>
-            <div style="font-size:13.5px;font-weight:700;color:${COLORS.text};">${signedDateFR} (heure de Paris)</div>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:12px 16px;">
-            <div style="font-size:11.5px;color:${COLORS.textMuted};margin-bottom:3px;">Identifiant de signature</div>
-            <div style="font-size:11px;color:${COLORS.textFaint};font-family:monospace;word-break:break-all;">${token_id}</div>
-          </td>
-        </tr>
-      </table>
-      <p style="font-size:11.5px;color:${COLORS.textFaint};margin:0;">
-        Signature électronique simple (SES) au sens du règlement eIDAS (UE n°910/2014).
-      </p>
-    `);
-
-    const confirmText = [
-      `Bonjour ${displayName},`,
-      '',
-      `Votre feuille de présence pour ${monthLabel} a été signée électroniquement.`,
-      '',
-      `Signataire : ${displayName} (${authUser.email})`,
-      `Période    : ${monthLabel}`,
-      `Date       : ${signedDateFR} (heure de Paris)`,
-      `Identifiant: ${token_id}`,
-      '',
-      'Conservez cet email comme preuve de votre signature électronique (SES — règlement eIDAS).',
-      '',
-      '— Amivet PULSE',
-    ].join('\n');
-
-    await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sender: { name: 'Amivet PULSE', email: 'jeremie.pvt@gmail.com' },
-        to: [{ email: authUser.email, name: displayName }],
-        subject: `Amivet PULSE — Confirmation de signature — ${monthLabel}`,
-        textContent: confirmText,
-        htmlContent: confirmHtml,
-        trackClicks: false,
-        trackOpens: false,
-      }),
     });
 
     return new Response(
