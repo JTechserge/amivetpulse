@@ -12,6 +12,8 @@ export const PRESENT_SHADES = [
   { bg:'#BEF264', border:'#A3E635', text:'#3F6212' }, // vert tilleul
 ];
 
+// INVARIANT : les `id` sont utilisés comme person_id dans les clés de planning
+// ("YYYY-MM-DD_<id>_..."). Ne jamais utiliser `_`, `/` ou espace dans un id.
 export const PEOPLE = [
   { id:'david',    name:'Dr. David Pelois',      short:'David',    color:'#2563EB', initial:'D', present:PRESENT_SHADES[0] },
   { id:'stephane', name:'Dr. Stéphane Maquinay', short:'Stéphane', color:'#7C3AED', initial:'S', present:PRESENT_SHADES[1] },

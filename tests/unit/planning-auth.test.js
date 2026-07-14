@@ -40,7 +40,19 @@ describe('extractPersonIdFromKey', () => {
     expect(extractPersonIdFromKey(null)).toBeNull();
     expect(extractPersonIdFromKey(undefined)).toBeNull();
     expect(extractPersonIdFromKey('short')).toBeNull();
-    expect(extractPersonIdFromKey('2026-07-14_')).toBeNull(); // 11 chars exactement → null
+    expect(extractPersonIdFromKey('2026-07-14_')).toBeNull(); // date + _ mais person_id vide
+  });
+
+  it('renvoie null pour des clés sans préfixe date valide', () => {
+    expect(extractPersonIdFromKey('marie_M')).toBeNull();        // pas de date
+    expect(extractPersonIdFromKey('nodate_marie_M')).toBeNull(); // format quelconque
+    expect(extractPersonIdFromKey('2026-07-14')).toBeNull();     // date seule, pas de _person_id
+    expect(extractPersonIdFromKey('26-07-14_marie_M')).toBeNull(); // année tronquée
+  });
+
+  it('extrait correctement même avec suffixe _decision', () => {
+    expect(extractPersonIdFromKey('2026-07-14_marie_M_decision')).toBe('marie');
+    expect(extractPersonIdFromKey('2026-07-14_stephane_AM_decision')).toBe('stephane');
   });
 });
 
@@ -189,6 +201,21 @@ describe('validateAsvWrite — cas refusés (403)', () => {
   it('ASV modifie le slot d\'une autre ASV', () => {
     const changed = [{ key: '2026-07-14_johanna_M', oldValue: 'empty', newValue: 'present' }];
     expect(validateAsvWrite(changed, 'marie')).toMatch(/johanna/);
+  });
+
+  it('ASV supprime la présence d\'une autre ASV (clé étrangère, newValue = undefined)', () => {
+    const changed = [{ key: '2026-07-14_johanna_M', oldValue: 'present', newValue: undefined }];
+    expect(validateAsvWrite(changed, 'marie')).toMatch(/johanna/);
+  });
+
+  it('clé de format invalide (sans préfixe date) → refus (extractPersonIdFromKey retourne null)', () => {
+    const changed = [{ key: 'marie_M', oldValue: undefined, newValue: 'present' }];
+    expect(validateAsvWrite(changed, 'marie')).not.toBeNull();
+  });
+
+  it('clé avec person_id inconnu → refus pour le demandeur', () => {
+    const changed = [{ key: '2026-07-14_ghost_M', oldValue: 'empty', newValue: 'present' }];
+    expect(validateAsvWrite(changed, 'marie')).toMatch(/ghost/);
   });
 
   it('ASV modifie le slot d\'un vet', () => {

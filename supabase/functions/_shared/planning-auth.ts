@@ -17,14 +17,14 @@ export interface UserProfile {
   person_id: string | null;
 }
 
-/** Extrait le person_id d'une clé de planning "YYYY-MM-DD_personId[_suffixe]". */
+/**
+ * Extrait le person_id d'une clé de planning "YYYY-MM-DD_personId[_suffixe]".
+ * Contrainte : les person_id ne doivent jamais contenir `_` (voir config.js côté front).
+ */
 export function extractPersonIdFromKey(key: string): string | null {
-  if (!key || key.length <= 11) return null;
-  const afterDate = key.slice(11);
-  if (!afterDate) return null;
-  const idx = afterDate.indexOf('_');
-  const personId = idx === -1 ? afterDate : afterDate.slice(0, idx);
-  return personId || null;
+  if (!key) return null;
+  const m = key.match(/^\d{4}-\d{2}-\d{2}_([^_]+)/);
+  return m ? m[1] : null;
 }
 
 /** Renvoie les clés dont la valeur diffère entre deux états. */

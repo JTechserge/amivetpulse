@@ -7,19 +7,15 @@
 
 /**
  * Extrait le person_id d'une clé de planning.
- * Format : "YYYY-MM-DD_personId" ou "YYYY-MM-DD_personId_suffixe"
- * La date (10 chars) + underscore de séparation (1 char) = 11 chars à ignorer.
- * Les dashes dans YYYY-MM-DD ne perturbent pas l'extraction car on slicera après le 11e char.
+ * Format attendu : "YYYY-MM-DD_<personId>[_suffixe…]"
+ * Contrainte : les person_id ne doivent jamais contenir `_` (voir config.js).
  * @param {string|null|undefined} key
  * @returns {string|null}
  */
 export function extractPersonIdFromKey(key) {
-  if (!key || key.length <= 11) return null;
-  const afterDate = key.slice(11); // saute "YYYY-MM-DD_"
-  if (!afterDate) return null;
-  const idx = afterDate.indexOf('_');
-  const personId = idx === -1 ? afterDate : afterDate.slice(0, idx);
-  return personId || null;
+  if (!key || typeof key !== 'string') return null;
+  const m = key.match(/^\d{4}-\d{2}-\d{2}_([^_]+)/);
+  return m ? m[1] : null;
 }
 
 /**
