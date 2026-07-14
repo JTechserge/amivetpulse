@@ -22,6 +22,7 @@ export function saveASVRoster(){
       archived:p.archived ?? false,
       saturdayOnly:p.saturdayOnly ?? false,
       workingDays:p.workingDays ?? null,
+      ...(p.lastName ? { lastName:p.lastName } : {}),
     }))
   ));
 }
@@ -39,6 +40,7 @@ export function loadASVRoster(){
           archived:p.archived ?? false,
           saturdayOnly:p.saturdayOnly ?? false,
           workingDays:p.workingDays ?? null,
+          ...(p.lastName ? { lastName:p.lastName } : {}),
         }));
         // Fusionner Carla si absente des données sauvegardées (migration)
         if(!ASV_PEOPLE.find(p=>p.id==='carla')){
