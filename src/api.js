@@ -3,7 +3,7 @@
    Fonctions data-in / data-out : retournent les données brutes.
    Les mutations d'état (DATA, SIGNATURES, renderCurrentView) restent dans app.js.
    ================================================================ */
-import { SUPABASE_URL, SUPABASE_FUNCTIONS_URL } from './config.js';
+import { SUPABASE_URL, SUPABASE_FUNCTIONS_URL, SUPABASE_STORAGE_URL } from './config.js';
 import { supabaseHeaders } from './auth.js';
 
 // ----------------------------------------------------------------
@@ -63,6 +63,36 @@ export async function apiSignMonth(personId, year, month, signedName){
     body: JSON.stringify({ person_id:personId, year, month, signed_name:signedName }),
   });
   if(!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+// Toutes les lignes de monthly_signatures pour une année (signed + rejected), pour l'archive PDF.
+export async function fetchSignatureArchive(year){
+  try{
+    const fields = 'person_id,year,month,status,signed_name,signed_at,pdf_path,rejected_at';
+    const res = await fetch(`${SUPABASE_URL}monthly_signatures?year=eq.${year}&select=${fields}`, {
+      headers: supabaseHeaders(),
+    });
+    if(!res.ok) return null;
+    return await res.json();
+  }catch(e){
+    console.warn('Archive PDF inaccessible (hors ligne ?).', e);
+    return null;
+  }
+}
+
+// Génère une URL signée temporaire (1h) pour un fichier du bucket privé signed-sheets.
+// Lance une exception en cas d'erreur (policy RLS : vet/admin uniquement).
+export async function fetchSignedStorageUrl(pdfPath){
+  const res = await fetch(
+    `${SUPABASE_STORAGE_URL}/object/sign/signed-sheets/${encodeURIComponent(pdfPath)}`,
+    {
+      method: 'POST',
+      headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ expiresIn: 3600 }),
+    });
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  const { signedURL } = await res.json();
+  return `https://ubowqtowyqmpraoxbaoo.supabase.co${signedURL}`;
 }
 
 // Rejette une signature (soft-delete : status → 'rejected', conservé en historique).
