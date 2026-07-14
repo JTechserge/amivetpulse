@@ -2,10 +2,12 @@
 # Doc : https://github.com/gitleaks/gitleaks#configuration
 
 [allowlist]
-  description = "Clé anon Supabase publique par design (protégée par RLS côté serveur)"
-  # La clé anon est intentionnellement dans src/config.js : elle est présente dans
-  # tout bundle frontend Supabase et ne donne accès qu'aux données autorisées par RLS.
-  # Ce qui est secret (service_role, BREVO_API_KEY…) n'est jamais dans le code.
+  description = "Faux positifs connus — clé anon publique et données de test"
+  # src/config.js : clé anon Supabase intentionnellement publique (protégée par RLS).
+  # tests/ : les fichiers de test utilisent des objets { key: '...' } qui déclenchent
+  #   la règle generic-api-key sur le mot "key", même sans aucune valeur secrète.
+  #   Les tests n'interagissent jamais avec de vraies APIs (pas de JWT, pas de service_role).
   paths = [
     '''src/config\.js''',
+    '''tests/''',
   ]
