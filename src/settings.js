@@ -763,7 +763,7 @@ async function getCalendarSyncStatus(personId){
   });
   if(!res.ok) throw new Error(`HTTP ${res.status}`);
   const rows = await res.json();
-  return rows[0] || { token:null, sync_presence:true, sync_absences:true, color:CALENDAR_SYNC_COLORS[0] };
+  return rows[0] || { has_token:false, sync_presence:true, sync_absences:true, color:CALENDAR_SYNC_COLORS[0] };
 }
 
 async function generateCalendarSyncToken(personId){
@@ -845,7 +845,7 @@ function wireCalendarSyncPreferences(prefsEl, person, status){
 }
 
 function renderCalendarSyncPersonBody(box, person, status, link){
-  const active = !!status.token;
+  const active = !!status.has_token;
   const statusEl = box.querySelector(`#cal-sync-status-${person.id}`);
   statusEl.textContent = active ? '✅ Active' : '⬜ Non activée';
   const bodyEl = box.querySelector(`#cal-sync-body-${person.id}`);
@@ -854,21 +854,38 @@ function renderCalendarSyncPersonBody(box, person, status, link){
     // eslint-disable-next-line no-unsanitized/property
     bodyEl.innerHTML = `
       ${prefsHtml}
-      <input type="text" readonly value="${escapeHTML(link)}" style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:6px;font-size:11.5px;font-family:inherit;margin-bottom:8px;" onclick="this.select();">
-      <div class="flex gap-2">
-        <button type="button" class="btn" data-copy-link style="flex:1;justify-content:center;font-size:12.5px;">Copier le lien</button>
-        <button type="button" class="btn" data-revoke style="flex:1;justify-content:center;font-size:12.5px;color:#B91C1C;border-color:#FCA5A5;">Désactiver</button>
-      </div>
+      ${link ? `
+        <input type="text" readonly value="${escapeHTML(link)}" style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:6px;font-size:11.5px;font-family:inherit;margin-bottom:8px;" onclick="this.select();">
+        <div class="flex gap-2">
+          <button type="button" class="btn" data-copy-link style="flex:1;justify-content:center;font-size:12.5px;">Copier le lien</button>
+          <button type="button" class="btn" data-revoke style="flex:1;justify-content:center;font-size:12.5px;color:#B91C1C;border-color:#FCA5A5;">Désactiver</button>
+        </div>
+      ` : `
+        <p class="text-muted" style="font-size:11.5px;margin-bottom:8px;">Lien actif. Pour afficher et copier l'URL (ex. : ajout sur un nouveau téléphone), régénérez un nouveau lien — l'ancien sera automatiquement invalidé.</p>
+        <div class="flex gap-2">
+          <button type="button" class="btn btn-primary" data-generate style="flex:1;justify-content:center;font-size:12.5px;">Régénérer le lien</button>
+          <button type="button" class="btn" data-revoke style="flex:1;justify-content:center;font-size:12.5px;color:#B91C1C;border-color:#FCA5A5;">Désactiver</button>
+        </div>
+      `}
       <p class="text-muted" style="font-size:11px;margin-top:6px;">Le même lien peut être ajouté à plusieurs téléphones/comptes. "Désactiver" coupe l'accès à tous d'un coup ; les événements déjà ajoutés disparaissent au prochain rafraîchissement automatique de chaque appareil (pas instantané — ni Apple ni Google ne permettent de forcer une suppression immédiate à distance).</p>
     `;
     wireCalendarSyncPreferences(bodyEl, person, status);
-    bodyEl.querySelector('[data-copy-link]').onclick = ()=>{
-      navigator.clipboard?.writeText(link);
-      showToast('Lien copié', '📋');
-    };
+    if(link){
+      bodyEl.querySelector('[data-copy-link]').onclick = ()=>{
+        navigator.clipboard?.writeText(link);
+        showToast('Lien copié', '📋');
+      };
+    } else {
+      bodyEl.querySelector('[data-generate]').onclick = async ()=>{
+        const token = await generateCalendarSyncToken(person.id);
+        const newLink = `${CALENDAR_FEED_URL}?person=${person.id}&token=${token}`;
+        renderCalendarSyncPersonBody(box, person, { ...status, has_token:true }, newLink);
+        showToast(`Nouveau lien généré pour ${person.short}`, '📅');
+      };
+    }
     bodyEl.querySelector('[data-revoke]').onclick = async ()=>{
       await revokeCalendarSyncToken(person.id);
-      renderCalendarSyncPersonBody(box, person, { ...status, token:null }, '');
+      renderCalendarSyncPersonBody(box, person, { ...status, has_token:false }, '');
       showToast(`Synchronisation de ${person.short} désactivée`, '📅');
     };
   } else {
@@ -881,7 +898,7 @@ function renderCalendarSyncPersonBody(box, person, status, link){
     bodyEl.querySelector('[data-generate]').onclick = async ()=>{
       const token = await generateCalendarSyncToken(person.id);
       const newLink = `${CALENDAR_FEED_URL}?person=${person.id}&token=${token}`;
-      renderCalendarSyncPersonBody(box, person, { ...status, token }, newLink);
+      renderCalendarSyncPersonBody(box, person, { ...status, has_token:true }, newLink);
       showToast(`Lien généré pour ${person.short}`, '📅');
     };
   }
@@ -911,8 +928,7 @@ function openCalendarSyncModal(){
 
   PEOPLE.forEach(person=>{
     getCalendarSyncStatus(person.id).then(status=>{
-      const link = status.token ? `${CALENDAR_FEED_URL}?person=${person.id}&token=${status.token}` : '';
-      renderCalendarSyncPersonBody(box, person, status, link);
+      renderCalendarSyncPersonBody(box, person, status, '');
     }).catch(e=>{
       box.querySelector(`#cal-sync-status-${person.id}`).textContent = 'Connexion impossible';
       console.warn(e);
