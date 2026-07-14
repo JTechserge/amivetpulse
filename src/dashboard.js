@@ -12,7 +12,7 @@ import { triggerPushNotification } from './pwa.js';
 
 import {
   buildPersonCard, buildBarChartSVG, buildRecapTable,
-  buildSignaturesTableASV, buildPdfArchiveSection,
+  buildPdfArchiveSection,
   buildASVModulationCard, buildASVWeeklyCapCard, buildASVSaturdayEquityCard,
   buildASVMonthlyTable,
 } from './dashboard-stats.js';
@@ -153,34 +153,12 @@ export async function renderDashboardSignatures(){
       <button data-year="${cy}" class="${year===cy?'active':''}">${cy}</button>
       <button data-year="${cy+1}" class="${year===cy+1?'active':''}">${cy+1}</button>
     </div>
-    <div class="card" style="margin-top:18px;">
-      <h3 style="font-size:16px;margin-bottom:4px;">Feuilles de présence signées ${year}</h3>
-      <p class="text-muted" style="font-size:12.5px;margin-bottom:10px;">Suivi des signatures électroniques mensuelles des ASV.</p>
-      ${buildSignaturesTableASV(year)}
-    </div>
     <div class="card" id="dash-pdf-archive-card" style="margin-top:18px;">
-      <h3 style="font-size:16px;margin-bottom:4px;">Archives PDF ${year}</h3>
-      <p class="text-muted" style="font-size:12.5px;margin-bottom:10px;">Feuilles signées et rejetées — cliquez sur "📄 PDF" pour ouvrir.</p>
-      <p class="text-muted" style="font-size:12px;">Chargement…</p>
+      <h3 style="font-size:16px;margin-bottom:4px;">Feuilles de présence signées ${year}</h3>
+      <p class="text-muted" style="font-size:12.5px;margin-bottom:10px;">Suivi des signatures et des archives PDF — cliquez sur "📄 PDF" pour ouvrir, ✕ pour annuler.</p>
+      <div id="dash-pdf-archive-body"><p class="text-muted" style="font-size:12px;">Chargement…</p></div>
     </div>
   `;
-
-  // Handlers : annulation de signature
-  container.querySelectorAll('[data-revoke-signature]').forEach(btn=>{
-    btn.onclick = async ()=>{
-      const [personId, y, m] = btn.dataset.revokeSignature.split('|');
-      openConfirmModal({
-        title: 'Annuler cette signature ?',
-        message: `Le mois redeviendra modifiable pour ${personOf(personId).short}.`,
-        confirmLabel: 'Annuler la signature',
-        onConfirm: async ()=>{
-          await revokeSignature(personId, parseInt(y,10), parseInt(m,10));
-          renderDashboardSignatures();
-          showToast('Signature annulée', '🔓');
-        },
-      });
-    };
-  });
 
   // Toggle année
   container.querySelector('#dash-sig-year-toggle').addEventListener('click', (e)=>{
@@ -190,16 +168,32 @@ export async function renderDashboardSignatures(){
     renderDashboardSignatures();
   });
 
-  // Charger l'archive PDF puis injecter dans la card dédiée
+  // Charger l'archive PDF puis injecter dans la card
   const archiveRows = await fetchSignatureArchive(year);
-  const archiveCard = container.querySelector('#dash-pdf-archive-card');
-  if(archiveCard){
+  const archiveBody = container.querySelector('#dash-pdf-archive-body');
+  if(archiveBody){
     // eslint-disable-next-line no-unsanitized/property
-    archiveCard.querySelector('p.text-muted:last-child').outerHTML =
-      buildPdfArchiveSection(year, archiveRows);
+    archiveBody.innerHTML = buildPdfArchiveSection(year, archiveRows);
 
-    // Handlers : ouverture PDF (signed URL temporaire 1h)
-    archiveCard.querySelectorAll('.pdf-open-btn').forEach(btn=>{
+    // Handler : annulation de signature
+    archiveBody.querySelectorAll('[data-revoke-signature]').forEach(btn=>{
+      btn.onclick = async ()=>{
+        const [personId, y, m] = btn.dataset.revokeSignature.split('|');
+        openConfirmModal({
+          title: 'Annuler cette signature ?',
+          message: `Le mois redeviendra modifiable pour ${personOf(personId).short}.`,
+          confirmLabel: 'Annuler la signature',
+          onConfirm: async ()=>{
+            await revokeSignature(personId, parseInt(y,10), parseInt(m,10));
+            renderDashboardSignatures();
+            showToast('Signature annulée', '🔓');
+          },
+        });
+      };
+    });
+
+    // Handler : ouverture PDF (signed URL temporaire 1h)
+    archiveBody.querySelectorAll('.pdf-open-btn').forEach(btn=>{
       btn.onclick = async ()=>{
         const path = btn.dataset.pdfPath;
         btn.disabled = true;

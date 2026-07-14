@@ -405,6 +405,8 @@ export function buildPdfArchiveSection(year, archiveRows){
           <span style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
             <span class="signed-pill" style="flex-shrink:0;">✅ ${escapeHTML(r.signed_name||'')}
               <span class="signed-pill-date">(${signedDate})</span>
+              <button type="button" class="asv-remove-btn" data-revoke-signature="${p.id}|${year}|${m}"
+                title="Annuler cette signature" aria-label="Annuler cette signature">✕</button>
             </span>
             ${pdfBtn}
           </span>

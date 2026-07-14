@@ -84,7 +84,7 @@ export async function fetchSignatureArchive(year){
 // Lance une exception en cas d'erreur (policy RLS : vet/admin uniquement).
 export async function fetchSignedStorageUrl(pdfPath){
   const res = await fetch(
-    `${SUPABASE_STORAGE_URL}/object/sign/signed-sheets/${encodeURIComponent(pdfPath)}`,
+    `${SUPABASE_STORAGE_URL}/object/sign/signed-sheets/${pdfPath}`,
     {
       method: 'POST',
       headers: supabaseHeaders({ 'Content-Type': 'application/json' }),

@@ -1,9 +1,13 @@
 // Reçoit le PDF base64 généré côté client après confirmation de signature,
 // vérifie que l'appelant est bien le propriétaire de la signature, upload dans
-// le bucket Storage signed-sheets, puis stocke le chemin dans monthly_signatures.
+// le bucket Storage signed-sheets, stocke le chemin dans monthly_signatures,
+// puis envoie le PDF en pièce jointe à l'ASV par email.
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANON_KEY         = Deno.env.get('SUPABASE_ANON_KEY')!;
+const RESEND_API_KEY   = Deno.env.get('RESEND_API_KEY')!;
+
+const MONTH_NAMES_FR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': 'https://jtechserge.github.io',
@@ -50,7 +54,7 @@ Deno.serve(async (req) => {
 
     // Récupérer la signature et vérifier l'appartenance
     const sigRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/monthly_signatures?id=eq.${encodeURIComponent(signature_id)}&select=id,person_id,year,month,status`,
+      `${SUPABASE_URL}/rest/v1/monthly_signatures?id=eq.${encodeURIComponent(signature_id)}&select=id,person_id,year,month,status,signed_name,signed_at`,
       { headers: SVC });
     const [sig] = await sigRes.json();
     if (!sig) {
@@ -90,6 +94,29 @@ Deno.serve(async (req) => {
         headers: { ...SVC, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify({ pdf_path: pdfPath }),
       });
+
+    // Envoyer le PDF en pièce jointe à l'ASV (best-effort, n'empêche pas la réponse)
+    const monthLabel = `${MONTH_NAMES_FR[sig.month]} ${sig.year}`;
+    const signedDateFR = new Date(sig.signed_at).toLocaleString('fr-FR', {
+      day: 'numeric', month: 'long', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris',
+    });
+    const displayName: string = sig.signed_name || authUser.email;
+    const filename = `feuille-presence-${sig.person_id}-${sig.year}-${mm}.pdf`;
+
+    fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Amivet PULSE <onboarding@resend.dev>',
+        to: [authUser.email],
+        subject: `Amivet PULSE — Feuille de présence ${monthLabel} — Copie PDF`,
+        html: `<p>Bonjour <strong>${displayName}</strong>,</p>
+               <p>Veuillez trouver en pièce jointe votre feuille de présence pour <strong>${monthLabel}</strong>, signée électroniquement le ${signedDateFR} (heure de Paris).</p>
+               <p style="font-size:12px;color:#888;">Amivet PULSE · Signature électronique simple (SES) au sens du règlement eIDAS (UE n°910/2014)</p>`,
+        attachments: [{ filename, content: pdf_base64 }],
+      }),
+    }).catch(e => console.warn('Email PDF non envoyé :', e));
 
     return new Response(JSON.stringify({ ok: true, pdf_path: pdfPath }),
       { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
