@@ -2,6 +2,12 @@
 /**
  * Restauration d'un export Amivet PULSE vers Supabase.
  *
+ * ⚠️  Les sauvegardes GitHub sont chiffrées (.tar.gz.age). Déchiffrer d'abord :
+ *   age --decrypt --identity amivet-backup-key.txt backup-2026-07-14.tar.gz.age \
+ *     | tar -xzf -
+ *   # Produit ./backup-2026-07-14/ déchiffré, prêt pour ce script.
+ *   # Requiert age installé (brew install age / apt install age) et la clé privée.
+ *
  * Usage (dry-run, sans écriture — défaut) :
  *   SUPABASE_SERVICE_ROLE_KEY=... node scripts/restore-supabase.mjs ./backup-2026-07-14
  *
