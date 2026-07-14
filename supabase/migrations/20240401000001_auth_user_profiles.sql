@@ -2,7 +2,7 @@
 -- Prérequis : avoir activé "Email Auth" dans Authentication → Providers (activé par défaut).
 -- Avant d'exécuter, configurez l'URL de redirection dans :
 --   Authentication → URL Configuration → Site URL
---   → https://jtechserge.github.io/planningamivet/amivet-planning.html
+--   → https://jtechserge.github.io/amivetpulse/
 
 -- ─────────────────────────────────────────────────────────────────
 -- 1. Table des profils utilisateurs (liée à auth.users de Supabase)

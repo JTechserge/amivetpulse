@@ -29,12 +29,25 @@ supabase/
 
 ## Edge Functions
 
-### Déploiement
+### Déploiement (manuel — CLI)
 
 ```bash
 # Depuis la racine du projet, avec Supabase CLI installé :
 supabase functions deploy <nom-function> --project-ref ubowqtowyqmpraoxbaoo
 ```
+
+### Piste : déploiement automatisé via GitHub Actions (optionnel)
+
+Pour déployer les Edge Functions depuis CI au lieu de la CLI manuelle, ajouter dans un workflow :
+```yaml
+- name: Déployer les Edge Functions
+  env:
+    SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+  run: |
+    npx supabase@latest functions deploy calendar-feed \
+      --project-ref ubowqtowyqmpraoxbaoo
+```
+**Prérequis** : créer un token d'accès Supabase (Dashboard → Account → Access Tokens) et l'ajouter comme secret `SUPABASE_ACCESS_TOKEN` dans GitHub. Ce token est différent du `service_role` — il agit sur l'infrastructure du projet (déployer, supprimer des fonctions), pas sur les données. À traiter comme un secret critique.
 
 ### Inventaire
 

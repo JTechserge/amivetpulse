@@ -1,0 +1,17 @@
+name: Vérification invariants de sécurité (prod)
+
+on:
+  workflow_dispatch: {} # déclencher manuellement depuis GitHub Actions après chaque déploiement SQL
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Vérifier les invariants de sécurité Supabase
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/verify-prod.mjs

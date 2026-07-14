@@ -1,0 +1,32 @@
+name: Sauvegarde quotidienne Supabase
+
+on:
+  schedule:
+    # Tous les jours à 02h00 UTC (= 04h00 heure de Paris en été)
+    - cron: '0 2 * * *'
+  workflow_dispatch: {} # lancement manuel depuis GitHub Actions → Run workflow
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Exporter les tables Supabase
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/backup-supabase.mjs
+
+      - name: Uploader la sauvegarde comme artefact GitHub (rétention 90 jours)
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ github.run_id }}-${{ github.run_attempt }}
+          # Le script écrit dans backup-YYYY-MM-DD/
+          path: backup-*/
+          retention-days: 90
+          # Échec si le dossier est vide (sauvegarde silencieusement vide = pire que pas de sauvegarde)
+          if-no-files-found: error
