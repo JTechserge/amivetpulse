@@ -116,11 +116,11 @@ HTML et composants communs (boutons, couleurs, wrapper) pour les emails envoyés
 
 | Fichier | Statut | Description |
 |---|---|---|
-| `20260713000001_tighten_rls.sql` | ⏳ **À déployer** | RLS restrictive sur 8 tables sensibles |
-| `20260713000002_rate_limits_and_token_hash.sql` | ⏳ **À déployer** | Rate limiting + hash tokens calendar-feed (**invalide tokens existants**) |
+| `20260713000001_tighten_rls.sql` | ✅ Déployé | RLS restrictive sur 8 tables sensibles |
+| `20260713000002_rate_limits_and_token_hash.sql` | ✅ Déployé | Rate limiting + hash tokens calendar-feed (**tokens existants invalidés**) |
 | `20260714000001_lock_planning_writes.sql` | ✅ Déployé | Verrouillage PATCH direct sur `planning_data` — toutes les écritures via `save-planning` |
 
-> Les migrations `20260713000001` et `20260713000002` restent à appliquer manuellement dans le SQL Editor Supabase. Voir [RUNBOOK-DEPLOIEMENT.md](../RUNBOOK-DEPLOIEMENT.md).
+> Toutes les migrations Phase 6–7 sont déployées. Voir [RUNBOOK-DEPLOIEMENT.md](../RUNBOOK-DEPLOIEMENT.md).
 
 ---
 
