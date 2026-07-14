@@ -16,17 +16,43 @@ jobs:
         with:
           node-version: 20
 
+      # Vérifie la présence de la clé de chiffrement AVANT d'exporter des données sensibles
+      - name: Vérifier la clé de chiffrement age
+        env:
+          AGE_PUBLIC_KEY: ${{ secrets.AGE_PUBLIC_KEY }}
+        run: |
+          if [ -z "$AGE_PUBLIC_KEY" ]; then
+            echo "❌ Secret AGE_PUBLIC_KEY non configuré dans GitHub Secrets." >&2
+            echo "   → Générer la paire de clés : age-keygen -o amivet-backup-key.txt" >&2
+            echo "   → Copier la ligne 'public key:' et l'ajouter comme secret AGE_PUBLIC_KEY" >&2
+            echo "   → Stocker amivet-backup-key.txt (clé privée) hors dépôt (coffre de mots de passe ou NAS)" >&2
+            exit 1
+          fi
+
+      - name: Installer age (chiffrement asymétrique)
+        run: sudo apt-get install -y age
+
       - name: Exporter les tables Supabase
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node scripts/backup-supabase.mjs
 
-      - name: Uploader la sauvegarde comme artefact GitHub (rétention 90 jours)
+      - name: Chiffrer la sauvegarde et supprimer le clair
+        env:
+          AGE_PUBLIC_KEY: ${{ secrets.AGE_PUBLIC_KEY }}
+        run: |
+          BACKUP_NAME=$(ls -d backup-*/ | head -1 | tr -d '/')
+          tar -czf "${BACKUP_NAME}.tar.gz" "${BACKUP_NAME}/"
+          age --recipient "$AGE_PUBLIC_KEY" "${BACKUP_NAME}.tar.gz" > "${BACKUP_NAME}.tar.gz.age"
+          # Supprimer le clair — seule l'archive chiffrée subsiste
+          rm -rf "${BACKUP_NAME}/" "${BACKUP_NAME}.tar.gz"
+          echo "✅ Archive chiffrée : ${BACKUP_NAME}.tar.gz.age"
+
+      - name: Uploader l'archive chiffrée comme artefact GitHub (rétention 90 jours)
         uses: actions/upload-artifact@v4
         with:
           name: backup-${{ github.run_id }}-${{ github.run_attempt }}
-          # Le script écrit dans backup-YYYY-MM-DD/
-          path: backup-*/
+          path: backup-*.tar.gz.age
           retention-days: 90
-          # Échec si le dossier est vide (sauvegarde silencieusement vide = pire que pas de sauvegarde)
+          # Échec si le fichier est absent (sauvegarde silencieusement vide = pire que pas de sauvegarde)
           if-no-files-found: error
