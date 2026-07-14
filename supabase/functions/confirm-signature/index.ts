@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
       headers: {
         apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
         'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates,return=minimal',
+        Prefer: 'return=representation',
       },
       body: JSON.stringify({
         person_id,
@@ -96,6 +96,8 @@ Deno.serve(async (req) => {
       }),
     });
     if(!sigRes.ok) throw new Error(`Erreur insertion signature HTTP ${sigRes.status} — ${await sigRes.text()}`);
+    const [insertedSig] = await sigRes.json();
+    const signatureId: string = insertedSig?.id ?? '';
 
     // Supprimer le token après usage — son absence en base sert de preuve qu'il a été utilisé
     await fetch(`${SUPABASE_URL}/rest/v1/signature_tokens?id=eq.${encodeURIComponent(token_id)}`, {
@@ -172,7 +174,7 @@ Deno.serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ ok: true, person_id, year, month, signed_at: signedAt }),
+      JSON.stringify({ ok: true, person_id, year, month, signed_at: signedAt, signature_id: signatureId }),
       { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
     );
   }catch(e){

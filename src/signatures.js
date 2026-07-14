@@ -111,6 +111,29 @@ export function openSignConfirmModal(tokenId) {
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Erreur inconnue');
+
+      // Génération et upload du PDF (best-effort : n'empêche pas la signature en cas d'échec)
+      if (data.signature_id) {
+        confirmBtn.textContent = 'Génération du PDF…';
+        try {
+          const { generateSignaturePdf } = await import('./lib/pdf-generator.js');
+          const pdfBase64 = await generateSignaturePdf({
+            personId:   data.person_id,
+            year:       data.year,
+            month:      data.month,
+            signedAt:   data.signed_at,
+            signedName: store.currentUser.display_name || store.currentUser.email,
+          });
+          await fetch(`${SUPABASE_FUNCTIONS_URL}upload-signed-pdf`, {
+            method: 'POST',
+            headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ signature_id: data.signature_id, pdf_base64: pdfBase64 }),
+          });
+        } catch (pdfErr) {
+          console.warn('PDF non généré :', pdfErr);
+        }
+      }
+
       close();
       await loadSignatures();
       _renderCalendarView?.('asv-current');
