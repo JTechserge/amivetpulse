@@ -118,11 +118,12 @@ export function openSignConfirmModal(tokenId) {
         try {
           const { generateSignaturePdf } = await import('./lib/pdf-generator.js');
           const pdfBase64 = await generateSignaturePdf({
-            personId:   data.person_id,
-            year:       data.year,
-            month:      data.month,
-            signedAt:   data.signed_at,
-            signedName: store.currentUser.display_name || store.currentUser.email,
+            personId:    data.person_id,
+            year:        data.year,
+            month:       data.month,
+            signedAt:    data.signed_at,
+            signedName:  store.currentUser.display_name || store.currentUser.email,
+            signatureId: data.signature_id,
           });
           await fetch(`${SUPABASE_FUNCTIONS_URL}upload-signed-pdf`, {
             method: 'POST',

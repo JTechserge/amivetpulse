@@ -25,18 +25,32 @@ function td(content, extraStyle = '') {
     vertical-align:middle;${extraStyle}">${content}</td>`;
 }
 
-function getLogoDataUrl() {
+async function getLogoDataUrl() {
   const img = document.querySelector('img.brand-logo') || document.querySelector('img.login-logo');
-  if (!img || !img.complete || !img.naturalWidth) return '';
+  if (!img || !img.src) return '';
   try {
-    const c = document.createElement('canvas');
-    c.width = img.naturalWidth; c.height = img.naturalHeight;
-    c.getContext('2d').drawImage(img, 0, 0);
-    return c.toDataURL('image/png');
-  } catch { return img.src; }
+    // Fetch comme blob → FileReader : contourne les restrictions canvas cross-origin
+    const res = await fetch(img.src);
+    if (!res.ok) throw new Error('fetch failed');
+    const blob = await res.blob();
+    return await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(/** @type {string} */(e.target.result));
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    if (!img.complete || !img.naturalWidth) return '';
+    try {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext('2d').drawImage(img, 0, 0);
+      return c.toDataURL('image/png');
+    } catch { return ''; }
+  }
 }
 
-function buildSheetHtml({ personId, year, month, signedAt, signedName, logoSrc }) {
+function buildSheetHtml({ personId, year, month, signedAt, signedName, signatureId, logoSrc }) {
   const fullName = asvFullName(personId);
   const monthLabel = `${MONTH_NAMES[month]} ${year}`;
   const nb = daysInMonth(year, month);
@@ -113,6 +127,8 @@ function buildSheetHtml({ personId, year, month, signedAt, signedName, logoSrc }
   const totTdLast = (content) =>
     `<td style="padding:6px 8px;background:#111;color:#fff;font-weight:700;font-size:12px;">${content}</td>`;
 
+  const idShort = signatureId ? signatureId.slice(0, 8) : '';
+
   return `<div style="
       width:793px;background:#fff;padding:53px 68px 45px;
       font-family:Arial,Helvetica,sans-serif;box-sizing:border-box;">
@@ -165,27 +181,32 @@ function buildSheetHtml({ personId, year, month, signedAt, signedName, logoSrc }
         </div>
         <div style="flex:1;">
           <div style="font-size:10px;color:#666;margin-bottom:3px;">Signature du v&eacute;t&eacute;rinaire</div>
-          <div style="border-bottom:1px solid #888;min-height:40px;"></div>
+          <div style="font-family:'Caveat',cursive;font-size:22px;color:#111;
+              border-bottom:1px solid #888;min-height:40px;padding-bottom:4px;line-height:1.2;">
+            David Pelois &amp; St&eacute;phane Maquinay
+          </div>
         </div>
       </div>
       <div style="font-size:10px;color:#444;margin-top:8px;line-height:1.5;">
         Sign&eacute; &eacute;lectroniquement par <strong>${escapeHTML(signedName)}</strong>
         le ${escapeHTML(signedDateTimeStr)} (heure de Paris) &middot; Amivet PULSE (SES eIDAS)
+        ${idShort ? `&middot; <span style="font-family:monospace;letter-spacing:.03em;">Réf. ${escapeHTML(idShort)}&hellip;</span>` : ''}
       </div>
     </div>
     <div style="font-size:10px;color:#AAA;text-align:right;border-top:1px solid #DDD;padding-top:5px;">
       G&eacute;n&eacute;r&eacute; le ${escapeHTML(printDate)} &mdash; Amivet PULSE
+      ${signatureId ? `&mdash; <span style="font-family:monospace;font-size:9px;color:#CCC;">${escapeHTML(signatureId)}</span>` : ''}
     </div>
   </div>`;
 }
 
-export async function generateSignaturePdf({ personId, year, month, signedAt, signedName }) {
-  const logoSrc = getLogoDataUrl();
+export async function generateSignaturePdf({ personId, year, month, signedAt, signedName, signatureId = '' }) {
+  const logoSrc = await getLogoDataUrl();
 
   const wrapper = document.createElement('div');
   wrapper.style.cssText = 'position:fixed;left:-9999px;top:0;pointer-events:none;z-index:-1;';
   // eslint-disable-next-line no-unsanitized/property
-  wrapper.innerHTML = buildSheetHtml({ personId, year, month, signedAt, signedName, logoSrc });
+  wrapper.innerHTML = buildSheetHtml({ personId, year, month, signedAt, signedName, signatureId, logoSrc });
   document.body.appendChild(wrapper);
 
   try {
@@ -205,6 +226,19 @@ export async function generateSignaturePdf({ personId, year, month, signedAt, si
     const pdfWidth = 210;
     const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
     pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+    // Filigrane : ID de signature en diagonale, gris très clair
+    if (signatureId) {
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(215, 215, 215);
+      const watermark = `ID: ${signatureId}`;
+      for (let row = 0; row < 8; row++) {
+        for (let col = -1; col < 4; col++) {
+          pdf.text(watermark, col * 90 - 10, row * 38 + 20, { angle: 45 });
+        }
+      }
+    }
 
     return pdf.output('datauristring').split(',')[1];
   } finally {

@@ -5,7 +5,20 @@
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANON_KEY         = Deno.env.get('SUPABASE_ANON_KEY')!;
-const BREVO_API_KEY    = Deno.env.get('BREVO_API_KEY')!;
+const BREVO_API_KEY       = Deno.env.get('BREVO_API_KEY')!;
+const PDF_SIGNING_SECRET  = Deno.env.get('PDF_SIGNING_SECRET') ?? '';
+
+// HMAC-SHA256 du PDF — clé secrète connue uniquement de l'EF (jamais exposée au client).
+async function computeHmac(key: string, data: Uint8Array): Promise<string> {
+  const keyBytes = new TextEncoder().encode(key);
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  );
+  // slice() retourne un ArrayBuffer strict (évite l'incompatibilité ArrayBufferLike en TS)
+  const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, buf);
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 const MONTH_NAMES_FR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 
@@ -86,13 +99,19 @@ Deno.serve(async (req) => {
       throw new Error(`Upload Storage HTTP ${uploadRes.status} — ${await uploadRes.text()}`);
     }
 
-    // Stocker le chemin dans la ligne de signature
+    // Calcul du HMAC-SHA256 du PDF pour vérification d'intégrité (clé admin uniquement)
+    let pdfHmac: string | undefined;
+    if (PDF_SIGNING_SECRET) {
+      pdfHmac = await computeHmac(PDF_SIGNING_SECRET, pdfBytes);
+    }
+
+    // Stocker le chemin (et le HMAC si disponible) dans la ligne de signature
     await fetch(
       `${SUPABASE_URL}/rest/v1/monthly_signatures?id=eq.${encodeURIComponent(signature_id)}`,
       {
         method: 'PATCH',
         headers: { ...SVC, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ pdf_path: pdfPath }),
+        body: JSON.stringify({ pdf_path: pdfPath, ...(pdfHmac ? { pdf_hmac: pdfHmac } : {}) }),
       });
 
     // Envoyer le PDF en pièce jointe à l'ASV (best-effort, n'empêche pas la réponse)
