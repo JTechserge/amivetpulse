@@ -5,7 +5,7 @@
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANON_KEY         = Deno.env.get('SUPABASE_ANON_KEY')!;
-const RESEND_API_KEY   = Deno.env.get('RESEND_API_KEY')!;
+const BREVO_API_KEY    = Deno.env.get('BREVO_API_KEY')!;
 
 const MONTH_NAMES_FR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 
@@ -104,17 +104,20 @@ Deno.serve(async (req) => {
     const displayName: string = sig.signed_name || authUser.email;
     const filename = `feuille-presence-${sig.person_id}-${sig.year}-${mm}.pdf`;
 
-    fetch('https://api.resend.com/emails', {
+    fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: 'Amivet PULSE <onboarding@resend.dev>',
-        to: [authUser.email],
+        sender: { name: 'Amivet PULSE', email: 'jeremie.pvt@gmail.com' },
+        to: [{ email: authUser.email, name: displayName }],
         subject: `Amivet PULSE — Feuille de présence ${monthLabel} — Copie PDF`,
-        html: `<p>Bonjour <strong>${displayName}</strong>,</p>
+        htmlContent: `<p>Bonjour <strong>${displayName}</strong>,</p>
                <p>Veuillez trouver en pièce jointe votre feuille de présence pour <strong>${monthLabel}</strong>, signée électroniquement le ${signedDateFR} (heure de Paris).</p>
                <p style="font-size:12px;color:#888;">Amivet PULSE · Signature électronique simple (SES) au sens du règlement eIDAS (UE n°910/2014)</p>`,
-        attachments: [{ filename, content: pdf_base64 }],
+        textContent: `Bonjour ${displayName},\n\nVeuillez trouver en pièce jointe votre feuille de présence pour ${monthLabel}, signée électroniquement le ${signedDateFR} (heure de Paris).\n\n— Amivet PULSE`,
+        attachment: [{ name: filename, content: pdf_base64 }],
+        trackClicks: false,
+        trackOpens: false,
       }),
     }).catch(e => console.warn('Email PDF non envoyé :', e));
 

@@ -7,7 +7,7 @@ import { wrapEmailHtml, buttonHtml, APP_URL, COLORS } from '../_shared/email-tem
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!;
+const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY')!;
 // Seules ces 2 fréquences restent sélectionnables sur le site ; tout autre/ancien réglage
 // (ex. "daily"/"now" laissés par d'anciens tests) retombe sur la fenêtre hebdomadaire.
 const FREQUENCY_DAYS: Record<string, number> = { weekly: 7, monthly: 30 };
@@ -180,18 +180,20 @@ Deno.serve(async (req) => {
       <div style="margin-top:24px;">${buttonHtml(APP_URL, 'Ouvrir Amivet PULSE')}</div>
     `);
 
-    const emailRes = await fetch('https://api.resend.com/emails', {
+    const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: 'Amivet PULSE <onboarding@resend.dev>',
-        to: [recipient],
+        sender: { name: 'Amivet PULSE', email: 'jeremie.pvt@gmail.com' },
+        to: [{ email: recipient }],
         subject,
-        text,
-        html,
+        textContent: text,
+        htmlContent: html,
+        trackClicks: false,
+        trackOpens: false,
       }),
     });
-    if(!emailRes.ok) throw new Error(`Resend a répondu HTTP ${emailRes.status} — ${await emailRes.text()}`);
+    if(!emailRes.ok) throw new Error(`Brevo a répondu HTTP ${emailRes.status} — ${await emailRes.text()}`);
     await markRun();
 
     return new Response(JSON.stringify({ ok: true, sent: true, count: groups.length, recipient }), {

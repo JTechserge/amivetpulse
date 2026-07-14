@@ -389,10 +389,10 @@ export function buildPdfArchiveSection(year, archiveRows){
       if(!r) return '<td class="text-muted" style="text-align:center;">—</td>';
 
       const signedDate = r.signed_at
-        ? new Date(r.signed_at).toLocaleDateString('fr-FR', { day:'numeric', month:'short' })
+        ? new Date(r.signed_at).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Paris' }).replace(',', ' -')
         : '';
       const rejDate = r.rejected_at
-        ? new Date(r.rejected_at).toLocaleDateString('fr-FR', { day:'numeric', month:'short' })
+        ? new Date(r.rejected_at).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Paris' }).replace(',', ' -')
         : '';
 
       const pdfBtn = r.pdf_path
@@ -403,8 +403,8 @@ export function buildPdfArchiveSection(year, archiveRows){
       if(r.status === 'signed'){
         return `<td>
           <span style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
-            <span class="signed-pill" style="flex-shrink:0;">✅ ${escapeHTML(r.signed_name||'')}
-              <span class="signed-pill-date">(${signedDate})</span>
+            <span class="signed-pill" style="flex-shrink:0;">PDF confirmé — ${signedDate}
+              <span class="signed-pill-date"></span>
               <button type="button" class="asv-remove-btn" data-revoke-signature="${p.id}|${year}|${m}"
                 title="Annuler cette signature" aria-label="Annuler cette signature">✕</button>
             </span>
@@ -417,7 +417,7 @@ export function buildPdfArchiveSection(year, archiveRows){
         <span style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
           <span style="display:inline-flex;align-items:center;gap:4px;background:#FEE2E2;color:#B91C1C;
               border:1px solid #FECACA;border-radius:12px;padding:2px 8px;font-size:12px;white-space:nowrap;">
-            🔴 Rejetée${rejDate?` (${rejDate})`:''}
+            PDF rejeté${rejDate?` — ${rejDate}`:''}
           </span>
           ${pdfBtn}
         </span>

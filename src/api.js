@@ -3,7 +3,7 @@
    Fonctions data-in / data-out : retournent les données brutes.
    Les mutations d'état (DATA, SIGNATURES, renderCurrentView) restent dans app.js.
    ================================================================ */
-import { SUPABASE_URL, SUPABASE_FUNCTIONS_URL, SUPABASE_STORAGE_URL } from './config.js';
+import { SUPABASE_URL, SUPABASE_FUNCTIONS_URL } from './config.js';
 import { supabaseHeaders } from './auth.js';
 
 // ----------------------------------------------------------------
@@ -80,19 +80,20 @@ export async function fetchSignatureArchive(year){
   }
 }
 
-// Génère une URL signée temporaire (1h) pour un fichier du bucket privé signed-sheets.
-// Lance une exception en cas d'erreur (policy RLS : vet/admin uniquement).
+// Génère une URL signée temporaire (1h) via l'Edge Function get-signed-pdf-url
+// (contourne le bug auth.jwt() ->> 'role' des policies RLS Storage).
 export async function fetchSignedStorageUrl(pdfPath){
   const res = await fetch(
-    `${SUPABASE_STORAGE_URL}/object/sign/signed-sheets/${pdfPath}`,
+    `${SUPABASE_FUNCTIONS_URL}get-signed-pdf-url`,
     {
       method: 'POST',
       headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ expiresIn: 3600 }),
+      body: JSON.stringify({ pdf_path: pdfPath }),
     });
   if(!res.ok) throw new Error(`HTTP ${res.status}`);
-  const { signedURL } = await res.json();
-  return `https://ubowqtowyqmpraoxbaoo.supabase.co${signedURL}`;
+  const data = await res.json();
+  if(!data.ok) throw new Error(data.error || 'Erreur URL signée');
+  return data.url;
 }
 
 // Rejette une signature (soft-delete : status → 'rejected', conservé en historique).

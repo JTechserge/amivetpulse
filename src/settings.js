@@ -604,9 +604,15 @@ function openEditUserModal(userId, users, onBack){
     <h3>Modifier ${escapeHTML(user.display_name||user.email||'collaborateur')}</h3>
     <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
       <div>
-        <label class="text-muted" style="font-size:12px;display:block;margin-bottom:4px;">Nom affiché</label>
+        <label class="text-muted" style="font-size:12px;display:block;margin-bottom:4px;">Nom affiché / prénom</label>
         <input type="text" id="edit-display-name" value="${escapeHTML(user.display_name||'')}" style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;box-sizing:border-box;">
       </div>
+      ${personId && user.role === 'asv' ? `<div>
+        <label class="text-muted" style="font-size:12px;display:block;margin-bottom:4px;">Nom de famille (facultatif — pour les PDF signés)</label>
+        <input type="text" id="edit-lastname" value="${escapeHTML(personOf(personId)?.lastName||'')}"
+          placeholder="ex. Martin"
+          style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;box-sizing:border-box;">
+      </div>` : ''}
       <div>
         <label class="text-muted" style="font-size:12px;display:block;margin-bottom:4px;">Adresse email</label>
         <input type="email" id="edit-email" value="${escapeHTML(user.email||'')}" style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;box-sizing:border-box;">
@@ -631,12 +637,6 @@ function openEditUserModal(userId, users, onBack){
         </label>
       </div>
       ${buildTimeFractionUI(personId, user.role)}
-      ${personId && user.role === 'asv' ? `<div>
-        <label class="text-muted" style="font-size:12px;display:block;margin-bottom:4px;">Nom de famille (facultatif — pour les PDF signés)</label>
-        <input type="text" id="edit-lastname" value="${escapeHTML(personOf(personId)?.lastName||'')}"
-          placeholder="ex. Martin"
-          style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;box-sizing:border-box;">
-      </div>` : ''}
       ${personId ? `<div>
         <label class="text-muted" style="font-size:12px;display:block;margin-bottom:8px;">Couleur dans le planning</label>
         <div style="display:flex;align-items:center;gap:12px;">
