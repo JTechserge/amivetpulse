@@ -395,33 +395,25 @@ export function buildPdfArchiveSection(year, archiveRows){
         ? new Date(r.rejected_at).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Paris' }).replace(',', ' -')
         : '';
 
-      const pdfBtn = r.pdf_path
-        ? `<button class="btn btn-sm pdf-open-btn" data-pdf-path="${escapeHTML(r.pdf_path)}"
-             style="font-size:11px;padding:2px 7px;margin-left:4px;">📄 PDF</button>`
-        : '';
-
       if(r.status === 'signed'){
+        const pdfBtn = r.pdf_path
+          ? `<button class="btn btn-sm pdf-open-btn" data-pdf-path="${escapeHTML(r.pdf_path)}"
+               style="font-size:11px;padding:2px 7px;">📄 PDF confirmé — ${signedDate}</button>`
+          : '';
         return `<td>
           <span style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
-            <span class="signed-pill" style="flex-shrink:0;">PDF confirmé — ${signedDate}
-              <span class="signed-pill-date"></span>
-              <button type="button" class="asv-remove-btn" data-revoke-signature="${p.id}|${year}|${m}"
-                title="Annuler cette signature" aria-label="Annuler cette signature">✕</button>
-            </span>
+            <button type="button" class="asv-remove-btn" data-revoke-signature="${p.id}|${year}|${m}"
+              title="Annuler cette signature" aria-label="Annuler cette signature">✕</button>
             ${pdfBtn}
           </span>
         </td>`;
       }
       // rejected
-      return `<td>
-        <span style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
-          <span style="display:inline-flex;align-items:center;gap:4px;background:#FEE2E2;color:#B91C1C;
-              border:1px solid #FECACA;border-radius:12px;padding:2px 8px;font-size:12px;white-space:nowrap;">
-            PDF rejeté${rejDate?` — ${rejDate}`:''}
-          </span>
-          ${pdfBtn}
-        </span>
-      </td>`;
+      const pdfBtnRej = r.pdf_path
+        ? `<button class="btn btn-sm pdf-open-btn" data-pdf-path="${escapeHTML(r.pdf_path)}"
+             style="font-size:11px;padding:2px 7px;color:#B91C1C;border-color:#FECACA;">📄 PDF rejeté${rejDate?` — ${rejDate}`:''}</button>`
+        : `<span style="font-size:12px;color:#B91C1C;">PDF rejeté${rejDate?` — ${rejDate}`:''}</span>`;
+      return `<td>${pdfBtnRej}</td>`;
     });
     rows += `<tr><td>${MONTH_NAMES[m]}</td>${cells.join('')}</tr>`;
   }

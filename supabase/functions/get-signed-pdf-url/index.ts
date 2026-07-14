@@ -48,23 +48,24 @@ Deno.serve(async (req) => {
         { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
     }
 
-    // Générer le token de signature avec service_role (bypasse la RLS Storage).
-    // Endpoint correct d'après le SDK JS Supabase : POST /sign/{bucket}/{key} → { token }
-    // (différent de /object/sign/{bucket}/{key} qui est l'endpoint de lecture)
+    // Générer l'URL signée avec service_role (bypasse la RLS Storage).
+    // POST /object/sign/{bucket}/{key} → { signedURL: '/storage/v1/object/sign/...?token=...' }
     const signRes = await fetch(
-      `${SUPABASE_URL}/storage/v1/sign/signed-sheets/${pdf_path}`,
+      `${SUPABASE_URL}/storage/v1/object/sign/signed-sheets/${pdf_path}`,
       {
         method: 'POST',
         headers: { ...SVC, 'Content-Type': 'application/json' },
         body: JSON.stringify({ expiresIn: 3600 }),
       });
     if (!signRes.ok) {
-      throw new Error(`Storage sign HTTP ${signRes.status} — ${await signRes.text()}`);
+      const errBody = await signRes.text();
+      throw new Error(`Storage HTTP ${signRes.status} — ${errBody}`);
     }
-    const { token } = await signRes.json();
+    const body = await signRes.json();
+    const signedURL: string = body.signedURL ?? body.signedUrl ?? '';
+    if (!signedURL) throw new Error(`Réponse Storage inattendue : ${JSON.stringify(body)}`);
 
-    const signedUrl = `${SUPABASE_URL}/storage/v1/object/sign/signed-sheets/${pdf_path}?token=${token}`;
-    return new Response(JSON.stringify({ ok: true, url: signedUrl }),
+    return new Response(JSON.stringify({ ok: true, url: `${SUPABASE_URL}${signedURL}` }),
       { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
 
   } catch (e) {

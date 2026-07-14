@@ -222,7 +222,15 @@ export async function generateSignaturePdf({ personId, year, month, signedAt, si
     });
 
     const imgData = canvas.toDataURL('image/jpeg', 0.88);
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    // Chiffrement RC4-128 : ouverture sans mot de passe, modifications bloquées sans clé owner
+    const pdf = new jsPDF({
+      orientation: 'portrait', unit: 'mm', format: 'a4',
+      encryption: {
+        userPassword: '',
+        ownerPassword: 'AmivetPULSE-verrouille',
+        userPermissions: ['print'],
+      },
+    });
     const pdfWidth = 210;
     const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
     pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
