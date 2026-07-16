@@ -245,16 +245,22 @@ function openMonthPrintWindow(pids, year, month){
     </div>`;
   });
 
+  // Supprimer un éventuel printDiv orphelin (double-clic, afterprint non déclenché)
+  document.getElementById('wk-print-tmp')?.remove();
   const printDiv = document.createElement('div');
   printDiv.id = 'wk-print-tmp';
   // eslint-disable-next-line no-unsanitized/property
   printDiv.innerHTML = printStyle + allSheets;
   document.body.appendChild(printDiv);
   document.body.classList.add('is-printing');
-  window.print();
-  const cleanup = ()=>{ document.body.classList.remove('is-printing'); if(printDiv.parentNode) printDiv.parentNode.removeChild(printDiv); };
-  window.addEventListener('afterprint', cleanup, {once:true});
-  setTimeout(cleanup, 12000);
+  // Laisser un cycle de rendu avant d'ouvrir la boîte de dialogue d'impression,
+  // sinon Safari/Chrome peuvent capturer l'ancienne vue dans l'aperçu.
+  requestAnimationFrame(()=>{
+    window.print();
+    const cleanup = ()=>{ document.body.classList.remove('is-printing'); if(printDiv.parentNode) printDiv.parentNode.removeChild(printDiv); };
+    window.addEventListener('afterprint', cleanup, {once:true});
+    setTimeout(cleanup, 12000);
+  });
 }
 
 function openMonthPrintPopup(viewKey){
@@ -292,6 +298,8 @@ function openMonthPrintPopup(viewKey){
   const indivCbs=[...box.querySelectorAll('.print-asv-cb')];
   allCb.onchange=()=>{ indivCbs.forEach(cb=>cb.checked=allCb.checked); };
   indivCbs.forEach(cb=>{ cb.onchange=()=>{ allCb.checked=indivCbs.every(c=>c.checked); allCb.indeterminate=!allCb.checked&&indivCbs.some(c=>c.checked); }; });
+  // Pré-cocher toutes les ASV à l'ouverture
+  allCb.checked=true; indivCbs.forEach(cb=>{ cb.checked=true; });
   box.querySelector('#print-launch-btn').onclick=()=>{
     const selected=indivCbs.filter(cb=>cb.checked).map(cb=>cb.dataset.pid);
     if(!selected.length){ showToast('Sélectionnez au moins une ASV','⚠️'); return; }
