@@ -400,8 +400,8 @@ export function buildPdfArchiveSection(year, archiveRows){
           ? `<button class="btn btn-sm pdf-open-btn" data-pdf-path="${escapeHTML(r.pdf_path)}"
                style="font-size:11px;padding:2px 7px;white-space:nowrap;">📄 PDF confirmé — ${signedDate}</button>`
           : '';
-        return `<td>
-          <span style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap;">
+        return `<td style="text-align:center;">
+          <span style="display:inline-flex;align-items:center;gap:4px;flex-wrap:nowrap;">
             <button type="button" class="asv-remove-btn" data-revoke-signature="${p.id}|${year}|${m}"
               title="Annuler cette signature" aria-label="Annuler cette signature">✕</button>
             ${pdfBtn}
@@ -413,17 +413,17 @@ export function buildPdfArchiveSection(year, archiveRows){
         ? `<button class="btn btn-sm pdf-open-btn" data-pdf-path="${escapeHTML(r.pdf_path)}"
              style="font-size:11px;padding:2px 7px;white-space:nowrap;color:#B91C1C;border-color:#FECACA;">📄 PDF rejeté${rejDate?` — ${rejDate}`:''}</button>`
         : `<span style="font-size:12px;white-space:nowrap;color:#B91C1C;">PDF rejeté${rejDate?` — ${rejDate}`:''}</span>`;
-      return `<td>${pdfBtnRej}</td>`;
+      return `<td style="text-align:center;">${pdfBtnRej}</td>`;
     });
     rows += `<tr><td>${MONTH_NAMES[m]}</td>${cells.join('')}</tr>`;
   }
 
   return `
     <div style="overflow-x:auto;">
-      <table class="recap-table">
+      <table class="recap-table" style="table-layout:fixed;width:100%;">
         <thead><tr>
-          <th>Mois</th>
-          ${ASV_PEOPLE.map(p=>`<th>${escapeHTML(p.short)}</th>`).join('')}
+          <th style="width:110px;">Mois</th>
+          ${ASV_PEOPLE.map(p=>`<th style="text-align:center;">${escapeHTML(p.short)}</th>`).join('')}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
