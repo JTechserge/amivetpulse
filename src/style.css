@@ -49,21 +49,18 @@
    AMIVET PLANNING — Variables & Reset
    ============================================================ */
 :root{
-  --color-primary:#0F766E;
-  --color-primary-light:#14B8A6;
-  --color-secondary:#F0FDF9;
+  --color-primary:#EA580C;
+  --color-primary-light:#F97316;
+  --color-secondary:#FAF9F6;
   --color-surface:#FFFFFF;
-  --color-border:#E2E8F0;
-  --color-text:#0F172A;
-  --color-text-muted:#64748B;
-  --color-sunday:#F1F5F9;
-  --color-saturday:#E0F2F1;
+  --color-border:#ECE7DE;
+  --color-text:#1E293B;
+  --color-text-muted:#8A8577;
+  --color-sunday:#F4F1EA;
+  --color-saturday:#FEF3E2;
   --color-holiday:#FDE047;
-  --color-david:#2563EB;
-  --color-stephane:#7C3AED;
-  /* Couleurs de statut indépendantes de la personne : congé validé = rouge marqué, congé
-     en attente = bleu foncé, férié = jaune. "Présent" reste vert mais varie en nuance par
-     personne (PRESENT_SHADES, en JS) pour les distinguer entre elles. */
+  --color-david:#0D9488;
+  --color-stephane:#4F46E5;
   --color-absent:#FCA5A5;
   --color-absent-border:#F87171;
   --color-absent-text:#7F1D1D;
@@ -96,11 +93,11 @@
   --color-closing:#D1FAE5;
   --color-closing-border:#34D399;
   --color-closing-text:#065F46;
-  --shadow-sm:0 1px 3px rgba(0,0,0,0.08);
-  --shadow-md:0 4px 12px rgba(15,23,42,0.10);
-  --shadow-lg:0 12px 32px rgba(15,23,42,0.16);
-  --radius-card:12px;
-  --radius-btn:8px;
+  --shadow-sm:0 1px 3px rgba(30,23,10,0.06);
+  --shadow-md:0 4px 14px rgba(30,23,10,0.09);
+  --shadow-lg:0 12px 32px rgba(30,23,10,0.14);
+  --radius-card:16px;
+  --radius-btn:11px;
   --transition:0.15s ease;
 }
 
@@ -354,7 +351,7 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
   font-size:9px;color:var(--color-text-muted);display:flex;align-items:center;justify-content:center;
   transition:background var(--transition);
 }
-.cal-icon-btn:hover{background:rgba(15,118,110,0.1);color:var(--color-primary);}
+.cal-icon-btn:hover{background:rgba(234,88,12,0.1);color:var(--color-primary);}
 .cal-icon-btn.has-comment{color:var(--color-primary);}
 
 .cal-cell{
@@ -451,7 +448,7 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-wg-holiday-name{font-size:7px;font-weight:600;color:#D97706;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
 .cal-wg-tools{display:flex;gap:1px;margin-left:auto;flex-shrink:0;}
 .cal-wg-tool-btn{width:16px;height:16px;border:none;background:transparent;border-radius:4px;font-size:9px;color:var(--color-text-muted);display:flex;align-items:center;justify-content:center;transition:background var(--transition);cursor:pointer;padding:0;font-family:inherit;}
-.cal-wg-tool-btn:hover{background:rgba(15,118,110,0.1);color:var(--color-primary);}
+.cal-wg-tool-btn:hover{background:rgba(234,88,12,0.1);color:var(--color-primary);}
 .cal-wg-tool-btn.has-comment{color:var(--color-primary);}
 .cal-wg-persons{flex:1;display:flex;flex-direction:column;padding:0 3px 3px;gap:2px;}
 .cal-wg-pstrip{flex:1;display:flex;border-radius:4px;overflow:hidden;min-height:20px;border:0.5px solid transparent;}
@@ -534,11 +531,11 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .popover-actions{display:flex;justify-content:flex-end;gap:8px;}
 .popover-split-btn{
   width:100%;justify-content:center;margin-bottom:14px;padding:11px;
-  background:rgba(20,184,166,0.12);border:2px solid var(--color-primary-light);
+  background:rgba(234,88,12,0.12);border:2px solid var(--color-primary-light);
   color:var(--color-primary);font-weight:800;font-size:13.5px;
-  box-shadow:0 1px 2px rgba(15,118,110,0.12);
+  box-shadow:0 1px 2px rgba(234,88,12,0.12);
 }
-.popover-split-btn:hover{background:rgba(20,184,166,0.22);border-color:var(--color-primary);transform:translateY(-1px);}
+.popover-split-btn:hover{background:rgba(234,88,12,0.22);border-color:var(--color-primary);transform:translateY(-1px);}
 .popover-quicktags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
 .quicktag{
   font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--color-border);
@@ -1093,7 +1090,7 @@ body.role-asv [data-view="dashboard"]{display:none;}
     right:16px; width:52px; height:52px;
     border-radius:50%; background:var(--color-primary);
     color:#fff; border:none; font-size:26px; line-height:1;
-    box-shadow:0 4px 16px rgba(15,118,110,.4);
+    box-shadow:0 4px 16px rgba(234,88,12,.4);
     display:flex; align-items:center; justify-content:center;
     cursor:pointer; z-index:69; font-family:inherit;
     -webkit-tap-highlight-color:transparent;
