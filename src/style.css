@@ -596,6 +596,7 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 }
 .modal-box.modal-box-wide{width:680px;max-width:calc(100vw - 48px);}
 .modal-box.modal-box--wide{width:780px;max-width:calc(100vw - 32px);padding:24px 28px;}
+.modal-box.modal-box-xl{width:960px;max-width:calc(100vw - 32px);padding:24px 28px;}
 
 /* Guide utilisateur — overlay plein écran */
 #help-overlay-root{position:fixed;inset:0;z-index:200;display:flex;background:#fff;}

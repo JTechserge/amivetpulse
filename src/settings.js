@@ -191,7 +191,7 @@ function openChangeMyPasswordModal(){
 function openManageUsersModal(){
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
-  box.className = 'modal-box modal-box-wide';
+  box.className = 'modal-box modal-box-xl';
   box.innerHTML = `<h3>👥 Gestion des collaborateurs</h3><p class="text-muted" style="font-size:13px;">Chargement…</p>`;
   backdrop.classList.add('open');
   const close = ()=> backdrop.classList.remove('open');
