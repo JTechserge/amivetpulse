@@ -218,7 +218,7 @@ function openManageUsersModal(){
       const cp = u.person_id ? personOf(u.person_id) : null;
       const swatch = cp ? `<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${cp.color};margin-right:6px;vertical-align:middle;flex-shrink:0;"></span>` : '';
       return `<tr>
-        <td style="font-weight:600;">${swatch}${escapeHTML(u.display_name||'—')}</td>
+        <td style="font-weight:600;white-space:nowrap;">${swatch}${escapeHTML(u.display_name||'—')}</td>
         <td style="font-size:12px;color:var(--color-text-muted);">${roleLabels[u.role]||u.role||'—'}</td>
         <td style="font-size:12px;color:var(--color-text-muted);">${escapeHTML(u.email||'—')}</td>
         <td style="font-size:12px;text-align:center;">${u.can_edit_vet_calendar ? '✅' : '—'}</td>
