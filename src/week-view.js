@@ -298,8 +298,6 @@ function openMonthPrintPopup(viewKey){
   const indivCbs=[...box.querySelectorAll('.print-asv-cb')];
   allCb.onchange=()=>{ indivCbs.forEach(cb=>cb.checked=allCb.checked); };
   indivCbs.forEach(cb=>{ cb.onchange=()=>{ allCb.checked=indivCbs.every(c=>c.checked); allCb.indeterminate=!allCb.checked&&indivCbs.some(c=>c.checked); }; });
-  // Pré-cocher toutes les ASV à l'ouverture
-  allCb.checked=true; indivCbs.forEach(cb=>{ cb.checked=true; });
   box.querySelector('#print-launch-btn').onclick=()=>{
     const selected=indivCbs.filter(cb=>cb.checked).map(cb=>cb.dataset.pid);
     if(!selected.length){ showToast('Sélectionnez au moins une ASV','⚠️'); return; }
