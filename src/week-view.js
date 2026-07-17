@@ -519,20 +519,21 @@ function getWeekAlerts(personId, sundayISO){
     if(holidayName(iso2)) continue;
     const pool = dt.getDay() === 6 ? poolAll : poolNC;
     const present = pool.filter(q => getSlotState(iso2, q.id, 'M') === 'present' || getSlotState(iso2, q.id, 'AM') === 'present');
-    if(present.length !== 2){
-      if(present.length === 0){
-        alerts.push(`${DAY_FULL[d]} : aucune ASV présente (2 requises)`);
-      } else {
-        alerts.push(`${DAY_FULL[d]} : 1 seule ASV présente (${present.map(q=>q.short).join(' et ')}), 2 requises`);
-      }
+    const iAmPresent = present.some(q => q.id === personId);
+
+    // Effectif insuffisant — seulement si cette ASV est la seule présente ce jour
+    if(present.length === 1 && iAmPresent){
+      alerts.push(`${DAY_FULL[d]} : tu es seule ce jour (une collègue devrait être présente)`);
     }
-    // Même poste les jours de semaine (pas samedi) — uniquement via shiftType stocké (pas TE)
-    if(present.length === 2 && dt.getDay() !== 6){
+
+    // Même poste — seulement si cette ASV est l'une des deux impliquées
+    if(present.length === 2 && iAmPresent && dt.getDay() !== 6){
       const s0 = store.DATA.slots[shiftTypeKey(iso2, present[0].id)] || null;
       const s1 = store.DATA.slots[shiftTypeKey(iso2, present[1].id)] || null;
       if(s0 && s1 && s0 === s1){
         const poste = s0 === 'O' ? 'ouverture' : 'fermeture';
-        alerts.push(`${DAY_FULL[d]} : ${present.map(q=>q.short).join(' et ')} sont toutes deux en ${poste}`);
+        const colleague = present.find(q => q.id !== personId);
+        alerts.push(`${DAY_FULL[d]} : même poste que ${colleague?.short || 'ta collègue'} — toutes deux en ${poste}`);
       }
     }
   }
