@@ -787,7 +787,7 @@ updatePwaOfflineBanner();
 setupMobileUI({ switchView, switchSubPage });
 
 setupIdleTimeout({
-  timeoutMs: 10 * 60 * 1000,
+  timeoutMs: 5 * 60 * 1000,
   onTimeout: async () => {
     if (!getAuthSession()) return;
     await authSignOut();
