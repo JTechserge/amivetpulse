@@ -347,12 +347,12 @@ function _seedDemoData(){
   seedAbsenceRange('david', '2026-01-12', '2026-01-16', 'Perche');
   seedAbsenceRange('david', '2026-01-26', '2026-01-31', 'Ski');
   seedAbsenceRange('david', '2026-02-09', '2026-02-13', 'Perche');
-  seedAbsenceRange('stephane', '2026-05-01', '2026-05-02', '70 ans de Michel');
-  seedAbsenceRange('stephane', '2026-05-13', '2026-05-14', 'Baptême Lucas');
-  seedAbsenceRange('david', '2026-05-19', '2026-05-23', 'Florence et Erwan');
-  seedAbsenceRange('stephane', '2026-06-19', '2026-06-20', 'Week-end Pivot');
-  seedAbsenceRange('stephane', '2026-06-24', '2026-06-28', 'Barcelone GP');
-  seedAbsenceRange('stephane', '2026-10-10', '2026-10-11', 'Marathon Cologne');
+  seedAbsenceRange('stephane', '2026-05-01', '2026-05-02', 'Événement familial');
+  seedAbsenceRange('stephane', '2026-05-13', '2026-05-14', 'Événement familial');
+  seedAbsenceRange('david', '2026-05-19', '2026-05-23', 'Congés');
+  seedAbsenceRange('stephane', '2026-06-19', '2026-06-20', 'Congés');
+  seedAbsenceRange('stephane', '2026-06-24', '2026-06-28', 'Congés');
+  seedAbsenceRange('stephane', '2026-10-10', '2026-10-11', 'Congés');
 
   // --- 2027 : janvier (prévisionnel) ---
   const nbDaysJan2027 = daysInMonth(2027,0);
@@ -656,17 +656,7 @@ function initApp(){
   switchSubPage('asv', store.subNavState.asv);
   const startView = !canAccessDashboard() && restoredView === 'dashboard' ? 'vets' : restoredView;
   switchView(VIEW_RENDERERS[startView] ? startView : 'vets');
-  syncFromSupabase().then(remoteSlots=>{
-    if(remoteSlots !== null){
-      store.DATA = { version:2, slots: remoteSlots };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
-      renderCurrentView();
-      updateDashboardNavBadge();
-    }
-  });
-  loadSignatures();
-  loadInterviews();
-  loadAnnouncements();
+  refreshData();
   document.getElementById('login-overlay').classList.add('hidden');
   // Ouvrir le modal de confirmation si l'utilisateur vient d'un lien de signature email
   if(store.pendingSignToken){
@@ -674,7 +664,7 @@ function initApp(){
     store.pendingSignToken = null;
     openSignConfirmModal(token);
   }
-  if(typeof handlePwaShortcutAction === 'function') handlePwaShortcutAction();
+  handlePwaShortcutAction();
 }
 
 async function init(){
@@ -716,7 +706,7 @@ document.addEventListener('DOMContentLoaded', init);
    PWA — fonctions SW, install, push → src/pwa.js
    ================================================================ */
 
-function refreshAllPwaData(){
+function refreshData(){
   syncFromSupabase().then(remoteSlots=>{
     if(remoteSlots !== null){
       store.DATA = { version:2, slots: remoteSlots };
@@ -726,9 +716,10 @@ function refreshAllPwaData(){
     }
   });
   loadSignatures();
-  if(typeof loadInterviews === 'function') loadInterviews();
-  if(typeof loadAnnouncements === 'function') loadAnnouncements();
+  loadInterviews();
+  loadAnnouncements();
 }
+function refreshAllPwaData(){ refreshData(); }
 window.addEventListener('online', ()=>{ updatePwaOfflineBanner(); refreshAllPwaData(); });
 window.addEventListener('offline', updatePwaOfflineBanner);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refreshAllPwaData(); });

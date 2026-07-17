@@ -29,6 +29,13 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
     }
 
+    // Format attendu : {personId}/{year}-{MM}-{uuid}.pdf
+    // Bloque toute tentative de path traversal (../, %2F, etc.)
+    if (!/^[a-z0-9_-]+\/\d{4}-\d{2}-[0-9a-f-]{36}\.pdf$/.test(pdf_path)) {
+      return new Response(JSON.stringify({ error: 'Format de chemin invalide.' }),
+        { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+    }
+
     // Vérifier le JWT
     const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`,
       { headers: { apikey: ANON_KEY, Authorization: authHeader } });

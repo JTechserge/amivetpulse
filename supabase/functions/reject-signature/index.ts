@@ -28,6 +28,13 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
     }
 
+    // person_id ne doit contenir que des lettres minuscules et chiffres (conforme config.js)
+    if (!/^[a-z0-9]+$/.test(person_id) || typeof year !== 'number' || typeof month !== 'number'
+        || year < 2020 || year > 2100 || month < 0 || month > 11) {
+      return new Response(JSON.stringify({ error: 'Paramètres invalides.' }),
+        { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+    }
+
     // Vérifier le JWT
     const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`,
       { headers: { apikey: ANON_KEY, Authorization: authHeader } });

@@ -101,6 +101,128 @@
   --transition:0.15s ease;
 }
 
+/* ============================================================
+   Mode sombre — redéfinition des tokens structurels
+   Les couleurs sémantiques (absent=rouge, congé=bleu…) gardent
+   leur lisibilité tout en s'adaptant aux fonds sombres.
+   ============================================================ */
+@media(prefers-color-scheme:dark){
+  :root{
+    --color-secondary:#1E293B;
+    --color-surface:#0F172A;
+    --color-border:#334155;
+    --color-text:#F1F5F9;
+    --color-text-muted:#94A3B8;
+    --color-sunday:#192233;
+    --color-saturday:#1A2530;
+    --color-holiday:#2D2500;
+    --color-absent:#4A1515;
+    --color-absent-border:#7F1D1D;
+    --color-absent-text:#FCA5A5;
+    --color-forecast:#1A1800;
+    --color-leave-rejected:#1E293B;
+    --color-leave-rejected-text:#94A3B8;
+    --color-leave-rejected-border:#334155;
+    --color-change-rejected:#2D1E00;
+    --color-change-rejected-text:#FDE68A;
+    --color-change-rejected-border:#78350F;
+    --color-medical:#082F49;
+    --color-medical-text:#BAE6FD;
+    --color-medical-border:#0369A1;
+    --color-sick:#292100;
+    --color-sick-text:#FEF08A;
+    --color-sick-border:#854D0E;
+    --color-off:#2D1500;
+    --color-off-text:#FED7AA;
+    --color-off-border:#C2410C;
+    --color-opening:#052E16;
+    --color-opening-border:#166534;
+    --color-opening-text:#DCFCE7;
+    --color-closing:#022C22;
+    --color-closing-border:#065F46;
+    --color-closing-text:#D1FAE5;
+    --shadow-sm:0 1px 3px rgba(0,0,0,0.4);
+    --shadow-md:0 4px 14px rgba(0,0,0,0.5);
+    --shadow-lg:0 12px 32px rgba(0,0,0,0.6);
+  }
+}
+:root[data-theme="dark"]{
+  --color-secondary:#1E293B;
+  --color-surface:#0F172A;
+  --color-border:#334155;
+  --color-text:#F1F5F9;
+  --color-text-muted:#94A3B8;
+  --color-sunday:#192233;
+  --color-saturday:#1A2530;
+  --color-holiday:#2D2500;
+  --color-absent:#4A1515;
+  --color-absent-border:#7F1D1D;
+  --color-absent-text:#FCA5A5;
+  --color-forecast:#1A1800;
+  --color-leave-rejected:#1E293B;
+  --color-leave-rejected-text:#94A3B8;
+  --color-leave-rejected-border:#334155;
+  --color-change-rejected:#2D1E00;
+  --color-change-rejected-text:#FDE68A;
+  --color-change-rejected-border:#78350F;
+  --color-medical:#082F49;
+  --color-medical-text:#BAE6FD;
+  --color-medical-border:#0369A1;
+  --color-sick:#292100;
+  --color-sick-text:#FEF08A;
+  --color-sick-border:#854D0E;
+  --color-off:#2D1500;
+  --color-off-text:#FED7AA;
+  --color-off-border:#C2410C;
+  --color-opening:#052E16;
+  --color-opening-border:#166534;
+  --color-opening-text:#DCFCE7;
+  --color-closing:#022C22;
+  --color-closing-border:#065F46;
+  --color-closing-text:#D1FAE5;
+  --shadow-sm:0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md:0 4px 14px rgba(0,0,0,0.5);
+  --shadow-lg:0 12px 32px rgba(0,0,0,0.6);
+}
+:root[data-theme="light"]{
+  --color-secondary:#FAF9F6;
+  --color-surface:#FFFFFF;
+  --color-border:#ECE7DE;
+  --color-text:#1E293B;
+  --color-text-muted:#8A8577;
+  --color-sunday:#F4F1EA;
+  --color-saturday:#FEF3E2;
+  --color-holiday:#FDE047;
+  --color-absent:#FCA5A5;
+  --color-absent-border:#F87171;
+  --color-absent-text:#7F1D1D;
+  --color-forecast:#FFFBEB;
+  --color-leave-rejected:#E2E8F0;
+  --color-leave-rejected-text:#475569;
+  --color-leave-rejected-border:#CBD5E1;
+  --color-change-rejected:#FEF3C7;
+  --color-change-rejected-text:#78350F;
+  --color-change-rejected-border:#F59E0B;
+  --color-medical:#BAE6FD;
+  --color-medical-text:#0C4A6E;
+  --color-medical-border:#38BDF8;
+  --color-sick:#FEF08A;
+  --color-sick-text:#713F12;
+  --color-sick-border:#FACC15;
+  --color-off:#FED7AA;
+  --color-off-text:#7C2D12;
+  --color-off-border:#FB923C;
+  --color-opening:#DCFCE7;
+  --color-opening-border:#16A34A;
+  --color-opening-text:#14532D;
+  --color-closing:#D1FAE5;
+  --color-closing-border:#34D399;
+  --color-closing-text:#065F46;
+  --shadow-sm:0 1px 3px rgba(30,23,10,0.06);
+  --shadow-md:0 4px 14px rgba(30,23,10,0.09);
+  --shadow-lg:0 12px 32px rgba(30,23,10,0.14);
+}
+
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
 body{
@@ -360,7 +482,7 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
   text-align:center;vertical-align:middle;
   font-size:10px;font-weight:700;padding:2px;
   cursor:pointer;transition:background var(--transition);user-select:none;
-  background:#fff;color:var(--color-text-muted);overflow:hidden;
+  background:var(--color-surface);color:var(--color-text-muted);overflow:hidden;
   white-space:nowrap;text-overflow:ellipsis;position:relative;
   border-radius:3px;letter-spacing:0.01em;
 }
@@ -405,8 +527,8 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
   position:absolute;bottom:0;right:1px;font-size:5.5px;font-weight:800;
   color:#7C3AED;line-height:1;
 }
-.cal-cell.overtime-row-cell{background:#fff;color:#7C3AED;cursor:default;}
-.cal-cell.overtime-row-cell:hover{background:#fff;}
+.cal-cell.overtime-row-cell{background:var(--color-surface);color:#7C3AED;cursor:default;}
+.cal-cell.overtime-row-cell:hover{background:var(--color-surface);}
 .ot-row-total{font-size:8.5px;font-weight:800;}
 .cal-cell .ot-badge-neg{color:#EA580C;}
 .ot-row-total-neg{color:#EA580C;}
@@ -520,7 +642,7 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 }
 .popover-backdrop.open{display:flex;}
 .popover-box{
-  background:#fff;border-radius:var(--radius-card);box-shadow:var(--shadow-lg);
+  background:var(--color-surface);border-radius:var(--radius-card);box-shadow:var(--shadow-lg);
   padding:20px;width:320px;
 }
 .popover-box h4{font-size:15px;margin-bottom:10px;}
@@ -552,7 +674,7 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .sidebar-overlay.open{display:block;}
 .day-sidebar{
   position:fixed;top:0;right:0;height:100%;width:340px;
-  background:#fff;box-shadow:var(--shadow-lg);z-index:81;
+  background:var(--color-surface);box-shadow:var(--shadow-lg);z-index:81;
   transform:translateX(100%);transition:transform 0.2s ease;
   display:flex;flex-direction:column;
 }
@@ -591,8 +713,8 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 }
 .modal-backdrop.open{display:flex;}
 .modal-box{
-  background:#fff;border-radius:var(--radius-card);box-shadow:var(--shadow-lg);padding:24px;width:380px;
-  max-height:calc(100vh - 64px);overflow-y:auto;
+  background:var(--color-surface);border-radius:var(--radius-card);box-shadow:var(--shadow-lg);padding:24px;width:380px;
+  max-width:calc(100vw - 24px);max-height:calc(100vh - 64px);overflow-y:auto;
 }
 .modal-box.modal-box-wide{width:680px;max-width:calc(100vw - 48px);}
 .modal-box.modal-box--wide{width:780px;max-width:calc(100vw - 32px);padding:24px 28px;}
@@ -877,7 +999,7 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .week-lunch-label{background:#FEF3C7;font-size:10px;color:#92400E;text-align:center;padding:4px 2px;font-weight:600;white-space:nowrap;}
 .week-lunch-cell{background:#FEF9EC;padding:0;}
 .week-footer-label{background:var(--color-secondary);font-size:11px;font-weight:700;color:var(--color-text-muted);text-align:right;padding:5px 5px 5px 0;white-space:nowrap;}
-.week-footer-cell{padding:4px;text-align:center;font-size:12px;background:#fff;}
+.week-footer-cell{padding:4px;text-align:center;font-size:12px;background:var(--color-surface);}
 .week-total-h{font-weight:700;color:var(--color-primary);}
 
 /* ── Vue semaine : barre d'outils ───────────────────────────── */
@@ -930,7 +1052,7 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 }
 #login-overlay.hidden{display:none;}
 .login-card{
-  background:#fff;border-radius:var(--radius-card);box-shadow:var(--shadow-lg);
+  background:var(--color-surface);border-radius:var(--radius-card);box-shadow:var(--shadow-lg);
   padding:36px 32px;width:100%;max-width:400px;text-align:center;
 }
 .login-card .login-logo{height:54px;margin-bottom:12px;}
@@ -1128,7 +1250,7 @@ body.role-asv [data-view="dashboard"]{display:none;}
   #dash-sub-stats table.recap-table th:first-child,
   #dash-sub-hours table.recap-table td:first-child,
   #dash-sub-hours table.recap-table th:first-child {
-    position:sticky; left:0; z-index:1; background:var(--color-card);
+    position:sticky; left:0; z-index:1; background:var(--color-surface);
   }
 
   /* ── T7e · Table visites médicales → cards ── */
@@ -1142,7 +1264,7 @@ body.role-asv [data-view="dashboard"]{display:none;}
   #dash-sub-medical .recap-table thead { display:none; }
   #dash-sub-medical .recap-table tr {
     border:1px solid var(--color-border); border-radius:10px;
-    margin-bottom:10px; overflow:hidden; background:var(--color-card);
+    margin-bottom:10px; overflow:hidden; background:var(--color-surface);
   }
   #dash-sub-medical .recap-table td {
     display:flex; align-items:center; padding:7px 12px;
@@ -1178,6 +1300,22 @@ body.role-asv [data-view="dashboard"]{display:none;}
   .cal-wg-tools { display:none; }
   .cal-wg-label-spacer { min-height:26px; }
   .cal-wg-plabel { font-size:0; }
+}
+
+/* ============================================================
+   Accessibilité — Désactive les animations pour les utilisateurs
+   qui ont activé "Réduire les animations" dans leur OS.
+   ============================================================ */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:0.01ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:0.01ms!important;
+    scroll-behavior:auto!important;
+  }
+  .heatmap-cell:hover{transform:none;}
+  .btn:hover{transform:none;box-shadow:none;}
+  .progress-fill,.hours-progress-fill{transition:none;}
 }
 
 @media print{

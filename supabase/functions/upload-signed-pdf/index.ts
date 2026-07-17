@@ -48,6 +48,19 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
     }
 
+    // Validation du format UUID (prévient les injections de chemin côté storage)
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(signature_id)) {
+      return new Response(JSON.stringify({ error: 'signature_id invalide.' }),
+        { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+    }
+
+    // Limite à 5 MB décodés (base64 encode 3 octets en 4 chars → seuil = 5_000_000 * 4/3 ≈ 6_666_667)
+    const MAX_B64_LEN = 6_666_667;
+    if (typeof pdf_base64 !== 'string' || pdf_base64.length > MAX_B64_LEN) {
+      return new Response(JSON.stringify({ error: 'PDF trop volumineux (max 5 Mo).' }),
+        { status: 413, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+    }
+
     // Vérifier le JWT et récupérer l'uid
     const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`,
       { headers: { apikey: ANON_KEY, Authorization: authHeader } });
