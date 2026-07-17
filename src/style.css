@@ -370,13 +370,13 @@ body.forecast-theme{background:var(--color-forecast);}
   width:240px;background:var(--color-surface);border:1px solid var(--color-border);
   border-radius:var(--radius-card);box-shadow:var(--shadow-lg);
   padding:8px;display:flex;flex-direction:column;gap:2px;z-index:50;
-  opacity:0;transform:translateY(-6px) scale(0.97);transform-origin:top right;
+  opacity:0;transform:translateY(-10px) scale(0.94);transform-origin:top right;
   pointer-events:none;visibility:hidden;
-  transition:opacity 0.18s ease,transform 0.18s cubic-bezier(0.4,0,0.2,1),visibility 0s 0.18s;
+  transition:opacity 0.22s ease,transform 0.22s cubic-bezier(0.4,0,0.2,1),visibility 0s 0.22s;
 }
 .settings-menu.open{
   opacity:1;transform:translateY(0) scale(1);pointer-events:auto;visibility:visible;
-  transition:opacity 0.18s ease,transform 0.18s cubic-bezier(0.4,0,0.2,1),visibility 0s;
+  transition:opacity 0.22s ease,transform 0.22s cubic-bezier(0.34,1.2,0.64,1),visibility 0s;
 }
 .settings-menu button{
   display:flex;align-items:center;gap:10px;width:100%;text-align:left;
@@ -1315,40 +1315,40 @@ body.role-asv [data-view="dashboard"]{display:none;}
    Animations — view transitions, modales, login, mobile
    ============================================================ */
 @keyframes view-enter{
-  from{opacity:0;transform:translateY(6px);}
+  from{opacity:0;transform:translateY(14px);}
   to{opacity:1;transform:translateY(0);}
 }
 @keyframes panel-up{
-  from{opacity:0;transform:scale(0.96) translateY(10px);}
+  from{opacity:0;transform:scale(0.91) translateY(18px);}
   to{opacity:1;transform:scale(1) translateY(0);}
 }
 @keyframes overlay-in{from{opacity:0;}to{opacity:1;}}
 @keyframes login-enter{
-  from{opacity:0;transform:translateY(16px) scale(0.98);}
+  from{opacity:0;transform:translateY(28px) scale(0.95);}
   to{opacity:1;transform:translateY(0) scale(1);}
 }
 @keyframes fab-pop{
-  from{opacity:0;transform:scale(0.6);}
+  from{opacity:0;transform:scale(0.45);}
   to{opacity:1;transform:scale(1);}
 }
 
 /* Changement de vue — glissement vers le haut + fondu */
-.view-section:not(.hidden){animation:view-enter 0.22s cubic-bezier(0.4,0,0.2,1);}
+.view-section:not(.hidden){animation:view-enter 0.3s cubic-bezier(0.4,0,0.2,1);}
 
-/* Modale — boîte avec spring léger */
-.modal-backdrop.open .modal-box{animation:panel-up 0.25s cubic-bezier(0.34,1.1,0.64,1);}
+/* Modale — boîte avec spring */
+.modal-backdrop.open .modal-box{animation:panel-up 0.32s cubic-bezier(0.34,1.2,0.64,1);}
 
 /* Popover */
-.popover-backdrop.open .popover-box{animation:panel-up 0.2s cubic-bezier(0.34,1.1,0.64,1);}
+.popover-backdrop.open .popover-box{animation:panel-up 0.26s cubic-bezier(0.34,1.2,0.64,1);}
 
 /* Overlay derrière la sidebar */
-.sidebar-overlay.open{animation:overlay-in 0.2s ease;}
+.sidebar-overlay.open{animation:overlay-in 0.22s ease;}
 
 /* Carte de connexion */
-.login-card{animation:login-enter 0.35s cubic-bezier(0.4,0,0.2,1);}
+.login-card{animation:login-enter 0.42s cubic-bezier(0.4,0,0.2,1);}
 
 /* FAB mobile — pop au montage */
-#mobile-fab{animation:fab-pop 0.3s cubic-bezier(0.34,1.56,0.64,1);}
+#mobile-fab{animation:fab-pop 0.36s cubic-bezier(0.34,1.7,0.64,1);}
 
 /* ============================================================
    Accessibilité — Désactive les animations pour les utilisateurs
