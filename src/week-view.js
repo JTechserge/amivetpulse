@@ -521,9 +521,13 @@ function getWeekAlerts(personId, sundayISO){
     const present = pool.filter(q => getSlotState(iso2, q.id, 'M') === 'present' || getSlotState(iso2, q.id, 'AM') === 'present');
     const iAmPresent = present.some(q => q.id === personId);
 
-    // Effectif insuffisant — seulement si cette ASV est la seule présente ce jour
-    if(present.length === 1 && iAmPresent){
-      alerts.push(`${DAY_FULL[d]} : tu es seule ce jour (une collègue devrait être présente)`);
+    // Effectif insuffisant — alerter les ASV absentes pour les aider à se positionner
+    if(present.length < 2 && !iAmPresent){
+      if(present.length === 0){
+        alerts.push(`${DAY_FULL[d]} : aucune ASV n'est positionnée ce jour`);
+      } else {
+        alerts.push(`${DAY_FULL[d]} : seulement ${present[0].short} est positionnée ce jour (une deuxième est nécessaire)`);
+      }
     }
 
     // Même poste — seulement si cette ASV est l'une des deux impliquées
