@@ -1095,11 +1095,10 @@ body.role-asv [data-view="dashboard"]{display:none;}
 @media (max-width:767px){
 
   /* ── Scroll horizontal désactivé au niveau de la page ── */
-  /* Les conteneurs internes gardent leur overflow-x:auto (sub-nav, tables, vue semaine) */
-  html, body {
-    overflow-x: hidden;
-    overscroll-behavior-x: none;
-  }
+  /* overflow-x:hidden sur html/body casse les position:fixed sur iOS Safari —
+     on l'applique à #app (conteneur de contenu) + overscroll sur body uniquement */
+  body { overscroll-behavior-x: none; }
+  #app  { overflow-x: hidden; max-width: 100vw; }
 
   /* ── T6a · Inputs : empêche le zoom automatique iOS au focus ── */
   input:not([type="hidden"]), textarea, select { font-size:16px; }
