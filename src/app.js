@@ -33,6 +33,7 @@ import {
 } from './calendar.js';
 import { setupSettings, initSettingsMenu } from './settings.js';
 import { setupMobileUI } from './mobile.js';
+import { setupIdleTimeout } from './idle-timeout.js';
 /* ================================================================
    AMIVET PLANNING — Application JS (vanilla ES2022, sans dépendance)
    ================================================================ */
@@ -784,3 +785,12 @@ setTimeout(showIOSInstallTip, 4000);
 updatePwaOfflineBanner();
 
 setupMobileUI({ switchView, switchSubPage });
+
+setupIdleTimeout({
+  timeoutMs: 10 * 60 * 1000,
+  onTimeout: async () => {
+    if (!getAuthSession()) return;
+    await authSignOut();
+    renderLoginScreen();
+  },
+});
