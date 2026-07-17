@@ -504,16 +504,15 @@ function getWeekAlerts(personId, sundayISO){
   } else {
     const expected = p.timeFraction >= 1 ? 4 : 3;
     const required = Math.max(0, expected - approvedLeaveDays);
-    if(workDays < required) alerts.push(`${workDays}j / ${required}j attendus`);
+    if(workDays < required) alerts.push(`Jours travaillés : ${workDays} sur ${required} attendus cette semaine`);
   }
   // Règle 42h
   const weekH = computeWeekTotalHours(personId, mon);
-  if(!p.saturdayOnly && weekH >= WEEKLY_MAX_HOURS) alerts.push(`${formatHHMM(weekH)} ≥ 42h`);
+  if(!p.saturdayOnly && weekH >= WEEKLY_MAX_HOURS) alerts.push(`Durée de la semaine : ${formatHHMM(weekH)} — dépasse le maximum de 42h`);
   // Effectif ≠ 2 par jour ouvré + alerte même poste O/F
   const poolNC = ASV_PEOPLE.filter(q => !q.archived && !q.saturdayOnly);
   const poolAll = ASV_PEOPLE.filter(q => !q.archived);
-  const DAY_MINI = ['Lu','Ma','Me','Je','Ve','Sa'];
-  const staffIssues = [], sameShiftIssues = [];
+  const DAY_FULL = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
   for(let d = 0; d < 6; d++){
     const dt = new Date(mon); dt.setDate(dt.getDate() + d);
     const iso2 = fmtISO(dt);
@@ -521,20 +520,22 @@ function getWeekAlerts(personId, sundayISO){
     const pool = dt.getDay() === 6 ? poolAll : poolNC;
     const present = pool.filter(q => getSlotState(iso2, q.id, 'M') === 'present' || getSlotState(iso2, q.id, 'AM') === 'present');
     if(present.length !== 2){
-      const who = present.length ? present.map(q=>q.short).join('+') : '0';
-      staffIssues.push(`${DAY_MINI[d]}:${present.length}ASV${present.length>0&&present.length<2?' ('+who+')':''}`);
+      if(present.length === 0){
+        alerts.push(`${DAY_FULL[d]} : aucune ASV présente (2 requises)`);
+      } else {
+        alerts.push(`${DAY_FULL[d]} : 1 seule ASV présente (${present.map(q=>q.short).join(' et ')}), 2 requises`);
+      }
     }
     // Même poste les jours de semaine (pas samedi) — uniquement via shiftType stocké (pas TE)
     if(present.length === 2 && dt.getDay() !== 6){
       const s0 = store.DATA.slots[shiftTypeKey(iso2, present[0].id)] || null;
       const s1 = store.DATA.slots[shiftTypeKey(iso2, present[1].id)] || null;
       if(s0 && s1 && s0 === s1){
-        sameShiftIssues.push(`${DAY_MINI[d]}:2×${s0==='O'?'Ouv':'Fer'} (${present.map(q=>q.short).join('+')})`);
+        const poste = s0 === 'O' ? 'ouverture' : 'fermeture';
+        alerts.push(`${DAY_FULL[d]} : ${present.map(q=>q.short).join(' et ')} sont toutes deux en ${poste}`);
       }
     }
   }
-  if(staffIssues.length > 0) alerts.push(`Effectif: ${staffIssues.join(' ')}`);
-  if(sameShiftIssues.length > 0) alerts.push(`Même poste: ${sameShiftIssues.join(' ')}`);
   // CP annuel > 5 semaines (25 jours ouvrés = 50 demi-journées hors samedi/dimanche)
   const yr = sun.getFullYear();
   let cpHalf = 0;
@@ -549,7 +550,7 @@ function getWeekAlerts(personId, sundayISO){
     }
   }
   const cpDays = cpHalf / 2;
-  if(cpDays > 25) alerts.push(`CP ${Math.round(cpDays * 2) / 2}j > 5 sem.`);
+  if(cpDays > 25) alerts.push(`Congés payés : ${Math.round(cpDays * 2) / 2} jours posés sur l'année (maximum 25 jours / 5 semaines)`);
   return alerts;
 }
 
