@@ -26,6 +26,25 @@ function json(body: unknown, status = 200) {
   });
 }
 
+// Rate limiter en mémoire par instance Deno — 60 sauvegardes/minute par utilisateur.
+// Protège contre les appels directs répétés en contournant le debounce côté client.
+// Limité à l'instance courante (repart au cold start) — suffisant pour un effectif fermé.
+const _rateLimits = new Map<string, { count: number; windowStart: number }>();
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX       = 60;
+
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const entry = _rateLimits.get(userId);
+  if (!entry || now - entry.windowStart > RATE_WINDOW_MS) {
+    _rateLimits.set(userId, { count: 1, windowStart: now });
+    return true;
+  }
+  if (entry.count >= RATE_MAX) return false;
+  entry.count++;
+  return true;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
 
@@ -40,6 +59,8 @@ Deno.serve(async (req) => {
     if (!userRes.ok) return json({ error: 'Token invalide ou expiré.' }, 401);
     const authUser = await userRes.json();
     if (!authUser?.id) return json({ error: 'Token invalide.' }, 401);
+
+    if (!checkRateLimit(authUser.id)) return json({ error: 'Trop de requêtes — réessayez dans une minute.' }, 429);
 
     // ── 2. Profil utilisateur ────────────────────────────────────────────────
     const profRes = await fetch(
