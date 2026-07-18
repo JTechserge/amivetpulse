@@ -1394,14 +1394,23 @@ function initSettingsMenu() {
     },
     { signal }
   );
-  // Sans { signal } : menu.innerHTML recrée ce bouton à chaque init (pas de doublons).
-  // Avec { signal }, un re-appel de initSettingsMenu() (toggle-view, ASV picker…)
-  // effacerait ce listener avant d'en créer un nouveau — laissant une fenêtre sans handler.
-  document.getElementById('action-logout').addEventListener('click', () => {
-    menu.classList.remove('open');
-    try { renderLoginScreen(); } catch (e) { console.error('logout render', e); }
-    if (typeof _authSignOut === 'function') _authSignOut().catch(console.warn);
-  });
+  // Délégation sur le container : survive aux re-inits et au swap de menu.innerHTML.
+  // { signal } assure le nettoyage au prochain initSettingsMenu() sans risque de doublons.
+  menu.addEventListener(
+    'click',
+    (e) => {
+      if (e.target.closest('#action-logout')) {
+        menu.classList.remove('open');
+        try {
+          renderLoginScreen();
+        } catch (err) {
+          console.error('logout render', err);
+        }
+        if (typeof _authSignOut === 'function') _authSignOut().catch(console.warn);
+      }
+    },
+    { signal }
+  );
 }
 
 function openHelpModal() {
