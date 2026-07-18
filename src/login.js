@@ -87,9 +87,11 @@ async function _handleBiometricLogin() {
       btn.disabled = false;
       btn.style.opacity = '';
     }
-    if (err?.name === 'NotAllowedError' || err?.message === 'cancelled') return;
+    if (err?.message === 'cancelled') return; // pas de token stocké — enrôlement déjà vide
     clearBiometric();
-    renderLoginScreen("Session expirée — reconnectez-vous avec votre mot de passe puis réactivez la connexion par clé d'accès dans les paramètres.");
+    renderLoginScreen(
+      "Clé d'accès non trouvée sur cet appareil — reconnectez-vous avec votre mot de passe puis réactivez la connexion dans les paramètres."
+    );
   }
 }
 
