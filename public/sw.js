@@ -2,7 +2,7 @@
 // Incrémenter CACHE_VERSION à chaque déploiement : Safari purge le SW après 7 jours
 // sans visite, donc un iOS qui revient après une coupure doit retrouver une version
 // fraîche plutôt qu'un cache figé indéfiniment.
-const CACHE_VERSION = 'amivet-v2';
+const CACHE_VERSION = 'amivet-v3';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 

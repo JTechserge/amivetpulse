@@ -9,7 +9,7 @@ export function setupMobileUI({ switchView, switchSubPage }) {
 
   /* ── Bottom Tab Bar ── */
   const TABS = [
-    { view:'dashboard', icon:'📊', label:'Tableau de bord', shortLabel:'Tableau',  badgeId:'dash-nav-badge' },
+    { view:'dashboard', icon:'📊', label:'Tableau de bord', shortLabel:'Tableau',  badgeId:null },
     { view:'vets',      icon:'🩺', label:'Vétérinaires',    shortLabel:'Vétos',     badgeId:null },
     { view:'asv',       icon:'🐾', label:'ASV',              shortLabel:'ASV',       badgeId:null },
     { view:'annonces',  icon:'📣', label:'Annonces',         shortLabel:'Annonces',  badgeId:'annonces-nav-badge' },

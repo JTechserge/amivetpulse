@@ -1143,6 +1143,11 @@ body.role-asv [data-view="dashboard"]{display:none;}
   /* ── T1 · Cache la nav desktop, révèle la nav mobile ── */
   .main-nav { display:none; }
 
+  /* Le header sticky crée un contexte de stacking z:40. Le settings-menu (z:90 dans ce
+     contexte) était donc sous la bottom nav (z:70 global). On élève le header à z:85
+     pour que son contexte batte la bottom nav, et que le menu s'affiche correctement. */
+  .app-header { z-index:85; }
+
   /* ── Bottom tab bar ── */
   #mobile-bottom-nav {
     position:fixed; bottom:0; left:0; right:0;
@@ -1216,9 +1221,9 @@ body.role-asv [data-view="dashboard"]{display:none;}
   .settings-menu.open {
     position:fixed; top:auto; bottom:0; left:0; right:0;
     width:100%; border-radius:20px 20px 0 0;
-    max-height:80vh; overflow-y:auto;
-    padding-bottom:env(safe-area-inset-bottom);
-    z-index:90; /* au-dessus de la tab bar (z-index:70) */
+    max-height:85vh; overflow-y:auto;
+    padding-bottom:max(20px, env(safe-area-inset-bottom));
+    z-index:90; /* au-dessus de la tab bar (z-index:70) — rendu possible par app-header z:85 */
   }
 
   /* ── T4 · Calendrier mensuel ── */
@@ -1352,6 +1357,10 @@ body.role-asv [data-view="dashboard"]{display:none;}
   .cal-wg-tools { display:none; }
   .cal-wg-label-spacer { min-height:26px; }
   .cal-wg-plabel { font-size:0; }
+  /* Les lettres L/M/M/J/V dans le header sont centrées (text-align:center).
+     Les numéros de jours dans cal-wg-day-head étaient à gauche (flex-start).
+     On centre pour aligner avec les entêtes de colonnes. */
+  .cal-wg-day-head { justify-content:center; }
 }
 
 /* ============================================================
