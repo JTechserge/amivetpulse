@@ -17,12 +17,12 @@ export function renderLoginContent(html) {
 }
 
 /* ── Bouton biométrique (injecté de façon asynchrone après le rendu du form) ── */
-function _makeBiometricSVG() {
+function _makeQuickLoginSVG() {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
   svg.setAttribute('aria-hidden', 'true');
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', 'M17.8 5.2A9.9 9.9 0 0 0 12 3a9.9 9.9 0 0 0-5.8 1.9M3.5 9.5a10 10 0 0 0-.5 3 9.9 9.9 0 0 0 2.3 6.4M21 12.5a9.9 9.9 0 0 1-2.4 6.4M12 8a4 4 0 0 1 4 4 8.2 8.2 0 0 1-.4 2.5M8.5 8.9A4 4 0 0 0 8 10.9c0 2.5.8 4.8 2 6.6M12 8a4 4 0 0 0-2.2.7M14.5 19a6 6 0 0 1-5 0');
+  path.setAttribute('d', 'M13 2L3 14h9l-1 8 10-12h-9l1-8z');
   svg.appendChild(path);
   return svg;
 }
@@ -40,8 +40,8 @@ function _injectBiometricButton() {
     btn.type = 'button';
     btn.id = 'biometric-btn';
     btn.className = 'btn-biometric';
-    btn.appendChild(_makeBiometricSVG());
-    btn.appendChild(document.createTextNode(' Se connecter — ' + biometricLabel()));
+    btn.appendChild(_makeQuickLoginSVG());
+    btn.appendChild(document.createTextNode(' ' + biometricLabel()));
     btn.addEventListener('click', _handleBiometricLogin);
     footer.before(sep);
     footer.before(btn);
@@ -61,7 +61,7 @@ async function _handleBiometricLogin() {
     _initApp();
   } catch (err) {
     if (btn) { btn.disabled = false; btn.style.opacity = ''; }
-    if (err?.name === 'NotAllowedError' || err?.message === 'cancelled') return;
+    if (err?.message === 'cancelled') return;
     renderLoginScreen(err.message || 'Échec de l\'authentification biométrique.');
   }
 }

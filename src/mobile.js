@@ -14,7 +14,7 @@ export function setupMobileUI({ switchView, switchSubPage }) {
     { view:'asv',       icon:'🐾', label:'ASV',              shortLabel:'ASV',       badgeId:null },
     { view:'annonces',  icon:'📣', label:'Annonces',         shortLabel:'Annonces',  badgeId:'annonces-nav-badge' },
   ];
-  let bottomNav=null, fab=null;
+  let bottomNav=null;
 
   function createBottomNav(){
     const nav=document.createElement('nav');
@@ -62,16 +62,6 @@ export function setupMobileUI({ switchView, switchSubPage }) {
     });
   }
   function unmountBottomNav(){ if(bottomNav){ bottomNav.remove(); bottomNav=null; } }
-
-  /* ── FAB ── */
-  function mountFAB(){
-    if(fab||window.innerWidth>=768) return;
-    fab=document.createElement('button');
-    fab.id='mobile-fab'; fab.setAttribute('aria-label','Demander un congé'); fab.textContent='+';
-    fab.addEventListener('click',()=>{ switchView('asv'); switchSubPage('asv','calendar'); });
-    document.getElementById('app').appendChild(fab);
-  }
-  function unmountFAB(){ if(fab){ fab.remove(); fab=null; } }
 
   /* ── Drag-handle + swipe-to-dismiss ── */
   function addSheetHandle(el, dismissFn){
@@ -139,8 +129,8 @@ export function setupMobileUI({ switchView, switchSubPage }) {
 
   /* ── Resize ── */
   function onResize(){
-    if(window.innerWidth<768){ mountBottomNav(); mountFAB(); }
-    else { unmountBottomNav(); unmountFAB(); }
+    if(window.innerWidth<768){ mountBottomNav(); }
+    else { unmountBottomNav(); }
   }
   window.addEventListener('resize',debounce(onResize,200));
   onResize();

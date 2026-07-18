@@ -1,27 +1,25 @@
 /* ================================================================
-   Authentification biométrique — WebAuthn platform authenticator
-   (Face ID / Touch ID sur iOS, empreinte digitale sur Android)
+   Connexion rapide — token stocké en localStorage
+   WebAuthn retiré : il passait par Dashlane / iCloud Keychain,
+   rendant la UX confuse (prompt gestionnaire de mots de passe
+   au lieu d'un prompt Face ID natif).
+   Modèle de sécurité : "seul l'appareil physique connaît le token".
    ================================================================ */
 
-const KEY_CRED    = 'bio_cred';
-const KEY_REFRESH = 'bio_refresh';
-const KEY_EMAIL   = 'bio_email';
+const KEY_REFRESH  = 'bio_refresh';
+const KEY_EMAIL    = 'bio_email';
+const KEY_ENROLLED = 'bio_enrolled';
 
 export function biometricLabel() {
-  const ua = navigator.userAgent;
-  if (/iPhone|iPad/i.test(ua)) return 'Face ID / Touch ID';
-  if (/Android/i.test(ua))     return 'Empreinte digitale';
-  return 'Authentification biométrique';
+  return 'Connexion rapide';
 }
 
 export async function isBiometricAvailable() {
-  if (!window.PublicKeyCredential) return false;
-  try { return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }
-  catch { return false; }
+  return typeof Storage !== 'undefined';
 }
 
 export function isBiometricEnrolled() {
-  return !!(localStorage.getItem(KEY_CRED) && localStorage.getItem(KEY_REFRESH));
+  return !!(localStorage.getItem(KEY_ENROLLED) && localStorage.getItem(KEY_REFRESH));
 }
 
 export function getBiometricEmail() {
@@ -29,28 +27,7 @@ export function getBiometricEmail() {
 }
 
 export async function registerBiometric(email, refreshToken) {
-  const cred = await navigator.credentials.create({
-    publicKey: {
-      challenge: crypto.getRandomValues(new Uint8Array(32)),
-      rp: { name: 'Amivet PULSE', id: location.hostname },
-      user: {
-        id: crypto.getRandomValues(new Uint8Array(16)),
-        name: email,
-        displayName: email,
-      },
-      pubKeyCredParams: [
-        { type: 'public-key', alg: -7 },   // ES256
-        { type: 'public-key', alg: -257 },  // RS256
-      ],
-      authenticatorSelection: {
-        authenticatorAttachment: 'platform',
-        userVerification: 'required',
-        residentKey: 'preferred',
-      },
-      timeout: 60000,
-    },
-  });
-  localStorage.setItem(KEY_CRED, btoa(String.fromCharCode(...new Uint8Array(cred.rawId))));
+  localStorage.setItem(KEY_ENROLLED, '1');
   localStorage.setItem(KEY_REFRESH, refreshToken);
   localStorage.setItem(KEY_EMAIL, email);
 }
@@ -60,25 +37,14 @@ export function updateBiometricToken(refreshToken) {
 }
 
 export async function authenticateWithBiometric() {
-  const credId      = localStorage.getItem(KEY_CRED);
   const storedToken = localStorage.getItem(KEY_REFRESH);
-  if (!credId || !storedToken) return null;
-
-  const rawId = Uint8Array.from(atob(credId), c => c.charCodeAt(0));
-  const assertion = await navigator.credentials.get({
-    publicKey: {
-      challenge: crypto.getRandomValues(new Uint8Array(32)),
-      rpId: location.hostname,
-      allowCredentials: [{ type: 'public-key', id: rawId.buffer, transports: ['internal'] }],
-      userVerification: 'required',
-      timeout: 60000,
-    },
-  });
-  return assertion ? storedToken : null;
+  if (!storedToken || !localStorage.getItem(KEY_ENROLLED)) return null;
+  return storedToken;
 }
 
 export function clearBiometric() {
-  localStorage.removeItem(KEY_CRED);
+  localStorage.removeItem(KEY_ENROLLED);
   localStorage.removeItem(KEY_REFRESH);
   localStorage.removeItem(KEY_EMAIL);
+  localStorage.removeItem('bio_cred'); // ancienne clé WebAuthn
 }

@@ -991,7 +991,7 @@ function buildSettingsMenuHtml(){
     <hr>
     <div class="settings-section-label">Mon compte${userName ? ` — ${escapeHTML(userName)}` : ''}</div>
     <button id="action-change-password" role="menuitem">🔑 Changer mon mot de passe</button>
-    <button id="action-biometric" role="menuitem">🔐 ${isBiometricEnrolled() ? `Désactiver ${biometricLabel()}` : `Activer ${biometricLabel()}`}</button>
+    <button id="action-biometric" role="menuitem">⚡ ${isBiometricEnrolled() ? 'Désactiver la connexion rapide' : 'Activer la connexion rapide'}</button>
     <button id="action-logout" class="danger" role="menuitem">🚪 Se déconnecter</button>
   `;
 }
@@ -1093,20 +1093,14 @@ function initSettingsMenu(){
     const btn = document.getElementById('action-biometric');
     if (isBiometricEnrolled()) {
       clearBiometric();
-      showToast(`${biometricLabel()} désactivé`, '🔐');
-      if (btn) btn.textContent = `🔐 Activer ${biometricLabel()}`;
+      showToast('Connexion rapide désactivée', '⚡');
+      if (btn) btn.textContent = '⚡ Activer la connexion rapide';
     } else {
-      const avail = await isBiometricAvailable();
-      if (!avail) { showToast('Biométrie non disponible sur cet appareil', '⚠️'); return; }
       const session = getAuthSession();
       if (!session?.refresh_token) { showToast('Session expirée, reconnectez-vous d\'abord', '⚠️'); return; }
-      try {
-        await registerBiometric(store.currentUser?.email || '', session.refresh_token);
-        showToast(`${biometricLabel()} activé`, '🔐');
-        if (btn) btn.textContent = `🔐 Désactiver ${biometricLabel()}`;
-      } catch (e) {
-        if (e?.name !== 'NotAllowedError') showToast('Impossible d\'activer la biométrie', '⚠️');
-      }
+      await registerBiometric(store.currentUser?.email || '', session.refresh_token);
+      showToast('Connexion rapide activée — bouton visible à la prochaine connexion', '⚡');
+      if (btn) btn.textContent = '⚡ Désactiver la connexion rapide';
     }
   });
   document.getElementById('action-logout').addEventListener('click', async ()=>{
