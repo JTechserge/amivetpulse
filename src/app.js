@@ -9,6 +9,7 @@ import {
   getWeekMondayDate,
 } from './utils.js';
 import { getAuthSession, saveAuthSession, supabaseHeaders } from './auth.js';
+import { updateBiometricToken } from './biometric-auth.js';
 import { loadASVRoster } from './state.js';
 import { showToast, showSavedToast, openConfirmModal, loadPersonColors } from './ui.js';
 import { pushDataToSupabase, syncFromSupabase } from './api.js';
@@ -183,6 +184,7 @@ async function authRefreshSession(){
   if(!res.ok){ clearAuthSession(); return null; }
   const session = await res.json();
   saveAuthSession(session);
+  updateBiometricToken(session.refresh_token);
   return session;
 }
 async function loadCurrentUser(){
@@ -262,6 +264,7 @@ function loadData(){
 function saveData(showToast = true){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
   updateDashboardNavBadge();
+  _hasDirtyLocalData = true;
   scheduleSupabasePush();
   if(showToast) showSavedToast();
 }
@@ -269,11 +272,19 @@ function saveData(showToast = true){
 // --- Synchronisation Supabase : la base partagée fait foi entre tous les appareils, le
 // localStorage ne sert que de cache instantané pour le premier affichage et le hors-ligne.
 let _supabasePushTimer = null;
+let _hasDirtyLocalData = false; // true tant que localStorage est en avance sur Supabase
 function scheduleSupabasePush(){
   clearTimeout(_supabasePushTimer);
   // Attend une courte pause après la dernière modification (ex. fin d'un glisser-peindre)
   // pour grouper les écritures plutôt que d'envoyer une requête à chaque case cochée.
-  _supabasePushTimer = setTimeout(()=> pushDataToSupabase(store.DATA.slots), 900);
+  _supabasePushTimer = setTimeout(async ()=>{
+    try {
+      await pushDataToSupabase(store.DATA.slots);
+      _hasDirtyLocalData = false;
+    } catch(e) {
+      console.warn('Synchronisation Supabase impossible, données conservées en local.', e);
+    }
+  }, 900);
 }
 // Signatures électroniques mensuelles (feuille de présence ASV) : un cache local simple
 // (clé "personId|year|month") rechargé au démarrage et après chaque signature/annulation —
@@ -709,14 +720,16 @@ document.addEventListener('DOMContentLoaded', init);
    ================================================================ */
 
 function refreshData(){
-  syncFromSupabase().then(remoteSlots=>{
-    if(remoteSlots !== null){
-      store.DATA = { version:2, slots: remoteSlots };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
-      renderCurrentView();
-      updateDashboardNavBadge();
-    }
-  });
+  if (!_hasDirtyLocalData) {
+    syncFromSupabase().then(remoteSlots=>{
+      if(remoteSlots !== null){
+        store.DATA = { version:2, slots: remoteSlots };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
+        renderCurrentView();
+        updateDashboardNavBadge();
+      }
+    });
+  }
   loadSignatures();
   loadInterviews();
   loadAnnouncements();

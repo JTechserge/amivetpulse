@@ -12,13 +12,17 @@ import { supabaseHeaders } from './auth.js';
 
 // Envoie les slots vers l'Edge Function save-planning (vérification des droits côté serveur).
 // La RLS de planning_data bloque les PATCH directs authenticated depuis la migration 20260714.
-// Fire-and-forget : les erreurs ne bloquent pas l'UI.
-export function pushDataToSupabase(slots){
-  fetch(`${SUPABASE_FUNCTIONS_URL}save-planning`, {
+// Lève une exception si l'Edge Function répond avec un statut non-2xx ou en cas d'erreur réseau.
+export async function pushDataToSupabase(slots){
+  const res = await fetch(`${SUPABASE_FUNCTIONS_URL}save-planning`, {
     method: 'POST',
     headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ slots }),
-  }).catch(e=> console.warn('Synchronisation Supabase impossible (hors ligne ?), données conservées en local.', e));
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
 }
 
 // Retourne les slots distants, ou null en cas d'erreur réseau.
