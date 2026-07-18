@@ -1139,7 +1139,10 @@ body.role-asv [data-view="dashboard"]{display:none;}
   }
   .mb-tab .mb-icon { font-size:21px; line-height:1; }
   .mb-tab .mb-label { font-size:10px; font-weight:600; line-height:1; }
-  .mb-tab .mb-badge { display:inline-block; }
+  .mb-tab .mb-badge {
+    position:absolute; top:4px; left:calc(50% + 7px);
+    pointer-events:none; line-height:1;
+  }
   .mb-tab.active { color:var(--color-primary); }
   .mb-tab::before {
     content:''; position:absolute; top:0;
@@ -1193,6 +1196,7 @@ body.role-asv [data-view="dashboard"]{display:none;}
     width:100%; border-radius:20px 20px 0 0;
     max-height:80vh; overflow-y:auto;
     padding-bottom:env(safe-area-inset-bottom);
+    z-index:90; /* au-dessus de la tab bar (z-index:70) */
   }
 
   /* ── T4 · Calendrier mensuel ── */
@@ -1250,12 +1254,12 @@ body.role-asv [data-view="dashboard"]{display:none;}
     bottom:calc(56px + env(safe-area-inset-bottom));
   }
 
-  /* ── T7a · Dashboard sub-nav : scrollable horizontal + snap ── */
-  .sub-nav-row .sub-nav {
+  /* ── T7a · Tous les sub-nav : scrollable horizontal + snap ── */
+  .sub-nav {
     overflow-x:auto; overflow-y:hidden; width:100%;
     -webkit-overflow-scrolling:touch; scroll-snap-type:x mandatory;
-    -webkit-mask-image:linear-gradient(to right, black 92%, transparent 100%);
-    mask-image:linear-gradient(to right, black 92%, transparent 100%);
+    -webkit-mask-image:linear-gradient(to right, black 88%, transparent 100%);
+    mask-image:linear-gradient(to right, black 88%, transparent 100%);
   }
   .sub-tab { scroll-snap-align:start; flex-shrink:0; }
 
