@@ -16,13 +16,6 @@ import { supabaseHeaders, getAuthSession, authUpdatePassword } from './auth.js';
 import { reindexPresentShades, saveASVRoster, savePersonColors } from './state.js';
 import { pushDataToSupabase } from './api.js';
 import { openNotificationSettingsModal } from './pwa.js';
-import {
-  isBiometricAvailable,
-  isBiometricEnrolled,
-  registerBiometric,
-  clearBiometric,
-  biometricLabel,
-} from './biometric-auth.js';
 import { renderLoginScreen } from './login.js';
 import { renderCalendarView } from './calendar.js';
 
@@ -1196,7 +1189,6 @@ function buildSettingsMenuHtml() {
     <hr>
     <div class="settings-section-label">Mon compte${userName ? ` — ${escapeHTML(userName)}` : ''}</div>
     <button id="action-change-password" role="menuitem">🔑 Changer mon mot de passe</button>
-    <button id="action-biometric" role="menuitem">🔐 ${isBiometricEnrolled() ? "Désactiver la connexion par clé d'accès" : "Activer la connexion par clé d'accès"}</button>
     <button id="action-logout" class="danger" role="menuitem">🚪 Se déconnecter</button>
   `;
 }
@@ -1362,45 +1354,6 @@ function initSettingsMenu() {
     () => {
       menu.classList.remove('open');
       openChangeMyPasswordModal();
-    },
-    { signal }
-  );
-  document.getElementById('action-biometric').addEventListener(
-    'click',
-    async () => {
-      menu.classList.remove('open');
-      const btn = document.getElementById('action-biometric');
-      if (isBiometricEnrolled()) {
-        clearBiometric();
-        showToast("Connexion par clé d'accès désactivée", '🔐');
-        if (btn) btn.textContent = "🔐 Activer la connexion par clé d'accès";
-      } else {
-        const session = getAuthSession();
-        if (!session?.refresh_token) {
-          showToast("Session expirée, reconnectez-vous d'abord", '⚠️');
-          return;
-        }
-        if (btn) {
-          btn.disabled = true;
-          btn.textContent = '🔐 Activation en cours…';
-        }
-        try {
-          await registerBiometric(store.currentUser?.email || '', session.refresh_token);
-          showToast("Connexion par clé d'accès activée — bouton disponible à la prochaine connexion", '🔐');
-          if (btn) {
-            btn.disabled = false;
-            btn.textContent = "🔐 Désactiver la connexion par clé d'accès";
-          }
-        } catch (err) {
-          if (err?.name !== 'NotAllowedError') {
-            showToast('Activation impossible : ' + (err?.message || 'erreur inconnue'), '⚠️');
-          }
-          if (btn) {
-            btn.disabled = false;
-            btn.textContent = "🔐 Activer la connexion par clé d'accès";
-          }
-        }
-      }
     },
     { signal }
   );

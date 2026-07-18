@@ -1,13 +1,5 @@
 import { escapeHTML } from './utils.js';
-import { authSignIn, authUpdatePassword, authSendPasswordReset, authRefreshSession } from './auth.js';
-import {
-  isBiometricAvailable,
-  isBiometricEnrolled,
-  authenticateWithBiometric,
-  updateBiometricToken,
-  clearBiometric,
-  biometricLabel,
-} from './biometric-auth.js';
+import { authSignIn, authUpdatePassword, authSendPasswordReset } from './auth.js';
 
 let _loadCurrentUser, _initApp;
 export function setupLogin({ loadCurrentUser, initApp }) {
@@ -18,81 +10,6 @@ export function setupLogin({ loadCurrentUser, initApp }) {
 export function renderLoginContent(html) {
   // eslint-disable-next-line no-unsanitized/property
   document.getElementById('login-content').innerHTML = html;
-}
-
-/* ── Bouton biométrique (injecté de façon asynchrone après le rendu du form) ── */
-function _makeBiometricSVG() {
-  const ns = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '2');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('aria-hidden', 'true');
-  // Icône Face ID : 4 coins + yeux + sourire
-  [
-    'M7 3H5a2 2 0 0 0-2 2v2',
-    'M17 3h2a2 2 0 0 1 2 2v2',
-    'M7 21H5a2 2 0 0 1-2-2v-2',
-    'M17 21h2a2 2 0 0 0 2-2v-2',
-    'M9 10h.01',
-    'M15 10h.01',
-    'M9 15a3.5 3.5 0 0 0 6 0',
-  ].forEach((d) => {
-    const p = document.createElementNS(ns, 'path');
-    p.setAttribute('d', d);
-    svg.appendChild(p);
-  });
-  return svg;
-}
-
-function _injectBiometricButton() {
-  if (!isBiometricEnrolled()) return;
-  isBiometricAvailable().then((avail) => {
-    if (!avail) return;
-    const footer = document.querySelector('#login-content .login-footer');
-    if (!footer) return;
-    const sep = document.createElement('div');
-    sep.className = 'biometric-separator';
-    sep.appendChild(document.createTextNode('ou'));
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = 'biometric-btn';
-    btn.className = 'btn-biometric';
-    btn.appendChild(_makeBiometricSVG());
-    btn.appendChild(document.createTextNode(' ' + biometricLabel()));
-    btn.addEventListener('click', _handleBiometricLogin);
-    footer.before(sep);
-    footer.before(btn);
-  });
-}
-
-async function _handleBiometricLogin() {
-  const btn = document.getElementById('biometric-btn');
-  if (btn) {
-    btn.disabled = true;
-    btn.style.opacity = '0.6';
-  }
-  try {
-    const storedToken = await authenticateWithBiometric();
-    if (!storedToken) throw new Error('cancelled');
-    const session = await authRefreshSession(storedToken);
-    updateBiometricToken(session.refresh_token);
-    const user = await _loadCurrentUser();
-    if (!user) throw new Error('Profil introuvable — contactez un administrateur.');
-    _initApp();
-  } catch (err) {
-    if (btn) {
-      btn.disabled = false;
-      btn.style.opacity = '';
-    }
-    if (err?.message === 'cancelled') return; // pas de token stocké — enrôlement déjà vide
-    clearBiometric();
-    renderLoginScreen(
-      "Clé d'accès non trouvée sur cet appareil — reconnectez-vous avec votre mot de passe puis réactivez la connexion dans les paramètres."
-    );
-  }
 }
 
 export function renderLoginScreen(errorMsg = '') {
@@ -116,8 +33,7 @@ export function renderLoginScreen(errorMsg = '') {
     btn.disabled = true;
     btn.textContent = 'Connexion…';
     try {
-      const session = await authSignIn(email, pwd);
-      updateBiometricToken(session.refresh_token);
+      await authSignIn(email, pwd);
       const user = await _loadCurrentUser();
       if (!user) throw new Error('Profil introuvable — contactez un administrateur.');
       _initApp();
@@ -126,7 +42,6 @@ export function renderLoginScreen(errorMsg = '') {
     }
   };
   document.getElementById('forgot-btn').onclick = renderForgotPasswordScreen;
-  _injectBiometricButton();
 }
 
 export function renderForgotPasswordScreen() {

@@ -1,15 +1,19 @@
 import {
-  PEOPLE, ASV_PEOPLE,
-  SLOTS, STORAGE_KEY, VIEW_STATE_KEY, AUTH_SESSION_KEY,
-  SUPABASE_URL, SUPABASE_AUTH_URL, SUPABASE_ANON_KEY,
-  getCurrentYear, setCurrentYear, personOf,
+  PEOPLE,
+  ASV_PEOPLE,
+  SLOTS,
+  STORAGE_KEY,
+  VIEW_STATE_KEY,
+  AUTH_SESSION_KEY,
+  SUPABASE_URL,
+  SUPABASE_AUTH_URL,
+  SUPABASE_ANON_KEY,
+  getCurrentYear,
+  setCurrentYear,
+  personOf,
 } from './config.js';
-import {
-  escapeHTML, fmtISO, daysInMonth, isoWeekday, isSunday, holidayName,
-  getWeekMondayDate,
-} from './utils.js';
+import { escapeHTML, fmtISO, daysInMonth, isoWeekday, isSunday, holidayName, getWeekMondayDate } from './utils.js';
 import { getAuthSession, saveAuthSession, supabaseHeaders } from './auth.js';
-import { updateBiometricToken } from './biometric-auth.js';
 import { loadASVRoster } from './state.js';
 import { showToast, showSavedToast, openConfirmModal, loadPersonColors } from './ui.js';
 import { pushDataToSupabase, syncFromSupabase } from './api.js';
@@ -18,19 +22,18 @@ import { setupLogin, renderLoginScreen, renderSetPasswordScreen } from './login.
 import { initServiceWorker, showIOSInstallTip, updatePwaOfflineBanner } from './pwa.js';
 import { loadAnnouncements, renderAnnounces } from './announcements.js';
 import { setupSignatures, loadSignatures, openSignConfirmModal } from './signatures.js';
-import {
-  isASVPerson, setSlotState, setSlotLabel,
-} from './slots.js';
+import { isASVPerson, setSlotState, setSlotLabel } from './slots.js';
 import { setupAnnualView, renderAnnualViewForGroup } from './annual-view.js';
+import { setupDashboard, renderDashboard, setDashSubTab, countPendingLeaveRequests } from './dashboard.js';
+import { setupWeekView, renderWeekViewASV } from './week-view.js';
 import {
-  setupDashboard, renderDashboard, setDashSubTab, countPendingLeaveRequests,
-} from './dashboard.js';
-import {
-  setupWeekView, renderWeekViewASV,
-} from './week-view.js';
-import {
-  setupCalendar, renderCalendarView, openDaySidebar, buildLegendColors,
-  initCalendarInteractions, changeMonth, goToToday,
+  setupCalendar,
+  renderCalendarView,
+  openDaySidebar,
+  buildLegendColors,
+  initCalendarInteractions,
+  changeMonth,
+  goToToday,
 } from './calendar.js';
 import { setupSettings, initSettingsMenu } from './settings.js';
 import { setupMobileUI } from './mobile.js';
@@ -54,18 +57,53 @@ const today = new Date();
 // chaque 1er janvier sans jamais avoir besoin de retoucher le code.
 // ----------------------------------------------------------------
 
-
 // Cal state + store.CAL_VIEWS → store.js (see initCalState() below)
-function buildCalViews(){
+function buildCalViews() {
   const cy = getCurrentYear();
   return {
-    'vets-current':  { year:cy,   people:PEOPLE,     navState:store.calStateCurrent,     todayNav:true,  forecast:false, label:'Vétérinaires', containerId:'vets-sub-calendar', printable:false },
-    'vets-forecast': { year:cy+1, people:PEOPLE,     navState:store.calStateForecast,    todayNav:false, forecast:true,  label:'Vétérinaires', containerId:'vets-sub-forecast', printable:false },
-    'asv-current':   { year:cy,   people:ASV_PEOPLE, navState:store.calStateAsvCurrent,  todayNav:true,  forecast:false, label:'ASV',          containerId:'asv-sub-calendar',  printable:true },
-    'asv-forecast':  { year:cy+1, people:ASV_PEOPLE, navState:store.calStateAsvForecast, todayNav:false, forecast:true,  label:'ASV',          containerId:'asv-sub-forecast',  printable:true },
+    'vets-current': {
+      year: cy,
+      people: PEOPLE,
+      navState: store.calStateCurrent,
+      todayNav: true,
+      forecast: false,
+      label: 'Vétérinaires',
+      containerId: 'vets-sub-calendar',
+      printable: false,
+    },
+    'vets-forecast': {
+      year: cy + 1,
+      people: PEOPLE,
+      navState: store.calStateForecast,
+      todayNav: false,
+      forecast: true,
+      label: 'Vétérinaires',
+      containerId: 'vets-sub-forecast',
+      printable: false,
+    },
+    'asv-current': {
+      year: cy,
+      people: ASV_PEOPLE,
+      navState: store.calStateAsvCurrent,
+      todayNav: true,
+      forecast: false,
+      label: 'ASV',
+      containerId: 'asv-sub-calendar',
+      printable: true,
+    },
+    'asv-forecast': {
+      year: cy + 1,
+      people: ASV_PEOPLE,
+      navState: store.calStateAsvForecast,
+      todayNav: false,
+      forecast: true,
+      label: 'ASV',
+      containerId: 'asv-sub-forecast',
+      printable: true,
+    },
   };
 }
-function initCalState(){
+function initCalState() {
   const cy = getCurrentYear();
   const m = today.getFullYear() === cy ? today.getMonth() : 0;
   store.calStateCurrent.month = m;
@@ -74,8 +112,22 @@ function initCalState(){
   store.dashState.year = cy;
 }
 const GROUP_VIEWS = {
-  vets: { label:'Vétérinaires', calendarViewKey:'vets-current', forecastViewKey:'vets-forecast', calendarContainer:'vets-sub-calendar', annualContainer:'vets-sub-annual', forecastContainer:'vets-sub-forecast' },
-  asv:  { label:'ASV',          calendarViewKey:'asv-current',  forecastViewKey:'asv-forecast',  calendarContainer:'asv-sub-calendar',  annualContainer:'asv-sub-annual',  forecastContainer:'asv-sub-forecast' },
+  vets: {
+    label: 'Vétérinaires',
+    calendarViewKey: 'vets-current',
+    forecastViewKey: 'vets-forecast',
+    calendarContainer: 'vets-sub-calendar',
+    annualContainer: 'vets-sub-annual',
+    forecastContainer: 'vets-sub-forecast',
+  },
+  asv: {
+    label: 'ASV',
+    calendarViewKey: 'asv-current',
+    forecastViewKey: 'asv-forecast',
+    calendarContainer: 'asv-sub-calendar',
+    annualContainer: 'asv-sub-annual',
+    forecastContainer: 'asv-sub-forecast',
+  },
 };
 
 initCalState();
@@ -88,8 +140,10 @@ initCalState();
 // ----------------------------------------------------------------
 // Bascule annuelle automatique (current -> current+1, forecast -> forecast+1)
 // ----------------------------------------------------------------
-function isYearRolloverDue(){ return today.getFullYear() > getCurrentYear(); }
-function performYearRollover(){
+function isYearRolloverDue() {
+  return today.getFullYear() > getCurrentYear();
+}
+function performYearRollover() {
   const fromYear = getCurrentYear();
   const toYear = fromYear + 1;
   setCurrentYear(toYear);
@@ -102,16 +156,17 @@ function performYearRollover(){
   renderCurrentView();
   showToast(`Calendrier basculé sur ${toYear}`, '🔄');
 }
-function renderRolloverBanner(){
-  if(!isYearRolloverDue()) return;
-  if(document.getElementById('rollover-banner')) return;
-  const fromYear = getCurrentYear(), toYear = fromYear + 1;
+function renderRolloverBanner() {
+  if (!isYearRolloverDue()) return;
+  if (document.getElementById('rollover-banner')) return;
+  const fromYear = getCurrentYear(),
+    toYear = fromYear + 1;
   const bar = document.createElement('div');
   bar.id = 'rollover-banner';
   bar.className = 'rollover-banner';
   // eslint-disable-next-line no-unsanitized/property
   bar.innerHTML = `
-    <span>📅 Nous sommes en ${today.getFullYear()} — le calendrier ${fromYear} peut basculer sur ${toYear} (le prévisionnel ${toYear} devient le calendrier courant, ${toYear+1} est proposé en prévisionnel).</span>
+    <span>📅 Nous sommes en ${today.getFullYear()} — le calendrier ${fromYear} peut basculer sur ${toYear} (le prévisionnel ${toYear} devient le calendrier courant, ${toYear + 1} est proposé en prévisionnel).</span>
     <div class="rollover-actions">
       <button class="btn btn-sm btn-primary" id="rollover-confirm">Basculer maintenant</button>
       <button class="btn-icon" id="rollover-dismiss" aria-label="Plus tard">✕</button>
@@ -119,27 +174,28 @@ function renderRolloverBanner(){
   `;
   document.getElementById('app-main').prepend(bar);
   bar.querySelector('#rollover-confirm').onclick = performYearRollover;
-  bar.querySelector('#rollover-dismiss').onclick = ()=> bar.remove();
+  bar.querySelector('#rollover-dismiss').onclick = () => bar.remove();
 }
 
 const UNDO_MAX = 30;
-function snapshotBeforeChange(){
+function snapshotBeforeChange() {
   store.UNDO_STACK.push(JSON.stringify(store.DATA.slots));
-  if(store.UNDO_STACK.length > UNDO_MAX) store.UNDO_STACK.shift();
+  if (store.UNDO_STACK.length > UNDO_MAX) store.UNDO_STACK.shift();
   updateUndoButtons();
 }
-function undoLastAction(){
-  if(store.UNDO_STACK.length === 0) return;
+function undoLastAction() {
+  if (store.UNDO_STACK.length === 0) return;
   store.DATA.slots = JSON.parse(store.UNDO_STACK.pop());
   saveData(false);
   renderCurrentView();
   updateUndoButtons();
   showToast('Dernière action annulée', '↩️');
 }
-function updateUndoButtons(){
-  document.querySelectorAll('.undo-btn').forEach(btn=>{ btn.disabled = store.UNDO_STACK.length === 0; });
+function updateUndoButtons() {
+  document.querySelectorAll('.undo-btn').forEach((btn) => {
+    btn.disabled = store.UNDO_STACK.length === 0;
+  });
 }
-
 
 /* ----------------------------------------------------------------
    4. PERSISTANCE (localStorage + synchronisation Supabase partagée)
@@ -153,67 +209,78 @@ function updateUndoButtons(){
 // État global — Annonces
 // ----------------------------------------------------------------
 
-function clearAuthSession(){ sessionStorage.removeItem(AUTH_SESSION_KEY); store.currentUser = null; }
+function clearAuthSession() {
+  sessionStorage.removeItem(AUTH_SESSION_KEY);
+  store.currentUser = null;
+}
 
 // ----------------------------------------------------------------
 // Fonctions d'authentification (Supabase Auth REST)
 // ----------------------------------------------------------------
-async function authSignOut(){
+async function authSignOut() {
   const s = getAuthSession();
-  if(s?.access_token){
+  if (s?.access_token) {
     await fetch(`${SUPABASE_AUTH_URL}logout`, {
-      method:'POST',
-      headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${s.access_token}` },
-    }).catch(()=>{});
+      method: 'POST',
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${s.access_token}` },
+    }).catch(() => {});
   }
   clearAuthSession();
   // Purger le DYNAMIC_CACHE pour ne pas laisser les données RH lisibles
   // depuis le cache SW sur un poste partagé après déconnexion.
-  if(navigator.serviceWorker?.controller){
-    navigator.serviceWorker.controller.postMessage({ type:'PURGE_DYNAMIC_CACHE' });
+  if (navigator.serviceWorker?.controller) {
+    navigator.serviceWorker.controller.postMessage({ type: 'PURGE_DYNAMIC_CACHE' });
   }
 }
-async function authRefreshSession(){
+async function authRefreshSession() {
   const s = getAuthSession();
-  if(!s?.refresh_token){ clearAuthSession(); return null; }
+  if (!s?.refresh_token) {
+    clearAuthSession();
+    return null;
+  }
   const res = await fetch(`${SUPABASE_AUTH_URL}token?grant_type=refresh_token`, {
-    method:'POST',
-    headers:{ apikey:SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
-    body:JSON.stringify({ refresh_token:s.refresh_token }),
+    method: 'POST',
+    headers: { apikey: SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: s.refresh_token }),
   });
-  if(!res.ok){ clearAuthSession(); return null; }
+  if (!res.ok) {
+    clearAuthSession();
+    return null;
+  }
   const session = await res.json();
   saveAuthSession(session);
-  updateBiometricToken(session.refresh_token);
   return session;
 }
-async function loadCurrentUser(){
+async function loadCurrentUser() {
   const s = getAuthSession();
-  if(!s?.access_token) return null;
+  if (!s?.access_token) return null;
   // Vérifier le token Supabase Auth
   let authRes = await fetch(`${SUPABASE_AUTH_URL}user`, {
-    headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${s.access_token}` },
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${s.access_token}` },
   });
-  if(authRes.status === 401){
+  if (authRes.status === 401) {
     const refreshed = await authRefreshSession();
-    if(!refreshed) return null;
+    if (!refreshed) return null;
     authRes = await fetch(`${SUPABASE_AUTH_URL}user`, {
-      headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${refreshed.access_token}` },
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${refreshed.access_token}` },
     });
   }
-  if(!authRes.ok) return null;
+  if (!authRes.ok) return null;
   const authUser = await authRes.json();
   // Charger le profil depuis user_profiles
   const profRes = await fetch(`${SUPABASE_URL}user_profiles?id=eq.${authUser.id}&select=*`, {
     headers: supabaseHeaders(),
   });
-  if(!profRes.ok) return null;
+  if (!profRes.ok) return null;
   const profiles = await profRes.json();
-  if(!profiles.length) return null;
+  if (!profiles.length) return null;
   const p = profiles[0];
   store.currentUser = {
-    id: authUser.id, email: authUser.email,
-    role: p.role, person_id: p.person_id, display_name: p.display_name,
+    id: authUser.id,
+    email: authUser.email,
+    role: p.role,
+    person_id: p.person_id,
+    display_name: p.display_name,
     can_edit_vet_calendar: p.can_edit_vet_calendar,
     can_edit_all_asv: p.can_edit_all_asv,
   };
@@ -223,65 +290,75 @@ async function loadCurrentUser(){
 // ----------------------------------------------------------------
 // Helpers de permissions
 // ----------------------------------------------------------------
-function effectiveRole(){
-  if(!store.currentUser) return null;
-  if(store.currentUser.role === 'admin') return store.adminViewMode === 'asv' ? 'asv' : 'vet';
+function effectiveRole() {
+  if (!store.currentUser) return null;
+  if (store.currentUser.role === 'admin') return store.adminViewMode === 'asv' ? 'asv' : 'vet';
   return store.currentUser.role;
 }
-function canAccessDashboard(){ const r = effectiveRole(); return r === 'vet' || r === 'admin'; }
-function canAccessSettings(){ return store.currentUser?.role === 'admin' || store.currentUser?.role === 'vet'; }
-function canEditSlot(personId){
-  if(!store.currentUser) return false;
-  const asvPerson = ASV_PEOPLE.find(p=>p.id===personId);
-  if(asvPerson?.archived) return false;
+function canAccessDashboard() {
+  const r = effectiveRole();
+  return r === 'vet' || r === 'admin';
+}
+function canAccessSettings() {
+  return store.currentUser?.role === 'admin' || store.currentUser?.role === 'vet';
+}
+function canEditSlot(personId) {
+  if (!store.currentUser) return false;
+  const asvPerson = ASV_PEOPLE.find((p) => p.id === personId);
+  if (asvPerson?.archived) return false;
   const role = effectiveRole();
-  if(role === 'vet') return true;
-  if(role === 'asv'){
+  if (role === 'vet') return true;
+  if (role === 'asv') {
     const isImpersonating = store.currentUser.role === 'admin' && store.adminViewMode === 'asv';
     const myId = isImpersonating ? store.adminImpersonatedPersonId : store.currentUser.person_id;
-    if(isASVPerson(personId)){
+    if (isASVPerson(personId)) {
       // En impersonation : strictement la ligne de la personne choisie, comme un vrai ASV
-      if(isImpersonating) return personId === myId;
+      if (isImpersonating) return personId === myId;
       return personId === myId || store.currentUser.can_edit_all_asv === true;
     }
     // Calendrier vétérinaires : jamais modifiable en impersonation
-    if(isImpersonating) return false;
+    if (isImpersonating) return false;
     return store.currentUser.can_edit_vet_calendar === true;
   }
   return false;
 }
 
-function loadData(){
-  try{
+function loadData() {
+  try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if(raw){
+    if (raw) {
       const parsed = JSON.parse(raw);
-      if(parsed && parsed.slots) { store.DATA = parsed; return; }
+      if (parsed && parsed.slots) {
+        store.DATA = parsed;
+        return;
+      }
     }
-  }catch(e){ console.warn('Lecture localStorage impossible, ré-initialisation.', e); }
-  store.DATA = { version:2, slots:{} };
+  } catch (e) {
+    console.warn('Lecture localStorage impossible, ré-initialisation.', e);
+  }
+  store.DATA = { version: 2, slots: {} };
 }
-function saveData(showToast = true){
+function saveData(showToast = true) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
   updateDashboardNavBadge();
   _hasDirtyLocalData = true;
   scheduleSupabasePush();
-  if(showToast) showSavedToast();
+  if (showToast) showSavedToast();
 }
 
 // --- Synchronisation Supabase : la base partagée fait foi entre tous les appareils, le
 // localStorage ne sert que de cache instantané pour le premier affichage et le hors-ligne.
 let _supabasePushTimer = null;
 let _hasDirtyLocalData = false; // true tant que localStorage est en avance sur Supabase
-function scheduleSupabasePush(){
+function scheduleSupabasePush() {
   clearTimeout(_supabasePushTimer);
   // Attend une courte pause après la dernière modification (ex. fin d'un glisser-peindre)
   // pour grouper les écritures plutôt que d'envoyer une requête à chaque case cochée.
-  _supabasePushTimer = setTimeout(async ()=>{
+  _supabasePushTimer = setTimeout(async () => {
     try {
       await pushDataToSupabase(store.DATA.slots);
       _hasDirtyLocalData = false;
-    } catch(e) {
+    } catch (e) {
       console.warn('Synchronisation Supabase impossible, données conservées en local.', e);
     }
   }, 900);
@@ -292,26 +369,28 @@ function scheduleSupabasePush(){
 // rares et ponctuelles (quelques-unes par mois, pas par clic).
 /* signatures.js — signatureKey, isMonthSigned, loadSignatures, signMonth, revokeSignature */
 
-async function loadInterviews(){
-  try{
+async function loadInterviews() {
+  try {
     const res = await fetch(`${SUPABASE_URL}annual_interviews?select=*`, { headers: supabaseHeaders() });
-    if(!res.ok) return;
+    if (!res.ok) return;
     store.INTERVIEWS = await res.json();
-  }catch(e){ console.warn('Entretiens inaccessibles.', e); }
+  } catch (e) {
+    console.warn('Entretiens inaccessibles.', e);
+  }
 }
 
 // Notifie le nombre de demandes de congé ASV en attente directement sur l'onglet "Tableau
 // de bord", visible depuis n'importe quelle page de l'app (pas seulement quand on y est).
-function updateDashboardNavBadge(){
+function updateDashboardNavBadge() {
   const el = document.getElementById('dash-nav-badge');
   const n = countPendingLeaveRequests();
-  if(el){
+  if (el) {
     el.textContent = n > 0 ? String(n) : '';
     el.className = n > 0 ? 'nav-badge' : '';
   }
-  if('setAppBadge' in navigator){
-    if(n > 0) navigator.setAppBadge(n).catch(()=>{});
-    else navigator.clearAppBadge().catch(()=>{});
+  if ('setAppBadge' in navigator) {
+    if (n > 0) navigator.setAppBadge(n).catch(() => {});
+    else navigator.clearAppBadge().catch(() => {});
   }
 }
 
@@ -324,13 +403,13 @@ function updateDashboardNavBadge(){
    5. DONNÉES DE DÉMONSTRATION
    ---------------------------------------------------------------- */
 // Marque une plage de jours (bornes incluses) comme absente avec un motif, pour une personne donnée
-function seedAbsenceRange(personId, fromISO, toISO, label){
-  let d = new Date(fromISO+'T00:00:00');
-  const end = new Date(toISO+'T00:00:00');
-  while(d <= end){
-    if(!isSunday(d)){
+function seedAbsenceRange(personId, fromISO, toISO, label) {
+  let d = new Date(fromISO + 'T00:00:00');
+  const end = new Date(toISO + 'T00:00:00');
+  while (d <= end) {
+    if (!isSunday(d)) {
       const iso = fmtISO(d);
-      SLOTS.forEach(slot=>{
+      SLOTS.forEach((slot) => {
         setSlotState(iso, personId, slot, 'absent');
         setSlotLabel(iso, personId, slot, label);
       });
@@ -339,21 +418,21 @@ function seedAbsenceRange(personId, fromISO, toISO, label){
   }
 }
 
-function _seedDemoData(){
+function _seedDemoData() {
   // --- 2026 : données réelles (issues du planning Excel de la clinique) ---
   // Janvier à août : présence par défaut Lu-Sa pour les deux associés (les jours fériés
   // restent vides, comme dans le fichier source, qui ne contient pas non plus de données
   // au-delà du mois d'août 2026 — sept./oct./nov./déc. ne sont donc pas pré-remplis).
-  for(let month=0; month<=7; month++){
+  for (let month = 0; month <= 7; month++) {
     const nbDays = daysInMonth(2026, month);
-    for(let day=1; day<=nbDays; day++){
+    for (let day = 1; day <= nbDays; day++) {
       const date = new Date(2026, month, day);
       const iso = fmtISO(date);
-      if(isSunday(date) || holidayName(iso)) continue;
-      setSlotState(iso,'david','M','present');
-      setSlotState(iso,'david','AM','present');
-      setSlotState(iso,'stephane','M','present');
-      setSlotState(iso,'stephane','AM','present');
+      if (isSunday(date) || holidayName(iso)) continue;
+      setSlotState(iso, 'david', 'M', 'present');
+      setSlotState(iso, 'david', 'AM', 'present');
+      setSlotState(iso, 'stephane', 'M', 'present');
+      setSlotState(iso, 'stephane', 'AM', 'present');
     }
   }
   // Congés et événements identifiés sur le planning d'origine
@@ -368,50 +447,65 @@ function _seedDemoData(){
   seedAbsenceRange('stephane', '2026-10-10', '2026-10-11', 'Congés');
 
   // --- 2027 : janvier (prévisionnel) ---
-  const nbDaysJan2027 = daysInMonth(2027,0);
-  for(let day=1; day<=nbDaysJan2027; day++){
-    const date = new Date(2027,0,day);
-    if(isSunday(date)) continue;
+  const nbDaysJan2027 = daysInMonth(2027, 0);
+  for (let day = 1; day <= nbDaysJan2027; day++) {
+    const date = new Date(2027, 0, day);
+    if (isSunday(date)) continue;
     const iso = fmtISO(date);
     const wd = isoWeekday(date);
-    if(wd <=3){ setSlotState(iso,'david','M','present'); setSlotState(iso,'david','AM','present'); }
-    else if(wd === 4){ setSlotState(iso,'david','M','absent'); setSlotState(iso,'david','AM','absent'); }
-    if(wd >=1 && wd <=4){ setSlotState(iso,'stephane','M','present'); setSlotState(iso,'stephane','AM','present'); }
-    else if(wd === 0){ setSlotState(iso,'stephane','M','absent'); setSlotState(iso,'stephane','AM','absent'); }
+    if (wd <= 3) {
+      setSlotState(iso, 'david', 'M', 'present');
+      setSlotState(iso, 'david', 'AM', 'present');
+    } else if (wd === 4) {
+      setSlotState(iso, 'david', 'M', 'absent');
+      setSlotState(iso, 'david', 'AM', 'absent');
+    }
+    if (wd >= 1 && wd <= 4) {
+      setSlotState(iso, 'stephane', 'M', 'present');
+      setSlotState(iso, 'stephane', 'AM', 'present');
+    } else if (wd === 0) {
+      setSlotState(iso, 'stephane', 'M', 'absent');
+      setSlotState(iso, 'stephane', 'AM', 'absent');
+    }
   }
-  ['2027-01-12','2027-01-13','2027-01-14'].forEach(iso=>{
-    setSlotState(iso,'stephane','M','absent'); setSlotLabel(iso,'stephane','M','Formation chirurgie');
-    setSlotState(iso,'stephane','AM','absent'); setSlotLabel(iso,'stephane','AM','Formation chirurgie');
+  ['2027-01-12', '2027-01-13', '2027-01-14'].forEach((iso) => {
+    setSlotState(iso, 'stephane', 'M', 'absent');
+    setSlotLabel(iso, 'stephane', 'M', 'Formation chirurgie');
+    setSlotState(iso, 'stephane', 'AM', 'absent');
+    setSlotLabel(iso, 'stephane', 'AM', 'Formation chirurgie');
   });
   // --- 2027 : semaine de congés David en février ---
-  for(let day=8; day<=12; day++){
-    const date = new Date(2027,1,day);
-    if(isSunday(date)) continue;
+  for (let day = 8; day <= 12; day++) {
+    const date = new Date(2027, 1, day);
+    if (isSunday(date)) continue;
     const iso = fmtISO(date);
-    setSlotState(iso,'david','M','absent'); setSlotLabel(iso,'david','M','Vacances hiver');
-    setSlotState(iso,'david','AM','absent'); setSlotLabel(iso,'david','AM','Vacances hiver');
+    setSlotState(iso, 'david', 'M', 'absent');
+    setSlotLabel(iso, 'david', 'M', 'Vacances hiver');
+    setSlotState(iso, 'david', 'AM', 'absent');
+    setSlotLabel(iso, 'david', 'AM', 'Vacances hiver');
   }
   saveData(false);
 }
-
 
 /* ----------------------------------------------------------------
    8. MENU RÉGLAGES (export / import / reset)
    ---------------------------------------------------------------- */
 
-function openResetYearModal(year, isForecast){
+function openResetYearModal(year, isForecast) {
   const label = isForecast ? `prévisionnel ${year}` : `année courante ${year}`;
   openConfirmModal({
-    title:`Réinitialiser le ${label} ?`,
-    message:`Toutes les présences, absences${isForecast ? '' : ', commentaires'} et heures saisies pour ${year} seront définitivement supprimées. Cette action est irréversible.`,
-    confirmLabel:`Réinitialiser ${year}`,
-    onConfirm:()=>{
+    title: `Réinitialiser le ${label} ?`,
+    message: `Toutes les présences, absences${isForecast ? '' : ', commentaires'} et heures saisies pour ${year} seront définitivement supprimées. Cette action est irréversible.`,
+    confirmLabel: `Réinitialiser ${year}`,
+    onConfirm: () => {
       snapshotBeforeChange();
-      Object.keys(store.DATA.slots).filter(k=>k.startsWith(`${year}-`)).forEach(k=> delete store.DATA.slots[k]);
+      Object.keys(store.DATA.slots)
+        .filter((k) => k.startsWith(`${year}-`))
+        .forEach((k) => delete store.DATA.slots[k]);
       saveData();
       renderCurrentView();
       showToast(`${year} réinitialisé`, '🗑️');
-    }
+    },
   });
 }
 
@@ -421,65 +515,67 @@ function openResetYearModal(year, isForecast){
 let currentView = 'vets';
 const VIEW_RENDERERS = {}; // rempli plus loin par chaque module de vue
 
-function switchView(viewId){
+function switchView(viewId) {
   currentView = viewId;
-  document.querySelectorAll('.nav-tab').forEach(btn=>{
+  document.querySelectorAll('.nav-tab').forEach((btn) => {
     const active = btn.dataset.view === viewId;
     btn.classList.toggle('active', active);
     btn.setAttribute('aria-current', active ? 'page' : 'false');
   });
-  document.querySelectorAll('.view-section').forEach(sec=>{
+  document.querySelectorAll('.view-section').forEach((sec) => {
     sec.classList.toggle('hidden', sec.id !== `view-${viewId}`);
   });
   renderCurrentView();
   saveViewState();
 }
 // Renvoie l'id du conteneur DOM de la sous-page actuellement sélectionnée pour ce groupe.
-function _activeSubContainer(group){
+function _activeSubContainer(group) {
   const g = GROUP_VIEWS[group];
   const sub = store.subNavState[group];
-  if(sub === 'calendar') return g.calendarContainer;
-  if(sub === 'forecast') return g.forecastContainer;
+  if (sub === 'calendar') return g.calendarContainer;
+  if (sub === 'forecast') return g.forecastContainer;
   return g.annualContainer;
 }
 // Seul point d'entrée qui décide si le contenu réel peut s'afficher ou s'il faut montrer
 // le verrou — aussi bien pour un onglet simple (tableau de bord) que pour un onglet groupé
 // (vétérinaires), où le verrou doit s'afficher À L'INTÉRIEUR de la sous-page active sans
 // détruire la sous-navigation (sub-nav) ni les autres sous-pages masquées.
-function renderCurrentView(){
+function renderCurrentView() {
   renderRolloverBanner();
-  const isForecastSubPage = (currentView === 'vets' && store.subNavState.vets === 'forecast') || (currentView === 'asv' && store.subNavState.asv === 'forecast');
+  const isForecastSubPage =
+    (currentView === 'vets' && store.subNavState.vets === 'forecast') ||
+    (currentView === 'asv' && store.subNavState.asv === 'forecast');
   document.body.classList.toggle('forecast-theme', isForecastSubPage);
-  if(currentView === 'dashboard' && !canAccessDashboard()){
+  if (currentView === 'dashboard' && !canAccessDashboard()) {
     switchView('vets');
     return;
   }
   const renderer = VIEW_RENDERERS[currentView];
-  if(renderer) renderer();
+  if (renderer) renderer();
 }
 
 // Sous-pages "Calendrier mensuel" / "Vue annuelle" / "Prévisionnel" au sein d'un onglet
 // groupé. Appelée uniquement une fois l'accès autorisé par renderCurrentView (jamais
 // directement quand le groupe est protégé et verrouillé).
-function renderGroupSubPage(group){
+function renderGroupSubPage(group) {
   const g = GROUP_VIEWS[group];
   const sub = store.subNavState[group];
-  if(sub === 'calendar') renderCalendarView(g.calendarViewKey);
-  else if(sub === 'forecast') renderCalendarView(g.forecastViewKey);
-  else if(sub === 'week' && group === 'asv') renderWeekViewASV();
+  if (sub === 'calendar') renderCalendarView(g.calendarViewKey);
+  else if (sub === 'forecast') renderCalendarView(g.forecastViewKey);
+  else if (sub === 'week' && group === 'asv') renderWeekViewASV();
   else renderAnnualViewForGroup(group);
 }
-function switchSubPage(group, subKey){
+function switchSubPage(group, subKey) {
   const g = GROUP_VIEWS[group];
   store.subNavState[group] = subKey;
-  document.querySelectorAll(`#${group}-sub-nav .sub-tab`).forEach(btn=>{
+  document.querySelectorAll(`#${group}-sub-nav .sub-tab`).forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.sub === subKey);
   });
   document.getElementById(g.calendarContainer).classList.toggle('hidden', subKey !== 'calendar');
   document.getElementById(g.annualContainer).classList.toggle('hidden', subKey !== 'annual');
   document.getElementById(g.forecastContainer).classList.toggle('hidden', subKey !== 'forecast');
   const weekEl = document.getElementById('asv-sub-week');
-  if(weekEl) weekEl.classList.toggle('hidden', !(group === 'asv' && subKey === 'week'));
+  if (weekEl) weekEl.classList.toggle('hidden', !(group === 'asv' && subKey === 'week'));
   renderCurrentView();
   saveViewState();
 }
@@ -492,43 +588,49 @@ function switchSubPage(group, subKey){
 
 // Popup de sélection ASV avant impression mensuelle
 
-
 // Mémorise l'onglet et la sous-page affichés pour qu'un rechargement de page (F5) rouvre
 // la même vue plutôt que de revenir systématiquement sur "Vétérinaires". Purement
 // cosmétique : ne contient aucune donnée du planning, donc pas besoin de Supabase ici.
-function saveViewState(){
-  try{
-    localStorage.setItem(VIEW_STATE_KEY, JSON.stringify({
-      currentView,
-      subNavState: store.subNavState,
-      annualYearState: store.annualYearState,
-      dashSubTab: store.dashSubState.tab,
-    }));
-  }catch{ /* stockage indisponible : tant pis, on retombera sur la vue par défaut */ }
+function saveViewState() {
+  try {
+    localStorage.setItem(
+      VIEW_STATE_KEY,
+      JSON.stringify({
+        currentView,
+        subNavState: store.subNavState,
+        annualYearState: store.annualYearState,
+        dashSubTab: store.dashSubState.tab,
+      })
+    );
+  } catch {
+    /* stockage indisponible : tant pis, on retombera sur la vue par défaut */
+  }
 }
 // Renvoie l'id de vue à restaurer (ou null si rien de valide n'a été sauvegardé), et
 // restaure au passage les sous-pages mémorisées dans les états globaux correspondants.
-function loadViewState(){
-  try{
+function loadViewState() {
+  try {
     const raw = localStorage.getItem(VIEW_STATE_KEY);
-    if(!raw) return null;
+    if (!raw) return null;
     const saved = JSON.parse(raw);
-    if(saved.subNavState) Object.assign(store.subNavState, saved.subNavState);
-    if(saved.annualYearState) Object.assign(store.annualYearState, saved.annualYearState);
-    if(saved.dashSubTab) store.dashSubState.tab = saved.dashSubTab;
+    if (saved.subNavState) Object.assign(store.subNavState, saved.subNavState);
+    if (saved.annualYearState) Object.assign(store.annualYearState, saved.annualYearState);
+    if (saved.dashSubTab) store.dashSubState.tab = saved.dashSubTab;
     return saved.currentView || null;
-  }catch{ return null; }
+  } catch {
+    return null;
+  }
 }
-function initNav(){
-  document.getElementById('main-nav').addEventListener('click', (e)=>{
+function initNav() {
+  document.getElementById('main-nav').addEventListener('click', (e) => {
     const btn = e.target.closest('.nav-tab');
-    if(btn) switchView(btn.dataset.view);
+    if (btn) switchView(btn.dataset.view);
   });
-  document.querySelectorAll('.sub-nav').forEach(nav=>{
-    const group = nav.id.replace('-sub-nav','');
-    nav.addEventListener('click', (e)=>{
+  document.querySelectorAll('.sub-nav').forEach((nav) => {
+    const group = nav.id.replace('-sub-nav', '');
+    nav.addEventListener('click', (e) => {
       const btn = e.target.closest('.sub-tab');
-      if(btn) switchSubPage(group, btn.dataset.sub);
+      if (btn) switchSubPage(group, btn.dataset.sub);
     });
   });
 }
@@ -538,27 +640,31 @@ function initNav(){
    ---------------------------------------------------------------- */
 // Renvoie la clé store.CAL_VIEWS du calendrier mensuel actuellement affiché, ou null si la vue
 // courante n'est pas un calendrier (ex. tableau de bord, sous-page "Vue annuelle"...).
-function activeCalendarViewKey(){
+function activeCalendarViewKey() {
   const g = GROUP_VIEWS[currentView];
-  if(!g) return null;
+  if (!g) return null;
   const sub = store.subNavState[currentView];
-  if(sub === 'calendar') return g.calendarViewKey;
-  if(sub === 'forecast') return g.forecastViewKey;
+  if (sub === 'calendar') return g.calendarViewKey;
+  if (sub === 'forecast') return g.forecastViewKey;
   return null;
 }
-function initKeyboardShortcuts(){
-  document.addEventListener('keydown', (e)=>{
-    if(e.target.matches && e.target.matches('input, textarea')) return;
-    if((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z'){
+function initKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    if (e.target.matches && e.target.matches('input, textarea')) return;
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
       e.preventDefault();
       undoLastAction();
       return;
     }
     const viewKey = activeCalendarViewKey();
-    if(!viewKey) return;
-    if(e.key === 'ArrowLeft'){ changeMonth(viewKey, -1); }
-    else if(e.key === 'ArrowRight'){ changeMonth(viewKey, 1); }
-    else if(e.key.toLowerCase() === 't' && store.CAL_VIEWS[viewKey].todayNav){ goToToday(viewKey); }
+    if (!viewKey) return;
+    if (e.key === 'ArrowLeft') {
+      changeMonth(viewKey, -1);
+    } else if (e.key === 'ArrowRight') {
+      changeMonth(viewKey, 1);
+    } else if (e.key.toLowerCase() === 't' && store.CAL_VIEWS[viewKey].todayNav) {
+      goToToday(viewKey);
+    }
   });
 }
 
@@ -567,8 +673,8 @@ function initKeyboardShortcuts(){
    VUE SEMAINE ASV + IMPRESSION → src/week-view.js
    ================================================================ */
 
-VIEW_RENDERERS['vets'] = ()=> renderGroupSubPage('vets');
-VIEW_RENDERERS['asv'] = ()=> renderGroupSubPage('asv');
+VIEW_RENDERERS['vets'] = () => renderGroupSubPage('vets');
+VIEW_RENDERERS['asv'] = () => renderGroupSubPage('asv');
 VIEW_RENDERERS['annonces'] = renderAnnounces;
 /* announcements.js — renderAnnounces, openAnnouncementModal */
 
@@ -578,22 +684,22 @@ VIEW_RENDERERS['annonces'] = renderAnnounces;
    16. INITIALISATION GÉNÉRALE (ci-dessous)
    ================================================================ */
 
-function renderImpersonationBanner(){
+function renderImpersonationBanner() {
   const banner = document.getElementById('impersonation-banner');
-  if(!banner) return;
-  if(store.currentUser?.role === 'admin' && store.adminViewMode === 'asv' && store.adminImpersonatedPersonId){
+  if (!banner) return;
+  if (store.currentUser?.role === 'admin' && store.adminViewMode === 'asv' && store.adminImpersonatedPersonId) {
     const p = personOf(store.adminImpersonatedPersonId);
     banner.classList.remove('hidden');
     // eslint-disable-next-line no-unsanitized/property
     banner.innerHTML = `
       <span>👁 Mode aperçu</span>
       <span style="display:inline-flex;align-items:center;gap:6px;">
-        <span style="width:10px;height:10px;border-radius:50%;background:${p?.color||'#fff'};display:inline-block;"></span>
-        Vue de <strong>${escapeHTML(p?.short||store.adminImpersonatedPersonId)}</strong>
+        <span style="width:10px;height:10px;border-radius:50%;background:${p?.color || '#fff'};display:inline-block;"></span>
+        Vue de <strong>${escapeHTML(p?.short || store.adminImpersonatedPersonId)}</strong>
       </span>
       <button class="imp-back" id="imp-back-btn">← Retour à ma vue</button>
     `;
-    document.getElementById('imp-back-btn').onclick = ()=>{
+    document.getElementById('imp-back-btn').onclick = () => {
       store.adminViewMode = 'vet';
       store.adminImpersonatedPersonId = null;
       applyRoleToDOM();
@@ -608,13 +714,13 @@ function renderImpersonationBanner(){
 }
 
 // Applique les classes CSS de rôle sur <body> et met à jour la bannière d'impersonation.
-function applyRoleToDOM(){
+function applyRoleToDOM() {
   document.body.classList.toggle('role-asv', effectiveRole() === 'asv');
   document.body.classList.toggle('role-vet', effectiveRole() !== 'asv');
   renderImpersonationBanner();
 }
 
-function openASVImpersonationPicker(){
+function openASVImpersonationPicker() {
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
   box.className = 'modal-box';
@@ -623,41 +729,45 @@ function openASVImpersonationPicker(){
     <h3>👁 Vue ASV — choisir</h3>
     <p>Sélectionnez l'ASV dont vous souhaitez voir l'expérience :</p>
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
-      ${ASV_PEOPLE.map(p=>`
+      ${ASV_PEOPLE.map(
+        (p) => `
         <button type="button" class="btn" data-pick-asv="${p.id}"
           style="justify-content:flex-start;gap:10px;border-color:${p.color};">
           <span style="width:10px;height:10px;border-radius:50%;background:${p.color};display:inline-block;"></span>
           ${escapeHTML(p.short)}
         </button>
-      `).join('')}
+      `
+      ).join('')}
     </div>
     <div class="modal-actions"><button class="btn" id="modal-cancel">Annuler</button></div>
   `;
   backdrop.classList.add('open');
-  const close = ()=> backdrop.classList.remove('open');
+  const close = () => backdrop.classList.remove('open');
   box.querySelector('#modal-cancel').onclick = close;
-  backdrop.onclick = (e)=>{ if(e.target===backdrop) close(); };
-  box.querySelectorAll('[data-pick-asv]').forEach(btn=>{
-    btn.onclick = ()=>{
+  backdrop.onclick = (e) => {
+    if (e.target === backdrop) close();
+  };
+  box.querySelectorAll('[data-pick-asv]').forEach((btn) => {
+    btn.onclick = () => {
       store.adminImpersonatedPersonId = btn.dataset.pickAsv;
       store.adminViewMode = 'asv';
       close();
       applyRoleToDOM();
       initSettingsMenu();
-      if(currentView === 'dashboard') switchView('vets');
+      if (currentView === 'dashboard') switchView('vets');
       else renderCurrentView();
       showToast(`Vue ASV : ${personOf(store.adminImpersonatedPersonId)?.short}`, '👁');
     };
   });
 }
 
-function initApp(){
+function initApp() {
   store.weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
   applyRoleToDOM();
   loadASVRoster();
   loadPersonColors();
   // Rafraîchir le token toutes les 45 min pour éviter les 401 après expiration
-  setInterval(()=> authRefreshSession(), 45 * 60 * 1000);
+  setInterval(() => authRefreshSession(), 45 * 60 * 1000);
   loadData();
   initNav();
   initSettingsMenu();
@@ -672,7 +782,7 @@ function initApp(){
   refreshData();
   document.getElementById('login-overlay').classList.add('hidden');
   // Ouvrir le modal de confirmation si l'utilisateur vient d'un lien de signature email
-  if(store.pendingSignToken){
+  if (store.pendingSignToken) {
     const token = store.pendingSignToken;
     store.pendingSignToken = null;
     openSignConfirmModal(token);
@@ -680,17 +790,17 @@ function initApp(){
   handlePwaShortcutAction();
 }
 
-async function init(){
+async function init() {
   // Charger l'effectif ASV dès le démarrage (indépendant de l'auth) : garantit que
   // localStorage est peuplé même sur l'écran de connexion, et que le roster est prêt
   // quel que soit le chemin d'entrée (login, recovery, invite).
   loadASVRoster();
   // Callback de réinitialisation de mot de passe : Supabase envoie le token dans le hash URL
-  const hash = new URLSearchParams(window.location.hash.replace(/^#/,''));
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   const query = new URLSearchParams(window.location.search);
   const type = hash.get('type') || query.get('type');
   const accessToken = hash.get('access_token') || query.get('access_token');
-  if((type === 'recovery' || type === 'invite') && accessToken){
+  if ((type === 'recovery' || type === 'invite') && accessToken) {
     renderSetPasswordScreen(accessToken, type === 'invite');
     return;
   }
@@ -698,7 +808,7 @@ async function init(){
   // Lien de signature reçu par email (?sign=UUID) — stocker le token avant l'auth,
   // puis le traiter dans initApp() une fois l'utilisateur identifié.
   const signToken = query.get('sign');
-  if(signToken){
+  if (signToken) {
     store.pendingSignToken = signToken;
     const cleanUrl = new URL(window.location.href);
     cleanUrl.searchParams.delete('sign');
@@ -706,9 +816,16 @@ async function init(){
   }
 
   const session = getAuthSession();
-  if(!session){ renderLoginScreen(); return; }
+  if (!session) {
+    renderLoginScreen();
+    return;
+  }
   const user = await loadCurrentUser();
-  if(!user){ clearAuthSession(); renderLoginScreen(); return; }
+  if (!user) {
+    clearAuthSession();
+    renderLoginScreen();
+    return;
+  }
   initApp();
 }
 document.addEventListener('DOMContentLoaded', init);
@@ -719,11 +836,11 @@ document.addEventListener('DOMContentLoaded', init);
    PWA — fonctions SW, install, push → src/pwa.js
    ================================================================ */
 
-function refreshData(){
+function refreshData() {
   if (!_hasDirtyLocalData) {
-    syncFromSupabase().then(remoteSlots=>{
-      if(remoteSlots !== null){
-        store.DATA = { version:2, slots: remoteSlots };
+    syncFromSupabase().then((remoteSlots) => {
+      if (remoteSlots !== null) {
+        store.DATA = { version: 2, slots: remoteSlots };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
         renderCurrentView();
         updateDashboardNavBadge();
@@ -734,64 +851,126 @@ function refreshData(){
   loadInterviews();
   loadAnnouncements();
 }
-function refreshAllPwaData(){ refreshData(); }
-window.addEventListener('online', ()=>{ updatePwaOfflineBanner(); refreshAllPwaData(); });
+function refreshAllPwaData() {
+  refreshData();
+}
+window.addEventListener('online', () => {
+  updatePwaOfflineBanner();
+  refreshAllPwaData();
+});
 window.addEventListener('offline', updatePwaOfflineBanner);
-document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refreshAllPwaData(); });
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) refreshAllPwaData();
+});
 
 /* ---------------- Raccourcis manifest + navigation au clic sur une notification ---------------- */
-function navigateForNotificationType(type){
-  if(typeof store.currentUser === 'undefined' || !store.currentUser) return;
-  switch(type){
-    case 'leave_request': case 'leave_approved': case 'leave_rejected':
-      if(canAccessDashboard()){ switchView('dashboard'); setDashSubTab('requests'); renderDashboard(); }
+function navigateForNotificationType(type) {
+  if (typeof store.currentUser === 'undefined' || !store.currentUser) return;
+  switch (type) {
+    case 'leave_request':
+    case 'leave_approved':
+    case 'leave_rejected':
+      if (canAccessDashboard()) {
+        switchView('dashboard');
+        setDashSubTab('requests');
+        renderDashboard();
+      }
       break;
     case 'medical_visit':
-      if(canAccessDashboard()){ switchView('dashboard'); setDashSubTab('stats'); renderDashboard(); }
+      if (canAccessDashboard()) {
+        switchView('dashboard');
+        setDashSubTab('stats');
+        renderDashboard();
+      }
       break;
     case 'interview':
-      if(canAccessDashboard()){ switchView('dashboard'); setDashSubTab('interviews'); renderDashboard(); }
+      if (canAccessDashboard()) {
+        switchView('dashboard');
+        setDashSubTab('interviews');
+        renderDashboard();
+      }
       break;
     case 'announcement':
       switchView('annonces');
       break;
   }
 }
-function handlePwaShortcutAction(){
+function handlePwaShortcutAction() {
   const params = new URLSearchParams(window.location.search);
   const action = params.get('action');
-  if(!action) return;
+  if (!action) return;
   const cleanUrl = new URL(window.location.href);
   cleanUrl.searchParams.delete('action');
   cleanUrl.searchParams.delete('source');
   history.replaceState({}, '', cleanUrl.toString());
 
-  if(action === 'new-leave'){
+  if (action === 'new-leave') {
     // Pas de formulaire dédié pour une nouvelle demande : on amène l'ASV sur son
     // calendrier, où peindre une absence crée automatiquement la demande en attente.
     switchView('asv');
     switchSubPage('asv', 'calendar');
-  } else if(action === 'week-view'){
+  } else if (action === 'week-view') {
     switchView('asv');
     switchSubPage('asv', 'week');
   } else {
-    navigateForNotificationType({
-      'dashboard-requests':'leave_request', 'dashboard-medical':'medical_visit',
-      'dashboard-interviews':'interview', 'announcements':'announcement',
-    }[action]);
+    navigateForNotificationType(
+      {
+        'dashboard-requests': 'leave_request',
+        'dashboard-medical': 'medical_visit',
+        'dashboard-interviews': 'interview',
+        announcements: 'announcement',
+      }[action]
+    );
   }
 }
 
 /* push subscriptions + notification settings → pwa.js */
 
 /* ---------------- Amorçage ---------------- */
-setupSettings({ saveData, renderCurrentView, snapshotBeforeChange, canAccessSettings, effectiveRole, applyRoleToDOM, openASVImpersonationPicker, authSignOut, authRefreshSession, buildCalViews, activeCalendarViewKey });
-setupCalendar({ snapshotBeforeChange, saveData, switchSubPage, canEditSlot, undoLastAction, getCurrentView: ()=>currentView });
-setupWeekView({ saveData, snapshotBeforeChange, renderCurrentView, canEditSlot, effectiveRole, switchSubPage, updateUndoButtons });
+setupSettings({
+  saveData,
+  renderCurrentView,
+  snapshotBeforeChange,
+  canAccessSettings,
+  effectiveRole,
+  applyRoleToDOM,
+  openASVImpersonationPicker,
+  authSignOut,
+  authRefreshSession,
+  buildCalViews,
+  activeCalendarViewKey,
+});
+setupCalendar({
+  snapshotBeforeChange,
+  saveData,
+  switchSubPage,
+  canEditSlot,
+  undoLastAction,
+  getCurrentView: () => currentView,
+});
+setupWeekView({
+  saveData,
+  snapshotBeforeChange,
+  renderCurrentView,
+  canEditSlot,
+  effectiveRole,
+  switchSubPage,
+  updateUndoButtons,
+});
 setupLogin({ loadCurrentUser, initApp });
 setupSignatures({ onLoaded: renderCurrentView, renderCalendarView });
 setupAnnualView({ switchSubPage, switchView, openDaySidebar, saveViewState, buildLegendColors, GROUP_VIEWS });
-setupDashboard({ openResetYearModal, saveViewState, canEditSlot, effectiveRole, snapshotBeforeChange, saveData, renderCurrentView, openDaySidebar, loadInterviews });
+setupDashboard({
+  openResetYearModal,
+  saveViewState,
+  canEditSlot,
+  effectiveRole,
+  snapshotBeforeChange,
+  saveData,
+  renderCurrentView,
+  openDaySidebar,
+  loadInterviews,
+});
 VIEW_RENDERERS['dashboard'] = renderDashboard;
 initServiceWorker(navigateForNotificationType);
 setTimeout(showIOSInstallTip, 4000);

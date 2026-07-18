@@ -19,7 +19,8 @@ const PRECACHE_URLS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(STATIC_CACHE)
+    caches
+      .open(STATIC_CACHE)
       .then((cache) => cache.addAll(PRECACHE_URLS))
       .then(() => self.skipWaiting())
   );
@@ -27,12 +28,13 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys()
-      .then((names) => Promise.all(
-        names
-          .filter((name) => name !== STATIC_CACHE && name !== DYNAMIC_CACHE)
-          .map((name) => caches.delete(name))
-      ))
+    caches
+      .keys()
+      .then((names) =>
+        Promise.all(
+          names.filter((name) => name !== STATIC_CACHE && name !== DYNAMIC_CACHE).map((name) => caches.delete(name))
+        )
+      )
       .then(() => self.clients.claim())
   );
 });
@@ -46,7 +48,9 @@ function isAuthRequest(url) {
 }
 
 // Google Fonts n'est plus utilisé (Inter auto-hébergé depuis Lot 4).
-function isGoogleFontsRequest(_url) { return false; }
+function isGoogleFontsRequest(_url) {
+  return false;
+}
 
 async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
@@ -102,7 +106,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (isGoogleFontsRequest(url) || request.destination === 'style' || request.destination === 'image' || url.pathname.endsWith('manifest.json')) {
+  if (
+    isGoogleFontsRequest(url) ||
+    request.destination === 'style' ||
+    request.destination === 'image' ||
+    url.pathname.endsWith('manifest.json')
+  ) {
     event.respondWith(cacheFirst(request, url.origin === self.location.origin ? STATIC_CACHE : DYNAMIC_CACHE));
     return;
   }
@@ -118,7 +127,11 @@ self.addEventListener('message', (event) => {
 
 self.addEventListener('push', (event) => {
   let payload = {};
-  try { payload = event.data ? event.data.json() : {}; } catch { payload = {}; }
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = {};
+  }
 
   const title = payload.title || 'Amivet Pulse RH';
   const options = {
