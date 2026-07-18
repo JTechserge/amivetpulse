@@ -55,6 +55,16 @@ function setupSettings({
   _authRefreshSession = authRefreshSession;
   _buildCalViews = buildCalViews;
   _activeCalendarViewKey = activeCalendarViewKey;
+
+  // Listener global persistant pour le bouton Se déconnecter.
+  // Indépendant de tout re-init du menu, ajouté une seule fois.
+  document.addEventListener('click', (e) => {
+    if (e.target.closest?.('#action-logout')) {
+      document.getElementById('settings-menu')?.classList.remove('open');
+      renderLoginScreen();
+      authSignOut().catch(console.warn);
+    }
+  });
 }
 
 function uniqueASVId(base) {
@@ -1394,12 +1404,6 @@ function initSettingsMenu() {
     },
     { signal }
   );
-  // onclick direct : réécrit à chaque init, pas de signal, pas de doublons possibles.
-  document.getElementById('action-logout').onclick = () => {
-    menu.classList.remove('open');
-    renderLoginScreen();
-    if (typeof _authSignOut === 'function') _authSignOut().catch(console.warn);
-  };
 }
 
 function openHelpModal() {
