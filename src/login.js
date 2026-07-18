@@ -5,6 +5,7 @@ import {
   isBiometricEnrolled,
   authenticateWithBiometric,
   updateBiometricToken,
+  clearBiometric,
   biometricLabel,
 } from './biometric-auth.js';
 
@@ -87,7 +88,8 @@ async function _handleBiometricLogin() {
       btn.style.opacity = '';
     }
     if (err?.name === 'NotAllowedError' || err?.message === 'cancelled') return;
-    renderLoginScreen(err.message || "Échec de la connexion par clé d'accès.");
+    clearBiometric();
+    renderLoginScreen("Session expirée — reconnectez-vous avec votre mot de passe puis réactivez la connexion par clé d'accès dans les paramètres.");
   }
 }
 
