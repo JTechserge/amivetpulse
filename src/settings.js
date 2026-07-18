@@ -1186,7 +1186,7 @@ function buildSettingsMenuHtml() {
     <hr>
     <div class="settings-section-label">Mon compte${userName ? ` — ${escapeHTML(userName)}` : ''}</div>
     <button id="action-change-password" role="menuitem">🔑 Changer mon mot de passe</button>
-    <button id="action-biometric" role="menuitem">🔐 ${isBiometricEnrolled() ? 'Désactiver la connexion par clé d\'accès' : 'Activer la connexion par clé d\'accès'}</button>
+    <button id="action-biometric" role="menuitem">🔐 ${isBiometricEnrolled() ? "Désactiver la connexion par clé d'accès" : "Activer la connexion par clé d'accès"}</button>
     <button id="action-logout" class="danger" role="menuitem">🚪 Se déconnecter</button>
   `;
 }
@@ -1362,8 +1362,8 @@ function initSettingsMenu() {
       const btn = document.getElementById('action-biometric');
       if (isBiometricEnrolled()) {
         clearBiometric();
-        showToast('Connexion par clé d\'accès désactivée', '🔐');
-        if (btn) btn.textContent = '🔐 Activer la connexion par clé d\'accès';
+        showToast("Connexion par clé d'accès désactivée", '🔐');
+        if (btn) btn.textContent = "🔐 Activer la connexion par clé d'accès";
       } else {
         const session = getAuthSession();
         if (!session?.refresh_token) {
@@ -1376,10 +1376,10 @@ function initSettingsMenu() {
         }
         try {
           await registerBiometric(store.currentUser?.email || '', session.refresh_token);
-          showToast('Connexion par clé d\'accès activée — bouton disponible à la prochaine connexion', '🔐');
+          showToast("Connexion par clé d'accès activée — bouton disponible à la prochaine connexion", '🔐');
           if (btn) {
             btn.disabled = false;
-            btn.textContent = '🔐 Désactiver la connexion par clé d\'accès';
+            btn.textContent = "🔐 Désactiver la connexion par clé d'accès";
           }
         } catch (err) {
           if (err?.name !== 'NotAllowedError') {
@@ -1387,22 +1387,21 @@ function initSettingsMenu() {
           }
           if (btn) {
             btn.disabled = false;
-            btn.textContent = '🔐 Activer la connexion par clé d\'accès';
+            btn.textContent = "🔐 Activer la connexion par clé d'accès";
           }
         }
       }
     },
     { signal }
   );
-  document.getElementById('action-logout').addEventListener(
-    'click',
-    () => {
-      menu.classList.remove('open');
-      renderLoginScreen();
-      _authSignOut().catch(console.warn);
-    },
-    { signal }
-  );
+  // Sans { signal } : menu.innerHTML recrée ce bouton à chaque init (pas de doublons).
+  // Avec { signal }, un re-appel de initSettingsMenu() (toggle-view, ASV picker…)
+  // effacerait ce listener avant d'en créer un nouveau — laissant une fenêtre sans handler.
+  document.getElementById('action-logout').addEventListener('click', () => {
+    menu.classList.remove('open');
+    try { renderLoginScreen(); } catch (e) { console.error('logout render', e); }
+    if (typeof _authSignOut === 'function') _authSignOut().catch(console.warn);
+  });
 }
 
 function openHelpModal() {
