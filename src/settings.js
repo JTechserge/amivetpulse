@@ -1394,23 +1394,12 @@ function initSettingsMenu() {
     },
     { signal }
   );
-  // Délégation sur le container : survive aux re-inits et au swap de menu.innerHTML.
-  // { signal } assure le nettoyage au prochain initSettingsMenu() sans risque de doublons.
-  menu.addEventListener(
-    'click',
-    (e) => {
-      if (e.target.closest('#action-logout')) {
-        menu.classList.remove('open');
-        try {
-          renderLoginScreen();
-        } catch (err) {
-          console.error('logout render', err);
-        }
-        if (typeof _authSignOut === 'function') _authSignOut().catch(console.warn);
-      }
-    },
-    { signal }
-  );
+  // onclick direct : réécrit à chaque init, pas de signal, pas de doublons possibles.
+  document.getElementById('action-logout').onclick = () => {
+    menu.classList.remove('open');
+    renderLoginScreen();
+    if (typeof _authSignOut === 'function') _authSignOut().catch(console.warn);
+  };
 }
 
 function openHelpModal() {
