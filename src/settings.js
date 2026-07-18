@@ -963,25 +963,29 @@ function buildSettingsMenuHtml(){
   const userName = store.currentUser?.display_name || store.currentUser?.email || '';
   return `
     ${isVet ? `
-      <div class="settings-section-label">Personnalisation</div>
-      <button id="action-colors" role="menuitem">🎨 Couleurs des associés</button>
-      <hr>
-      <div class="settings-section-label">Synchronisation</div>
-      <button id="action-calendar-sync" role="menuitem">📅 Synchronisation calendrier</button>
-      <hr>
-      <div class="settings-section-label">Données</div>
-      <button id="action-export" role="menuitem">⬇️ Exporter JSON</button>
-      <button id="action-import" role="menuitem">⬆️ Importer JSON</button>
-      <input type="file" id="import-file-input" accept="application/json" class="hidden" aria-hidden="true">
-      <hr>
+      <div class="settings-desktop-only">
+        <div class="settings-section-label">Personnalisation</div>
+        <button id="action-colors" role="menuitem">🎨 Couleurs des associés</button>
+        <hr>
+        <div class="settings-section-label">Synchronisation</div>
+        <button id="action-calendar-sync" role="menuitem">📅 Synchronisation calendrier</button>
+        <hr>
+        <div class="settings-section-label">Données</div>
+        <button id="action-export" role="menuitem">⬇️ Exporter JSON</button>
+        <button id="action-import" role="menuitem">⬆️ Importer JSON</button>
+        <input type="file" id="import-file-input" accept="application/json" class="hidden" aria-hidden="true">
+        <hr>
+      </div>
       <div class="settings-section-label">Collaborateurs</div>
       <button id="action-manage-users" role="menuitem">👥 Gérer les collaborateurs</button>
       <hr>
     ` : ''}
     ${isAdmin ? `
-      <div class="settings-section-label">Mode d'affichage</div>
-      <button id="action-toggle-view" role="menuitem">👁 ${store.adminViewMode === 'asv' ? 'Passer en vue Vétérinaires' : 'Passer en vue ASV'}</button>
-      <hr>
+      <div class="settings-desktop-only">
+        <div class="settings-section-label">Mode d'affichage</div>
+        <button id="action-toggle-view" role="menuitem">👁 ${store.adminViewMode === 'asv' ? 'Passer en vue Vétérinaires' : 'Passer en vue ASV'}</button>
+        <hr>
+      </div>
     ` : ''}
     <div class="settings-section-label">Notifications</div>
     <button id="action-notifications" role="menuitem">🔔 Notifications</button>
@@ -991,7 +995,7 @@ function buildSettingsMenuHtml(){
     <hr>
     <div class="settings-section-label">Mon compte${userName ? ` — ${escapeHTML(userName)}` : ''}</div>
     <button id="action-change-password" role="menuitem">🔑 Changer mon mot de passe</button>
-    <button id="action-biometric" role="menuitem">⚡ ${isBiometricEnrolled() ? 'Désactiver la connexion rapide' : 'Activer la connexion rapide'}</button>
+    <button id="action-biometric" role="menuitem">🔐 ${isBiometricEnrolled() ? 'Désactiver la connexion biométrique' : 'Activer la connexion biométrique'}</button>
     <button id="action-logout" class="danger" role="menuitem">🚪 Se déconnecter</button>
   `;
 }
@@ -1004,7 +1008,14 @@ function updateHeaderUsername(){
   el.style.display = name ? 'inline' : 'none';
 }
 
+let _menuAC = null;
+
 function initSettingsMenu(){
+  // Annule les listeners de l'appel précédent (évite les doublons sur re-init)
+  if (_menuAC) _menuAC.abort();
+  _menuAC = new AbortController();
+  const signal = _menuAC.signal;
+
   const toggle = document.getElementById('settings-toggle');
   const menu = document.getElementById('settings-menu');
   updateHeaderUsername();
@@ -1016,21 +1027,21 @@ function initSettingsMenu(){
     const willOpen = !menu.classList.contains('open');
     menu.classList.toggle('open', willOpen);
     toggle.setAttribute('aria-expanded', String(willOpen));
-  });
+  }, { signal });
   document.addEventListener('click', (e)=>{
     if(!menu.contains(e.target) && e.target !== toggle){
       menu.classList.remove('open');
       toggle.setAttribute('aria-expanded','false');
     }
-  });
+  }, { signal });
 
   if(_canAccessSettings()){
     document.getElementById('action-colors').addEventListener('click', ()=>{
       menu.classList.remove('open'); openColorPickerModal();
-    });
+    }, { signal });
     document.getElementById('action-calendar-sync').addEventListener('click', ()=>{
       menu.classList.remove('open'); openCalendarSyncModal();
-    });
+    }, { signal });
     document.getElementById('action-export').addEventListener('click', ()=>{
       const blob = new Blob([JSON.stringify(store.DATA, null, 2)], { type:'application/json' });
       const url = URL.createObjectURL(blob);
@@ -1039,9 +1050,9 @@ function initSettingsMenu(){
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
       menu.classList.remove('open'); showToast('Export JSON téléchargé', '⬇️');
-    });
+    }, { signal });
     const fileInput = document.getElementById('import-file-input');
-    document.getElementById('action-import').addEventListener('click', ()=>{ menu.classList.remove('open'); fileInput.click(); });
+    document.getElementById('action-import').addEventListener('click', ()=>{ menu.classList.remove('open'); fileInput.click(); }, { signal });
     fileInput.addEventListener('change', (e)=>{
       const file = e.target.files[0]; if(!file) return;
       const reader = new FileReader();
@@ -1055,17 +1066,16 @@ function initSettingsMenu(){
         fileInput.value = '';
       };
       reader.readAsText(file);
-    });
+    }, { signal });
     document.getElementById('action-manage-users').addEventListener('click', ()=>{
       menu.classList.remove('open'); openManageUsersModal();
-    });
+    }, { signal });
   }
 
   if(store.currentUser?.role === 'admin'){
     document.getElementById('action-toggle-view').addEventListener('click', ()=>{
       menu.classList.remove('open');
       if(store.adminViewMode === 'asv'){
-        // Déjà en mode ASV → retour immédiat
         store.adminViewMode = 'vet';
         store.adminImpersonatedPersonId = null;
         _applyRoleToDOM();
@@ -1073,41 +1083,48 @@ function initSettingsMenu(){
         _renderCurrentView();
         showToast('Retour à la vue Vétérinaires', '👁');
       } else {
-        // Passer en mode ASV → choisir qui imiter
         _openASVImpersonationPicker();
       }
-    });
+    }, { signal });
   }
 
   document.getElementById('action-help').addEventListener('click', ()=>{
     menu.classList.remove('open'); openHelpModal();
-  });
+  }, { signal });
   document.getElementById('action-notifications').addEventListener('click', ()=>{
     menu.classList.remove('open'); openNotificationSettingsModal();
-  });
+  }, { signal });
   document.getElementById('action-change-password').addEventListener('click', ()=>{
     menu.classList.remove('open'); openChangeMyPasswordModal();
-  });
+  }, { signal });
   document.getElementById('action-biometric').addEventListener('click', async ()=>{
     menu.classList.remove('open');
     const btn = document.getElementById('action-biometric');
     if (isBiometricEnrolled()) {
       clearBiometric();
-      showToast('Connexion rapide désactivée', '⚡');
-      if (btn) btn.textContent = '⚡ Activer la connexion rapide';
+      showToast('Connexion biométrique désactivée', '🔐');
+      if (btn) btn.textContent = '🔐 Activer la connexion biométrique';
     } else {
       const session = getAuthSession();
       if (!session?.refresh_token) { showToast('Session expirée, reconnectez-vous d\'abord', '⚠️'); return; }
-      await registerBiometric(store.currentUser?.email || '', session.refresh_token);
-      showToast('Connexion rapide activée — bouton visible à la prochaine connexion', '⚡');
-      if (btn) btn.textContent = '⚡ Désactiver la connexion rapide';
+      if (btn) { btn.disabled = true; btn.textContent = '🔐 Activation en cours…'; }
+      try {
+        await registerBiometric(store.currentUser?.email || '', session.refresh_token);
+        showToast('Connexion biométrique activée — bouton disponible à la prochaine connexion', '🔐');
+        if (btn) { btn.disabled = false; btn.textContent = '🔐 Désactiver la connexion biométrique'; }
+      } catch (err) {
+        if (err?.name !== 'NotAllowedError') {
+          showToast('Activation impossible : ' + (err?.message || 'erreur inconnue'), '⚠️');
+        }
+        if (btn) { btn.disabled = false; btn.textContent = '🔐 Activer la connexion biométrique'; }
+      }
     }
-  });
-  document.getElementById('action-logout').addEventListener('click', async ()=>{
+  }, { signal });
+  document.getElementById('action-logout').addEventListener('click', ()=>{
     menu.classList.remove('open');
-    await _authSignOut();
     renderLoginScreen();
-  });
+    _authSignOut().catch(console.warn);
+  }, { signal });
 }
 
 function openHelpModal(){

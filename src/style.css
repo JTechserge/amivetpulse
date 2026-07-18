@@ -365,11 +365,13 @@ body.forecast-theme{background:var(--color-forecast);}
    Menu réglages (dropdown)
    ============================================================ */
 .settings-wrap{position:relative;}
+.settings-desktop-only{display:contents;} /* transparent dans flex — caché sur mobile */
 .settings-menu{
   position:absolute;right:0;top:calc(100% + 8px);
   width:240px;background:var(--color-surface);border:1px solid var(--color-border);
   border-radius:var(--radius-card);box-shadow:var(--shadow-lg);
   padding:8px;display:flex;flex-direction:column;gap:2px;z-index:50;
+  max-height:calc(100dvh - 80px);overflow-y:auto;
   opacity:0;transform:translateY(-10px) scale(0.94);transform-origin:top right;
   pointer-events:none;visibility:hidden;
   transition:opacity 0.22s ease,transform 0.22s cubic-bezier(0.4,0,0.2,1),visibility 0s 0.22s;
@@ -1217,12 +1219,15 @@ body.role-asv [data-view="dashboard"]{display:none;}
     padding-bottom:calc(env(safe-area-inset-bottom) + 16px);
   }
 
-  /* ── T3 · Settings menu → bottom sheet ── */
+  /* ── T3 · Settings menu → dropdown sous le header ── */
+  .settings-desktop-only { display:none !important; }
   .settings-menu.open {
-    position:fixed; top:auto; bottom:0; left:0; right:0;
-    width:100%; border-radius:20px 20px 0 0;
-    max-height:85vh; overflow-y:auto;
-    padding-bottom:max(20px, env(safe-area-inset-bottom));
+    position:fixed;
+    top:calc(env(safe-area-inset-top) + 64px);
+    bottom:auto; left:0; right:0;
+    width:100%; border-radius:0 0 20px 20px;
+    max-height:calc(100dvh - env(safe-area-inset-top) - 64px - 56px - env(safe-area-inset-bottom));
+    overflow-y:auto; padding-bottom:12px;
     z-index:90; /* au-dessus de la tab bar (z-index:70) — rendu possible par app-header z:85 */
   }
 

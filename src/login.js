@@ -17,13 +17,29 @@ export function renderLoginContent(html) {
 }
 
 /* ── Bouton biométrique (injecté de façon asynchrone après le rendu du form) ── */
-function _makeQuickLoginSVG() {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+function _makeBiometricSVG() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
   svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', 'M13 2L3 14h9l-1 8 10-12h-9l1-8z');
-  svg.appendChild(path);
+  // Icône Face ID : 4 coins + yeux + sourire
+  [
+    'M7 3H5a2 2 0 0 0-2 2v2',
+    'M17 3h2a2 2 0 0 1 2 2v2',
+    'M7 21H5a2 2 0 0 1-2-2v-2',
+    'M17 21h2a2 2 0 0 0 2-2v-2',
+    'M9 10h.01',
+    'M15 10h.01',
+    'M9 15a3.5 3.5 0 0 0 6 0',
+  ].forEach(d => {
+    const p = document.createElementNS(ns, 'path');
+    p.setAttribute('d', d);
+    svg.appendChild(p);
+  });
   return svg;
 }
 
@@ -40,7 +56,7 @@ function _injectBiometricButton() {
     btn.type = 'button';
     btn.id = 'biometric-btn';
     btn.className = 'btn-biometric';
-    btn.appendChild(_makeQuickLoginSVG());
+    btn.appendChild(_makeBiometricSVG());
     btn.appendChild(document.createTextNode(' ' + biometricLabel()));
     btn.addEventListener('click', _handleBiometricLogin);
     footer.before(sep);
@@ -61,7 +77,7 @@ async function _handleBiometricLogin() {
     _initApp();
   } catch (err) {
     if (btn) { btn.disabled = false; btn.style.opacity = ''; }
-    if (err?.message === 'cancelled') return;
+    if (err?.name === 'NotAllowedError' || err?.message === 'cancelled') return;
     renderLoginScreen(err.message || 'Échec de l\'authentification biométrique.');
   }
 }
