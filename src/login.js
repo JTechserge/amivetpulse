@@ -1,8 +1,11 @@
 import { escapeHTML } from './utils.js';
 import { authSignIn, authUpdatePassword, authSendPasswordReset, authRefreshSession } from './auth.js';
 import {
-  isBiometricAvailable, isBiometricEnrolled,
-  authenticateWithBiometric, updateBiometricToken, biometricLabel,
+  isBiometricAvailable,
+  isBiometricEnrolled,
+  authenticateWithBiometric,
+  updateBiometricToken,
+  biometricLabel,
 } from './biometric-auth.js';
 
 let _loadCurrentUser, _initApp;
@@ -35,7 +38,7 @@ function _makeBiometricSVG() {
     'M9 10h.01',
     'M15 10h.01',
     'M9 15a3.5 3.5 0 0 0 6 0',
-  ].forEach(d => {
+  ].forEach((d) => {
     const p = document.createElementNS(ns, 'path');
     p.setAttribute('d', d);
     svg.appendChild(p);
@@ -45,7 +48,7 @@ function _makeBiometricSVG() {
 
 function _injectBiometricButton() {
   if (!isBiometricEnrolled()) return;
-  isBiometricAvailable().then(avail => {
+  isBiometricAvailable().then((avail) => {
     if (!avail) return;
     const footer = document.querySelector('#login-content .login-footer');
     if (!footer) return;
@@ -66,7 +69,10 @@ function _injectBiometricButton() {
 
 async function _handleBiometricLogin() {
   const btn = document.getElementById('biometric-btn');
-  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+  }
   try {
     const storedToken = await authenticateWithBiometric();
     if (!storedToken) throw new Error('cancelled');
@@ -76,9 +82,12 @@ async function _handleBiometricLogin() {
     if (!user) throw new Error('Profil introuvable — contactez un administrateur.');
     _initApp();
   } catch (err) {
-    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = '';
+    }
     if (err?.name === 'NotAllowedError' || err?.message === 'cancelled') return;
-    renderLoginScreen(err.message || 'Échec de l\'authentification biométrique.');
+    renderLoginScreen(err.message || "Échec de la connexion par clé d'accès.");
   }
 }
 
@@ -100,14 +109,17 @@ export function renderLoginScreen(errorMsg = '') {
     const email = document.getElementById('login-email').value.trim();
     const pwd = document.getElementById('login-password').value;
     const btn = e.target.querySelector('button[type=submit]');
-    btn.disabled = true; btn.textContent = 'Connexion…';
+    btn.disabled = true;
+    btn.textContent = 'Connexion…';
     try {
       const session = await authSignIn(email, pwd);
       updateBiometricToken(session.refresh_token);
       const user = await _loadCurrentUser();
       if (!user) throw new Error('Profil introuvable — contactez un administrateur.');
       _initApp();
-    } catch (err) { renderLoginScreen(err.message || 'Identifiants incorrects.'); }
+    } catch (err) {
+      renderLoginScreen(err.message || 'Identifiants incorrects.');
+    }
   };
   document.getElementById('forgot-btn').onclick = renderForgotPasswordScreen;
   _injectBiometricButton();
@@ -132,14 +144,19 @@ export function renderForgotPasswordScreen() {
     const email = document.getElementById('forgot-email').value.trim();
     const btn = e.target.querySelector('button[type=submit]');
     const msg = document.getElementById('forgot-msg');
-    btn.disabled = true; btn.textContent = 'Envoi…';
+    btn.disabled = true;
+    btn.textContent = 'Envoi…';
     try {
       await authSendPasswordReset(email);
       msg.textContent = 'Email envoyé ! Vérifiez votre boîte de réception.';
-      msg.style.color = 'var(--color-primary)'; msg.style.display = 'block';
+      msg.style.color = 'var(--color-primary)';
+      msg.style.display = 'block';
     } catch (err) {
-      msg.textContent = err.message; msg.style.color = '#B91C1C'; msg.style.display = 'block';
-      btn.disabled = false; btn.textContent = 'Envoyer le lien';
+      msg.textContent = err.message;
+      msg.style.color = '#B91C1C';
+      msg.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Envoyer le lien';
     }
   };
   document.getElementById('back-login').onclick = renderLoginScreen;
@@ -164,18 +181,32 @@ export function renderSetPasswordScreen(accessToken, isFirstLogin = false) {
     const conf = document.getElementById('set-pwd-confirm').value;
     const errEl = document.getElementById('set-pwd-error');
     const btn = e.target.querySelector('button[type=submit]');
-    if (next.length < 8) { errEl.textContent = 'Au moins 8 caractères.'; errEl.style.display = 'block'; return; }
-    if (next !== conf) { errEl.textContent = 'Les mots de passe ne correspondent pas.'; errEl.style.display = 'block'; return; }
-    btn.disabled = true; btn.textContent = 'Enregistrement…';
+    if (next.length < 8) {
+      errEl.textContent = 'Au moins 8 caractères.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if (next !== conf) {
+      errEl.textContent = 'Les mots de passe ne correspondent pas.';
+      errEl.style.display = 'block';
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Enregistrement…';
     try {
       await authUpdatePassword(accessToken, next);
       history.replaceState(null, '', window.location.pathname);
       const user = await _loadCurrentUser();
-      if (user) { _initApp(); }
-      else { renderLoginScreen('Mot de passe défini. Connectez-vous.'); }
+      if (user) {
+        _initApp();
+      } else {
+        renderLoginScreen('Mot de passe défini. Connectez-vous.');
+      }
     } catch (err) {
-      errEl.textContent = err.message; errEl.style.display = 'block';
-      btn.disabled = false; btn.textContent = 'Définir le mot de passe';
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Définir le mot de passe';
     }
   };
 }
