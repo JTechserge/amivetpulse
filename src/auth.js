@@ -47,3 +47,18 @@ export async function authSendPasswordReset(email){
   });
   if(!res.ok) throw new Error('Impossible d\'envoyer l\'email de réinitialisation.');
 }
+
+export async function authRefreshSession(refreshToken){
+  const res = await fetch(`${SUPABASE_AUTH_URL}token?grant_type=refresh_token`, {
+    method:'POST',
+    headers:{ apikey:SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
+    body:JSON.stringify({ refresh_token:refreshToken }),
+  });
+  if(!res.ok){
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err.error_description || err.message || `Erreur ${res.status}`);
+  }
+  const session = await res.json();
+  saveAuthSession(session);
+  return session;
+}

@@ -13,6 +13,10 @@ import { supabaseHeaders, getAuthSession, authUpdatePassword } from './auth.js';
 import { reindexPresentShades, saveASVRoster, savePersonColors } from './state.js';
 import { pushDataToSupabase } from './api.js';
 import { openNotificationSettingsModal } from './pwa.js';
+import {
+  isBiometricAvailable, isBiometricEnrolled,
+  registerBiometric, clearBiometric, biometricLabel,
+} from './biometric-auth.js';
 import { renderLoginScreen } from './login.js';
 import { renderCalendarView } from './calendar.js';
 
@@ -987,6 +991,7 @@ function buildSettingsMenuHtml(){
     <hr>
     <div class="settings-section-label">Mon compte${userName ? ` — ${escapeHTML(userName)}` : ''}</div>
     <button id="action-change-password" role="menuitem">🔑 Changer mon mot de passe</button>
+    <button id="action-biometric" role="menuitem">🔐 ${isBiometricEnrolled() ? `Désactiver ${biometricLabel()}` : `Activer ${biometricLabel()}`}</button>
     <button id="action-logout" class="danger" role="menuitem">🚪 Se déconnecter</button>
   `;
 }
@@ -1082,6 +1087,27 @@ function initSettingsMenu(){
   });
   document.getElementById('action-change-password').addEventListener('click', ()=>{
     menu.classList.remove('open'); openChangeMyPasswordModal();
+  });
+  document.getElementById('action-biometric').addEventListener('click', async ()=>{
+    menu.classList.remove('open');
+    const btn = document.getElementById('action-biometric');
+    if (isBiometricEnrolled()) {
+      clearBiometric();
+      showToast(`${biometricLabel()} désactivé`, '🔐');
+      if (btn) btn.textContent = `🔐 Activer ${biometricLabel()}`;
+    } else {
+      const avail = await isBiometricAvailable();
+      if (!avail) { showToast('Biométrie non disponible sur cet appareil', '⚠️'); return; }
+      const session = getAuthSession();
+      if (!session?.refresh_token) { showToast('Session expirée, reconnectez-vous d\'abord', '⚠️'); return; }
+      try {
+        await registerBiometric(store.currentUser?.email || '', session.refresh_token);
+        showToast(`${biometricLabel()} activé`, '🔐');
+        if (btn) btn.textContent = `🔐 Désactiver ${biometricLabel()}`;
+      } catch (e) {
+        if (e?.name !== 'NotAllowedError') showToast('Impossible d\'activer la biométrie', '⚠️');
+      }
+    }
   });
   document.getElementById('action-logout').addEventListener('click', async ()=>{
     menu.classList.remove('open');
