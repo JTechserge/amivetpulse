@@ -646,7 +646,7 @@ function buildWeekGrid(year, month, people) {
       const isWeekStart = i === 0 || dWD <= prevWD;
       // Compte les cellules ouvrées du segment jusqu'au franchissement de semaine suivant
       let weekRunLen = 1;
-      if (isWeekStart && displayLabel) {
+      if (isWeekStart) {
         for (let j = i + 1; j < runDays.length; j++) {
           const jWD = isoWeekday(new Date(year, month, parseInt(runDays[j].slice(8, 10), 10)));
           const prevJWD = isoWeekday(new Date(year, month, parseInt(runDays[j - 1].slice(8, 10), 10)));
@@ -762,19 +762,23 @@ function buildWeekGrid(year, month, people) {
             continue;
           }
           const ri = leaveRuns?.[person.id]?.[iso];
-          // Cellules non-isWeekStart absorbées par le span précédent — seulement si le run a un label
-          // (sinon weekRunLen=1 et le span ne couvre pas ces cellules → elles doivent être rendues normalement)
-          if (ri && !ri.isWeekStart && ri.hasLabel) {
+          // Cellules non-isWeekStart absorbées dans le span du isWeekStart
+          if (ri && !ri.isWeekStart) {
             wi++;
             continue;
           }
           if (ri && ri.isWeekStart) {
             const span = ri.weekRunLen;
             const spanStyle = span > 1 ? `grid-column:span ${span};` : '';
+            // Pour les runs avec label, forcer la couleur du type de congé sur toutes les halves
+            // (sinon seule la half du slot absent du jour isWeekStart prend la couleur)
+            const leaveHalfCls = ri.hasLabel
+              ? { repos: ' cal-wg-half-off', pending: ' cal-wg-half-leave-pending', conge: ' cal-wg-half-absent' }[ri.leaveType] ?? ' cal-wg-half-absent'
+              : null;
             const halves = SLOTS.map((slot) => {
               const info = cellRenderInfo(iso, person.id, slot);
               const lockCls = locked ? ' cal-wg-half-locked' : noEdit ? ' cal-wg-half-readonly' : '';
-              const stateCls = info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
+              const stateCls = leaveHalfCls ?? (info.stateClass ? ` cal-wg-half-${info.stateClass}` : '');
               return `<div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(iso, person.id, slot)}"></div>`;
             }).join('');
             const lbl = ri.label
