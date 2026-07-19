@@ -563,9 +563,9 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-wg-status-absent::before{background:var(--color-absent);}
 .cal-wg-status-pending::before{background:var(--color-leave-pending);}
 .cal-wg-week-block+.cal-wg-week-block{border-top:3px solid var(--color-secondary);}
-.cal-wg-week{display:grid;grid-template-columns:40px repeat(6,1fr) 0.5fr;}
+.cal-wg-week{display:grid;grid-template-columns:40px repeat(6,1fr) 0.5fr;row-gap:2px;}
 .cal-wg-week-ot{display:flex;align-items:center;gap:10px;padding:3px 12px;background:var(--color-secondary);border-top:1px solid var(--color-border);font-size:11px;flex-wrap:wrap;}
-.cal-wg-day{border-right:0.5px solid var(--color-border);display:flex;flex-direction:column;min-height:84px;}
+.cal-wg-day{border-right:0.5px solid var(--color-border);display:flex;flex-direction:column;}
 .cal-wg-day:last-child{border-right:none;}
 .cal-wg-day-empty{background:var(--color-secondary);}
 .cal-wg-day-sa{background:var(--color-saturday);}
@@ -581,7 +581,8 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-wg-tool-btn:hover{background:rgba(234,88,12,0.1);color:var(--color-primary);}
 .cal-wg-tool-btn.has-comment{color:var(--color-primary);}
 .cal-wg-persons{flex:1;display:flex;flex-direction:column;padding:0 3px 3px;gap:2px;}
-.cal-wg-pstrip{flex:1;display:flex;border-radius:4px;overflow:hidden;min-height:20px;border:0.5px solid transparent;}
+.cal-wg-pstrip{display:flex;border-radius:4px;overflow:hidden;min-height:20px;border:0.5px solid transparent;}
+.cal-wg-pstrip-null{background:var(--color-secondary);}
 .cal-wg-half{flex:1;display:flex;align-items:center;justify-content:center;font-size:7.5px;font-weight:600;cursor:pointer;transition:filter var(--transition);color:var(--color-text-muted);background:var(--color-surface);user-select:none;overflow:hidden;white-space:nowrap;}
 .cal-wg-half+.cal-wg-half{border-left:0.5px solid rgba(128,128,128,0.15);}
 .cal-wg-half:hover{filter:brightness(0.94);}
@@ -595,10 +596,8 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-wg-half-off{background:var(--color-off);color:var(--color-off-text);}
 .cal-wg-half-opening{background:var(--color-opening);border-color:var(--color-opening-border);color:var(--color-opening-text);}
 .cal-wg-half-closing{background:var(--color-closing);border-color:var(--color-closing-border);color:var(--color-closing-text);}
-.cal-wg-label-col{border-right:1px solid var(--color-border);background:var(--color-secondary);display:flex;flex-direction:column;overflow:hidden;}
-.cal-wg-label-spacer{min-height:32px;flex-shrink:0;}
-.cal-wg-label-persons{flex:1;display:flex;flex-direction:column;padding:0 2px 3px;gap:2px;}
-.cal-wg-plabel{flex:1;display:flex;align-items:center;justify-content:center;min-height:20px;border-radius:3px;font-size:8px;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.cal-wg-label-spacer{background:var(--color-secondary);border-right:1px solid var(--color-border);}
+.cal-wg-plabel{display:flex;align-items:center;justify-content:center;min-height:20px;border-radius:3px;font-size:8px;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;background:var(--color-secondary);border-right:1px solid var(--color-border);padding:0 2px;}
 .plabel-archived{opacity:0.4;}
 .cal-wg-half-locked{cursor:not-allowed;opacity:0.62;filter:grayscale(35%);}
 .cal-wg-half-locked:hover{filter:grayscale(35%);}
@@ -946,17 +945,11 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .hm1-abs[data-lbl]::after{content:attr(data-lbl);position:absolute;top:50%;left:0;right:0;transform:translateY(-50%);font-size:8px;font-weight:700;color:#fff;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 3px;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.4);z-index:1;}
 /* Feature 2 : Fusion visuelle congés (vue grille mensuelle)
    Gap entre jours = padding(3px) + border(0.5px) + padding(3px) = ~7px
-   → marges négatives pour combler le blanc entre colonnes */
-.pstrip-leave-start{border-radius:5px 0 0 5px!important;margin-right:-7px;position:relative;z-index:2;}
-.pstrip-leave-mid{border-radius:0!important;margin-left:-7px;margin-right:-7px;position:relative;z-index:1;}
-.pstrip-leave-end{border-radius:0 5px 5px 0!important;margin-left:-7px;position:relative;z-index:2;}
-.pstrip-leave-label{position:absolute;top:0;bottom:0;left:0;width:calc(var(--wl,1)*(100% + 7px) - 7px);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.4);padding:0 3px;z-index:3;}
-/* Quand un label est présent : masquer les icônes avion, agrandir le texte */
-.pstrip-leave-labeled .cell-mark{display:none;}
-.pstrip-leave-labeled .cal-wg-half{font-size:0;}
-.pstrip-leave-labeled .pstrip-leave-label{font-size:11px;}
-.pstrip-leave-label.lbl-repos{color:#7C2D12;text-shadow:none;}
-.pstrip-leave-label.lbl-conge{color:#7F1D1D;text-shadow:none;}
+   → vraie fusion via grid-column:span N, pas de rustine CSS */
+.pstrip-leave-label-merged{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px;z-index:1;}
+.pstrip-leave-label-merged.lbl-repos{color:#7C2D12;text-shadow:none;}
+.pstrip-leave-label-merged.lbl-conge{color:#fff;}
+.pstrip-leave-label-merged.lbl-pending{color:#fff;}
 /* ===== Feature 3 : % Samedis dashboard ===== */
 .stat-pct{font-size:12px;color:var(--color-text-muted);font-weight:400;}
 .week-th.is-holiday{background:#FEF3C7;color:#92400E;}
