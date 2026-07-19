@@ -870,31 +870,9 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .ecart-equilibre{color:var(--color-text-muted);font-weight:700;}
 
 /* ============================================================
-   Vue annuelle (heatmap)
+   Vue annuelle (heatmap) — styles de base
    ============================================================ */
-.heatmap-wrap{overflow-x:auto;}
-.heatmap-table{width:100%;border-collapse:separate;border-spacing:1.5px;table-layout:fixed;}
-.heatmap-table th{font-size:11px;line-height:1;color:var(--color-text-muted);font-weight:700;padding:1px 0;text-align:center;}
-.heatmap-table .col-month{width:44px;}
-.heatmap-table .col-label{width:54px;}
-.heatmap-table td{padding:0;line-height:0;}
-.heatmap-month-label{font-size:12px;line-height:1;font-weight:800;color:var(--color-text);text-align:center;background:var(--color-secondary);}
-.heatmap-row-label{font-size:11.5px;line-height:1;font-weight:800;text-align:left;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.heatmap-cell{
-  width:100%;height:17px;border-radius:3px;cursor:pointer;position:relative;
-  border:1px solid rgba(0,0,0,0.05);transition:transform var(--transition);
-  box-sizing:border-box;
-}
-.heatmap-cell:hover{transform:scale(1.12);z-index:3;box-shadow:var(--shadow-sm);}
-.heatmap-cell.empty-cell{visibility:hidden;cursor:default;}
-.heatmap-weekday-row{background:var(--color-secondary);}
-.heatmap-weekday-cell{
-  font-size:9px;font-weight:700;color:var(--color-text-muted);text-align:center;
-  line-height:14px;height:14px;
-}
-.heatmap-weekday-cell.is-saturday{background:var(--color-saturday);}
-.heatmap-weekday-cell.is-sunday{background:var(--color-sunday);}
-.heatmap-weekday-cell.empty-cell{visibility:hidden;}
+.heatmap-wrap{overflow:auto;max-height:72vh;border:1px solid var(--color-border);border-radius:8px;background:var(--color-card);}
 
 /* ============================================================
    Utilitaires
@@ -938,38 +916,29 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .clinic-bulk-actions{display:flex;gap:8px;flex-wrap:wrap;padding:8px 0 4px;margin:0 2px;}
 .clinic-bulk-actions .btn{font-size:12px;padding:5px 10px;}
 
-/* ===== Feature 6 : Vue annuelle redessinée ===== */
-.heatmap-wrap{overflow:auto;max-height:72vh;border:1px solid var(--color-border);border-radius:8px;background:var(--color-card);}
-.heatmap-table{border-collapse:separate;border-spacing:2px;min-width:max-content;font-size:11px;}
-.col-month{width:32px;}
-.col-label{width:58px;}
-.col-day{width:32px;}
-.hm-corner{position:sticky;top:0;left:0;z-index:5;background:var(--color-card);border-bottom:2px solid var(--color-border);}
-.hm-corner.hm-corner-2{left:32px;z-index:4;}
-.hm-daynum{position:sticky;top:0;z-index:2;background:var(--color-card);padding:5px 2px;text-align:center;font-weight:600;font-size:11px;border-bottom:2px solid var(--color-border);min-width:27px;}
-.hm-month-lbl{position:sticky;left:0;z-index:3;background:var(--color-card);padding:4px 2px;font-weight:700;font-size:11px;text-align:center;vertical-align:middle;border-right:1px solid var(--color-border);white-space:nowrap;}
-.hm-person-lbl{position:sticky;left:32px;z-index:2;background:var(--color-card);padding:2px 5px;font-size:11px;font-weight:600;white-space:nowrap;border-right:1px solid var(--color-border);min-width:58px;}
-.hm-wd-lbl{font-size:10px;font-weight:400;color:var(--color-text-muted);}
-.hm-wd-cell{text-align:center;font-size:9px;color:var(--color-text-muted);padding:2px 0;height:16px;}
-.hm-wd-cell.hm-sat{color:#6366F1;}
-.hm-wd-cell.hm-sun{color:#DC2626;}
-.hm-wd-cell.hm-today{color:var(--color-primary);font-weight:700;}
-.hm-day-td{padding:2px;vertical-align:middle;text-align:center;}
-.hm-day-td.hm-today{background:rgba(82,130,255,0.07);}
-.heatmap-cell{display:inline-block;width:28px;height:24px;border-radius:4px;cursor:pointer;vertical-align:middle;}
-.heatmap-cell:hover{opacity:0.75;outline:2px solid var(--color-primary);outline-offset:1px;}
-.heatmap-cell:focus{outline:2px solid var(--color-primary);outline-offset:1px;}
-.heatmap-cell.hm-empty{background:transparent;cursor:default;}
-.heatmap-cell.hm-empty:hover{outline:none;opacity:1;}
-.heatmap-cell.hm-sun{background:var(--color-sunday,#f1f5f9);cursor:default;}
-.heatmap-cell.hm-sun:hover{outline:none;opacity:1;}
-/* Feature 2 : Fusion colspan congés (vue annuelle) */
-.hm-leave-merged{padding:2px;vertical-align:middle;overflow:hidden;}
-.hm-leave-cell{display:flex;align-items:center;justify-content:center;width:100%;height:24px;cursor:pointer;border-radius:4px;position:relative;}
-.hm-leave-cell:hover{opacity:0.75;outline:2px solid var(--color-primary);outline-offset:1px;}
-.hm-leave-cell:focus{outline:2px solid var(--color-primary);outline-offset:1px;}
-.hm-leave-label{font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px;text-shadow:0 1px 2px rgba(0,0,0,.4);pointer-events:none;max-width:100%;}
-.hm-empty-col{padding:0;background:transparent;}
+/* ===== Feature 6 : Vue annuelle — heatmap uniforme ===== */
+.hm1-table{border-collapse:separate;border-spacing:2px;min-width:max-content;font-size:11px;}
+.hm1-col-lbl{width:60px;}
+.hm1-col-day{width:32px;}
+.hm1-mlbl{font-size:11px;font-weight:700;color:var(--color-text-muted);text-align:right;padding-right:8px;white-space:nowrap;vertical-align:middle;position:sticky;left:0;background:var(--color-card);z-index:3;}
+.hm1-plbl{font-size:10px;font-weight:600;padding-right:8px;text-align:right;white-space:nowrap;vertical-align:middle;position:sticky;left:0;background:var(--color-card);z-index:3;min-width:60px;}
+.hm1-dn{font-size:9px;color:var(--color-text-muted);text-align:center;padding-bottom:2px;font-variant-numeric:tabular-nums;}
+.hm1-wd{font-size:8.5px;color:var(--color-text-muted);text-align:center;padding-bottom:3px;}
+.hm1-wd-sat{color:#6366F1;}
+.hm1-wd-sun{color:#DC2626;}
+.hm1-c{width:32px;height:26px;border-radius:4px;cursor:pointer;}
+.hm1-c:hover{opacity:.75;outline:2px solid var(--color-primary);outline-offset:1px;}
+.hm1-c:focus{outline:2px solid var(--color-primary);outline-offset:1px;}
+.hm1-we,.hm1-su,.hm1-em{cursor:default;}
+.hm1-we:hover,.hm1-su:hover,.hm1-em:hover{opacity:1;outline:none;}
+.hm1-pre{background:#6EE7A0;}
+.hm1-abs{background:var(--color-absent);}
+.hm1-we{background:var(--color-saturday,#F1F5F9);}
+.hm1-su{background:var(--color-sunday,#FEF2F2);}
+.hm1-em{background:transparent;}
+.hm1-cc{background-image:repeating-linear-gradient(45deg,rgba(0,0,0,0.08) 0px,rgba(0,0,0,0.08) 2px,transparent 2px,transparent 5px);}
+.hm1-today{outline:1px solid var(--color-primary)!important;outline-offset:1px;}
+.hm1-sep td{height:5px;}
 /* Feature 2 : Fusion visuelle congés (vue grille mensuelle)
    Gap entre jours = padding(3px) + border(0.5px) + padding(3px) = ~7px
    → marges négatives pour combler le blanc entre colonnes */
@@ -981,9 +950,6 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .pstrip-leave-labeled .cell-mark{display:none;}
 .pstrip-leave-labeled .cal-wg-half{font-size:0;}
 .pstrip-leave-labeled .pstrip-leave-label{font-size:11px;}
-.heatmap-cell.hm-today:not(.hm-empty):not(.hm-sun){outline:2px solid var(--color-primary);outline-offset:1px;}
-.heatmap-cell.hm-clinic-closed{background-image:repeating-linear-gradient(45deg,rgba(0,0,0,0.08) 0px,rgba(0,0,0,0.08) 2px,transparent 2px,transparent 5px)!important;opacity:0.6;}
-.hm-sep td{height:6px;background:var(--color-surface,#f8fafc);border-top:2px solid var(--color-border);}
 /* ===== Feature 3 : % Samedis dashboard ===== */
 .stat-pct{font-size:12px;color:var(--color-text-muted);font-weight:400;}
 .week-th.is-holiday{background:#FEF3C7;color:#92400E;}

@@ -64,130 +64,78 @@ export function heatmapSlotColor(person, iso, slot) {
 
 export function buildHeatmap(year, people = PEOPLE) {
   const todayISO = fmtISO(new Date());
-  const dayNums = Array.from({ length: 31 }, (_, i) => `<th class="hm-daynum">${i + 1}</th>`).join('');
 
   let rows = '';
   for (let month = 0; month < 12; month++) {
     const nbDays = daysInMonth(year, month);
 
-    // Sous-ligne jours de la semaine pour ce mois
-    let wdCols = '';
-    for (let day = 1; day <= 31; day++) {
-      if (day > nbDays) {
-        wdCols += `<td class="hm-wd-cell hm-empty"></td>`;
-        continue;
-      }
-      const date = new Date(year, month, day);
-      const iso = fmtISO(date);
-      const wd = isoWeekday(date);
-      const isSat = wd === 5,
-        isSun = wd === 6;
-      const isToday = iso === todayISO;
-      wdCols +=
-        `<td class="hm-wd-cell${isSun ? ' hm-sun' : isSat ? ' hm-sat' : ''}${isToday ? ' hm-today' : ''}">` +
-        `${WEEKDAY_NAMES[wd].slice(0, 2)}</td>`;
+    // Row 1 : numéros de jours — mlbl couvre les 2 lignes d'en-tête
+    let dnCells = '';
+    for (let d = 1; d <= 31; d++) {
+      dnCells += d <= nbDays ? `<td class="hm1-dn">${d}</td>` : '<td></td>';
     }
+    rows += `<tr><td class="hm1-mlbl" rowspan="2">${MONTH_SHORT[month]}</td>${dnCells}</tr>`;
 
-    rows +=
-      `<tr class="hm-wd-row">` +
-      `<th class="hm-month-lbl" rowspan="${people.length + 1}">${MONTH_SHORT[month]}</th>` +
-      `<th class="hm-person-lbl hm-wd-lbl"></th>` +
-      wdCols +
-      `</tr>`;
+    // Row 2 : lettres jour de semaine (col 1 occupée par rowspan)
+    let wdCells = '';
+    for (let d = 1; d <= 31; d++) {
+      if (d > nbDays) { wdCells += '<td></td>'; continue; }
+      const wd = isoWeekday(new Date(year, month, d));
+      const cls = wd === 6 ? ' hm1-wd-sun' : wd === 5 ? ' hm1-wd-sat' : '';
+      wdCells += `<td class="hm1-wd${cls}">${WEEKDAY_NAMES[wd].slice(0, 2)}</td>`;
+    }
+    rows += `<tr>${wdCells}</tr>`;
 
+    // Lignes par personne
     people.forEach((person) => {
       let cells = '';
-      let day = 1;
-      while (day <= 31) {
-        if (day > nbDays) {
-          cells += `<td class="hm-day-td hm-empty-col"></td>`;
-          day++;
-          continue;
-        }
-        const date = new Date(year, month, day);
+      for (let d = 1; d <= 31; d++) {
+        if (d > nbDays) { cells += '<td class="hm1-c hm1-em"></td>'; continue; }
+        const date = new Date(year, month, d);
         const iso = fmtISO(date);
         const wd = isoWeekday(date);
-        const isSun = wd === 6;
         const isToday = iso === todayISO;
-        const clinicClosed = isClinicClosed(iso);
 
-        if (isSun) {
-          cells +=
-            `<td class="hm-day-td${isToday ? ' hm-today' : ''}">` +
-            `<div class="heatmap-cell hm-sun" title="${formatFR(iso)} — Dimanche"></div></td>`;
-          day++;
-          continue;
-        }
-
-        const mState = getSlotState(iso, person.id, 'M');
-        const amState = getSlotState(iso, person.id, 'AM');
-        const isAbsent = mState === 'absent' || amState === 'absent';
-
-        if (isAbsent) {
-          // Fusion colspan réelle : détecte le run de jours consécutifs absents (dimanche = coupure)
-          const runStartISO = iso;
-          const label = getSlotLabel(iso, person.id, 'M') || getSlotLabel(iso, person.id, 'AM') || '';
-          const colorM = heatmapSlotColor(person, iso, 'M');
-          let runLen = 1;
-          let nextDay = day + 1;
-          while (nextDay <= nbDays) {
-            const nd = new Date(year, month, nextDay);
-            if (isoWeekday(nd) === 6) break;
-            const ni = fmtISO(nd);
-            if (getSlotState(ni, person.id, 'M') !== 'absent' && getSlotState(ni, person.id, 'AM') !== 'absent') break;
-            runLen++;
-            nextDay++;
-          }
-          const titleRun = `${formatFR(runStartISO)}${runLen > 1 ? ` → ${formatFR(fmtISO(new Date(year, month, nextDay - 1)))}` : ''} — Absence${label ? ' (' + label + ')' : ''}${clinicClosed ? ' · 🔒 Fermée' : ''}`;
-          cells +=
-            `<td class="hm-day-td hm-leave-merged${clinicClosed ? ' hm-clinic-closed' : ''}" colspan="${runLen}" title="${escapeHTML(titleRun)}">` +
-            `<div class="heatmap-cell hm-leave-cell" data-date="${runStartISO}" style="background:${colorM};" ` +
-            `tabindex="0" role="button" aria-label="Congé du ${formatFR(runStartISO)}">` +
-            `${label ? `<span class="hm-leave-label">${escapeHTML(label)}</span>` : ''}` +
-            `</div></td>`;
-          day = nextDay;
+        let cls = 'hm1-c';
+        let titleSuffix = '';
+        if (wd === 6) {
+          cls += ' hm1-su';
+          titleSuffix = ' — Dimanche';
+        } else if (wd === 5) {
+          cls += ' hm1-we';
+          titleSuffix = ' — Samedi';
         } else {
-          // Option 1 : une couleur unie par jour — pas de split M/AM
-          const isPresent = mState === 'present' || amState === 'present';
-          const bg = isPresent ? '#6EE7A0' : 'transparent';
-          const hName = holidayName(iso);
-          const extraStyle = hName ? 'outline:2px solid var(--color-holiday);outline-offset:-2px;' : '';
-          const overtime = getOvertimeHours(iso, person.id);
-          const title = `${formatFR(iso)}${hName ? ' — ' + hName : ''} — Mat : ${stateLabel(iso, person.id, 'M')} · AM : ${stateLabel(iso, person.id, 'AM')}${overtime > 0 ? ' · +' + formatNum(overtime) + 'h' : ''}${clinicClosed ? ' · 🔒 Fermée' : ''}`;
-          const cellCls = `heatmap-cell${!isPresent ? ' hm-empty' : ''}${clinicClosed ? ' hm-clinic-closed' : ''}${isToday ? ' hm-today' : ''}`;
-          cells +=
-            `<td class="hm-day-td${isToday ? ' hm-today' : ''}">` +
-            `<div class="${cellCls}" data-date="${iso}" style="background:${bg};${extraStyle}" ` +
-            `title="${escapeHTML(title)}" tabindex="0" role="button" aria-label="Détail du ${formatFR(iso)}"></div></td>`;
-          day++;
+          const mState = getSlotState(iso, person.id, 'M');
+          const amState = getSlotState(iso, person.id, 'AM');
+          if (mState === 'absent' || amState === 'absent') {
+            const label = getSlotLabel(iso, person.id, 'M') || getSlotLabel(iso, person.id, 'AM') || '';
+            cls += ' hm1-abs';
+            titleSuffix = label ? ` — Absent (${label})` : ' — Absent';
+          } else if (mState === 'present' || amState === 'present') {
+            cls += ' hm1-pre';
+            titleSuffix = ' — Présent';
+          } else {
+            cls += ' hm1-em';
+          }
+          if (isClinicClosed(iso)) cls += ' hm1-cc';
+          if (isToday) cls += ' hm1-today';
         }
-      }
 
-      rows +=
-        `<tr class="hm-person-row">` +
-        `<th class="hm-person-lbl" style="color:${person.color}">${person.short}</th>` +
-        cells +
-        `</tr>`;
+        cells += `<td class="${cls}" data-date="${iso}" title="${escapeHTML(formatFR(iso) + titleSuffix)}" tabindex="0" role="button" aria-label="Détail du ${formatFR(iso)}"></td>`;
+      }
+      rows += `<tr><td class="hm1-plbl" style="color:${person.color}">${person.short}</td>${cells}</tr>`;
     });
 
-    if (month < 11) rows += `<tr class="hm-sep"><td colspan="33"></td></tr>`;
+    if (month < 11) rows += `<tr class="hm1-sep"><td colspan="32"></td></tr>`;
   }
 
   return `
     <div class="heatmap-wrap">
-      <table class="heatmap-table">
+      <table class="hm1-table">
         <colgroup>
-          <col class="col-month">
-          <col class="col-label">
-          ${'<col class="col-day">'.repeat(31)}
+          <col class="hm1-col-lbl">
+          ${'<col class="hm1-col-day">'.repeat(31)}
         </colgroup>
-        <thead>
-          <tr class="hm-header-row">
-            <th class="hm-corner"></th>
-            <th class="hm-corner hm-corner-2"></th>
-            ${dayNums}
-          </tr>
-        </thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
@@ -260,7 +208,7 @@ export function renderAnnualViewForGroup(group) {
     renderAnnualViewForGroup(group);
     _saveViewState();
   });
-  container.querySelectorAll('.heatmap-cell[data-date]').forEach((cell) => {
+  container.querySelectorAll('td.hm1-c[data-date]').forEach((cell) => {
     cell.addEventListener('click', () => openAnnualDayDetail(cell.dataset.date, cfg.people, viewKey));
     cell.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
