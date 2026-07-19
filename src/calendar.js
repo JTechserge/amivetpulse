@@ -386,19 +386,31 @@ function collectContiguousAbsentSlots(personId, iso, slot, direction) {
 
 function propagateLabelAcrossSunday(personId, slots, label) {
   if (!slots.length) return;
-  const first = slots[0],
-    last = slots[slots.length - 1];
-  const before = prevSlotAcrossSunday(first.iso, first.slot);
-  if (before && getSlotState(before.iso, personId, before.slot) === 'absent') {
-    collectContiguousAbsentSlots(personId, before.iso, before.slot, -1).forEach(({ iso, slot }) =>
-      setSlotLabel(iso, personId, slot, label)
-    );
+  const startDate = new Date(slots[0].iso + 'T00:00:00');
+  const dayIsAbsent = (d) => SLOTS.some((s) => getSlotState(fmtISO(d), personId, s) === 'absent');
+  // Remonter jour par jour (sauter dimanches) pour trouver le début du run
+  let runStart = new Date(startDate);
+  for (let d = new Date(startDate.getTime() - 86400000); ; d = new Date(d.getTime() - 86400000)) {
+    if (isSunday(d)) continue;
+    if (!dayIsAbsent(d)) break;
+    runStart = new Date(d);
+    if (d.getFullYear() < 2020) break;
   }
-  const after = nextSlotAcrossSunday(last.iso, last.slot);
-  if (after && getSlotState(after.iso, personId, after.slot) === 'absent') {
-    collectContiguousAbsentSlots(personId, after.iso, after.slot, 1).forEach(({ iso, slot }) =>
-      setSlotLabel(iso, personId, slot, label)
-    );
+  // Avancer jour par jour (sauter dimanches) pour trouver la fin du run
+  let runEnd = new Date(startDate);
+  for (let d = new Date(startDate.getTime() + 86400000); ; d = new Date(d.getTime() + 86400000)) {
+    if (isSunday(d)) continue;
+    if (!dayIsAbsent(d)) break;
+    runEnd = new Date(d);
+    if (d.getFullYear() > 2030) break;
+  }
+  // Appliquer le label à tous les slots absents du run
+  for (let d = new Date(runStart); d <= runEnd; d = new Date(d.getTime() + 86400000)) {
+    if (isSunday(d)) continue;
+    const iso = fmtISO(d);
+    SLOTS.forEach((s) => {
+      if (getSlotState(iso, personId, s) === 'absent') setSlotLabel(iso, personId, s, label);
+    });
   }
 }
 

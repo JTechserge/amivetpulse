@@ -114,6 +114,46 @@ export function buildHeatmap(year, people = PEOPLE) {
         return '';
       };
 
+      // isAbsDayOrSat : absent tout jour sauf dimanche (idem buildRun : samedis inclus, dimanches sautés)
+      const isAbsDayOrSat = (dd) => {
+        if (dd < 1 || dd > nbDays) return false;
+        if (isoWeekday(new Date(year, month, dd)) === 6) return false;
+        const iso = fmtISO(new Date(year, month, dd));
+        return getSlotState(iso, person.id, 'M') === 'absent' || getSlotState(iso, person.id, 'AM') === 'absent';
+      };
+
+      // superRunLabel : pour chaque super-run d'absence (samedis inclus, dimanches traversés),
+      // propaguer le label du 1er jour absent à tous les débuts de runs weekday du même super-run.
+      const superRunLabel = new Map(); // weekday run-start dd → { label, type }
+      {
+        let sp = 1;
+        while (sp <= nbDays) {
+          if (isoWeekday(new Date(year, month, sp)) === 6) { sp++; continue; }
+          if (!isAbsDayOrSat(sp)) { sp++; continue; }
+          let prevD = sp - 1;
+          while (prevD >= 1 && isoWeekday(new Date(year, month, prevD)) === 6) prevD--;
+          if (prevD >= 1 && isAbsDayOrSat(prevD)) { sp++; continue; }
+          const isoSp = fmtISO(new Date(year, month, sp));
+          const lbl = getSlotLabel(isoSp, person.id, 'M') || getSlotLabel(isoSp, person.id, 'AM') || '';
+          if (lbl) {
+            const typeSp = absType(isoSp);
+            let end = sp;
+            let ptr = sp + 1;
+            while (ptr <= nbDays) {
+              if (isoWeekday(new Date(year, month, ptr)) === 6) { ptr++; continue; }
+              if (!isAbsDayOrSat(ptr)) break;
+              end = ptr; ptr++;
+            }
+            for (let d2 = sp; d2 <= end; d2++) {
+              if (!isAbsDay(d2)) continue;
+              if (isAbsDay(d2 - 1)) continue;
+              superRunLabel.set(d2, { label: lbl, type: typeSp });
+            }
+            sp = end + 1;
+          } else { sp++; }
+        }
+      }
+
       // Pré-calcul : runs d'absence avec label → colspan pour centrer le motif
       const runColspans = new Map(); // dd → { runLen, label, type }
       const absorbedDays = new Set();
@@ -121,24 +161,16 @@ export function buildHeatmap(year, people = PEOPLE) {
         if (!isAbsDay(dd)) continue;
         if (isAbsDay(dd - 1)) continue; // pas un début de run
         const iso0 = fmtISO(new Date(year, month, dd));
-        let lbl0 = getSlotLabel(iso0, person.id, 'M') || getSlotLabel(iso0, person.id, 'AM') || '';
-        // Si lundi sans label : le label est souvent sur le samedi précédent (1er jour absent du run).
-        // buildRun inclut les samedis alors que isAbsDay les exclut → chercher en arrière.
-        if (!lbl0 && isoWeekday(new Date(year, month, dd)) === 0) {
-          const satD = dd - 2;
-          if (satD >= 1 && isoWeekday(new Date(year, month, satD)) === 5) {
-            const isoSat = fmtISO(new Date(year, month, satD));
-            const satAbs =
-              getSlotState(isoSat, person.id, 'M') === 'absent' ||
-              getSlotState(isoSat, person.id, 'AM') === 'absent';
-            if (satAbs) lbl0 = getSlotLabel(isoSat, person.id, 'M') || getSlotLabel(isoSat, person.id, 'AM') || '';
-          }
-        }
+        const srEntry = superRunLabel.get(dd);
+        const lbl0 = getSlotLabel(iso0, person.id, 'M') || getSlotLabel(iso0, person.id, 'AM') || (srEntry?.label ?? '');
         if (!lbl0) continue;
-        const type0 = absType(iso0);
+        const type0 = srEntry ? srEntry.type : absType(iso0);
         let runLen = 1;
         let nd = dd + 1;
-        while (nd <= nbDays && isAbsDay(nd)) { runLen++; nd++; }
+        while (nd <= nbDays && isAbsDay(nd)) {
+          runLen++;
+          nd++;
+        }
         if (runLen > 1) {
           runColspans.set(dd, { runLen, label: lbl0, type: type0 });
           for (let i = dd + 1; i < dd + runLen; i++) absorbedDays.add(i);
