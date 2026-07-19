@@ -91,7 +91,7 @@ export function buildHeatmap(year, people = PEOPLE) {
 
     // Lignes par personne
     people.forEach((person) => {
-      // Retourne vrai si le jour dd du mois courant est absent (les week-ends brisent les runs)
+      // Retourne vrai si le jour dd est un jour ouvré absent (weekends brisent les runs)
       const isAbsDay = (dd) => {
         if (dd < 1 || dd > nbDays) return false;
         const dt = new Date(year, month, dd);
@@ -101,27 +101,53 @@ export function buildHeatmap(year, people = PEOPLE) {
         return getSlotState(i, person.id, 'M') === 'absent' || getSlotState(i, person.id, 'AM') === 'absent';
       };
 
+      // Type d'absence → code couleur identique à la vue mensuelle
+      const absType = (iso) => {
+        const lbl = getSlotLabel(iso, person.id, 'M') || getSlotLabel(iso, person.id, 'AM') || '';
+        const lc = lbl.toLowerCase().trim();
+        if (lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé') return 'off';
+        if (isASVPerson(person.id)) {
+          const dec = getLeaveDecision(iso, person.id, 'M') || getLeaveDecision(iso, person.id, 'AM') || 'pending';
+          if (dec === 'rejected') return 'rejected';
+          if (dec === 'pending') return 'pending';
+        }
+        return '';
+      };
+
       // Pré-calcul : runs d'absence avec label → colspan pour centrer le motif
-      const runColspans = new Map(); // jour de début → longueur du run
-      const absorbedDays = new Set(); // jours absorbés par un colspan
+      const runColspans = new Map(); // dd → { runLen, label, type }
+      const absorbedDays = new Set();
       for (let dd = 1; dd <= nbDays; dd++) {
         if (!isAbsDay(dd)) continue;
         if (isAbsDay(dd - 1)) continue; // pas un début de run
         const iso0 = fmtISO(new Date(year, month, dd));
-        const lbl0 = getSlotLabel(iso0, person.id, 'M') || getSlotLabel(iso0, person.id, 'AM') || '';
+        let lbl0 = getSlotLabel(iso0, person.id, 'M') || getSlotLabel(iso0, person.id, 'AM') || '';
+        // Si lundi sans label : le label est souvent sur le samedi précédent (1er jour absent du run).
+        // buildRun inclut les samedis alors que isAbsDay les exclut → chercher en arrière.
+        if (!lbl0 && isoWeekday(new Date(year, month, dd)) === 0) {
+          const satD = dd - 2;
+          if (satD >= 1 && isoWeekday(new Date(year, month, satD)) === 5) {
+            const isoSat = fmtISO(new Date(year, month, satD));
+            const satAbs =
+              getSlotState(isoSat, person.id, 'M') === 'absent' ||
+              getSlotState(isoSat, person.id, 'AM') === 'absent';
+            if (satAbs) lbl0 = getSlotLabel(isoSat, person.id, 'M') || getSlotLabel(isoSat, person.id, 'AM') || '';
+          }
+        }
         if (!lbl0) continue;
+        const type0 = absType(iso0);
         let runLen = 1;
         let nd = dd + 1;
         while (nd <= nbDays && isAbsDay(nd)) { runLen++; nd++; }
         if (runLen > 1) {
-          runColspans.set(dd, runLen);
+          runColspans.set(dd, { runLen, label: lbl0, type: type0 });
           for (let i = dd + 1; i < dd + runLen; i++) absorbedDays.add(i);
         }
       }
 
       let cells = '';
       for (let d = 1; d <= 31; d++) {
-        if (absorbedDays.has(d)) continue; // absorbé par colspan précédent
+        if (absorbedDays.has(d)) continue;
         if (d > nbDays) {
           cells += '<td class="hm1-c hm1-em"></td>';
           continue;
@@ -147,17 +173,21 @@ export function buildHeatmap(year, people = PEOPLE) {
             const label = getSlotLabel(iso, person.id, 'M') || getSlotLabel(iso, person.id, 'AM') || '';
             const prevAbs = isAbsDay(d - 1);
             const nextAbs = isAbsDay(d + 1);
+            const tc = absType(iso);
+            const typeCls = tc ? ` hm1-type-${tc}` : '';
             if (runColspans.has(d)) {
-              const runLen = runColspans.get(d);
-              cls += ' hm1-abs run-labeled';
-              extraAttr = ` colspan="${runLen}" data-lbl="${escapeHTML(label)}"`;
+              const { runLen, label: lbl, type } = runColspans.get(d);
+              const tcs = type ? ` hm1-type-${type}` : '';
+              cls += ` hm1-abs run-labeled${tcs}`;
+              extraAttr = ` colspan="${runLen}" data-lbl="${escapeHTML(lbl)}"`;
+              titleSuffix = ` — Absent (${lbl})`;
             } else {
               const runCls =
                 prevAbs && nextAbs ? ' run-mid' : !prevAbs && nextAbs ? ' run-start' : prevAbs ? ' run-end' : '';
-              cls += ' hm1-abs' + runCls;
+              cls += ' hm1-abs' + runCls + typeCls;
+              titleSuffix = label ? ` — Absent (${label})` : ' — Absent';
               if (label && !prevAbs) extraAttr = ` data-lbl="${escapeHTML(label)}"`;
             }
-            titleSuffix = label ? ` — Absent (${label})` : ' — Absent';
           } else if (mState === 'present' || amState === 'present') {
             cls += ' hm1-pre';
             titleSuffix = ' — Présent';
