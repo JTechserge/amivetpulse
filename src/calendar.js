@@ -414,6 +414,38 @@ function propagateLabelAcrossSunday(personId, slots, label) {
   }
 }
 
+// Efface tous les slots absents du run contigu autour de iso (ignore dimanches)
+function eraseFullRun(personId, iso) {
+  const startDate = new Date(iso + 'T00:00:00');
+  const dayHasAbsent = (d) => SLOTS.some((s) => getSlotState(fmtISO(d), personId, s) === 'absent');
+  let runStart = new Date(startDate);
+  for (let d = new Date(startDate.getTime() - 86400000); ; d = new Date(d.getTime() - 86400000)) {
+    if (isSunday(d)) continue;
+    if (!dayHasAbsent(d)) break;
+    runStart = new Date(d);
+    if (d.getFullYear() < 2020) break;
+  }
+  let runEnd = new Date(startDate);
+  for (let d = new Date(startDate.getTime() + 86400000); ; d = new Date(d.getTime() + 86400000)) {
+    if (isSunday(d)) continue;
+    if (!dayHasAbsent(d)) break;
+    runEnd = new Date(d);
+    if (d.getFullYear() > 2030) break;
+  }
+  for (let d = new Date(runStart); d <= runEnd; d = new Date(d.getTime() + 86400000)) {
+    if (isSunday(d)) continue;
+    const isoD = fmtISO(d);
+    SLOTS.forEach((s) => {
+      if (getSlotState(isoD, personId, s) === 'absent') {
+        setSlotState(isoD, personId, s, 'empty');
+        setSlotLabel(isoD, personId, s, '');
+        setChangeDecision(isoD, personId, s, null);
+      }
+    });
+    delete store.DATA.slots[shiftTypeKey(isoD, personId)];
+  }
+}
+
 function buildPersonRowCells(year, month, days, personId) {
   let html = '';
   let run = null;
@@ -773,7 +805,9 @@ function buildWeekGrid(year, month, people) {
             // Pour les runs avec label, forcer la couleur du type de congé sur toutes les halves
             // (sinon seule la half du slot absent du jour isWeekStart prend la couleur)
             const leaveHalfCls = ri.hasLabel
-              ? { repos: ' cal-wg-half-off', pending: ' cal-wg-half-leave-pending', conge: ' cal-wg-half-absent' }[ri.leaveType] ?? ' cal-wg-half-absent'
+              ? ({ repos: ' cal-wg-half-off', pending: ' cal-wg-half-leave-pending', conge: ' cal-wg-half-absent' }[
+                  ri.leaveType
+                ] ?? ' cal-wg-half-absent')
               : null;
             const halves = SLOTS.map((slot) => {
               const info = cellRenderInfo(iso, person.id, slot);
@@ -1283,10 +1317,7 @@ function applyPaint(cell, value) {
     setSlotState(iso, personId, slot, 'absent');
     setSlotLabel(iso, personId, slot, 'Arrêt maladie');
   } else if (dragCtx.paintMode === 'erase') {
-    setSlotState(iso, personId, slot, 'empty');
-    setSlotLabel(iso, personId, slot, '');
-    delete store.DATA.slots[shiftTypeKey(iso, personId)];
-    setChangeDecision(iso, personId, slot, null); // effacement = plus de demande d'approbation
+    eraseFullRun(personId, iso);
   } else {
     setSlotState(iso, personId, slot, value);
   }
