@@ -970,11 +970,13 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .hm-leave-cell:focus{outline:2px solid var(--color-primary);outline-offset:1px;}
 .hm-leave-label{font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px;text-shadow:0 1px 2px rgba(0,0,0,.4);pointer-events:none;max-width:100%;}
 .hm-empty-col{padding:0;background:transparent;}
-/* Feature 2 : Fusion visuelle congés (vue grille mensuelle) */
-.pstrip-leave-start{border-radius:5px 0 0 5px!important;}
-.pstrip-leave-mid{border-radius:0!important;}
-.pstrip-leave-end{border-radius:0 5px 5px 0!important;}
-.pstrip-leave-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.4);padding:0 3px;z-index:1;}
+/* Feature 2 : Fusion visuelle congés (vue grille mensuelle)
+   Gap entre jours = padding(3px) + border(0.5px) + padding(3px) = ~7px
+   → marges négatives pour combler le blanc entre colonnes */
+.pstrip-leave-start{border-radius:5px 0 0 5px!important;margin-right:-7px;position:relative;z-index:2;}
+.pstrip-leave-mid{border-radius:0!important;margin-left:-7px;margin-right:-7px;position:relative;z-index:1;}
+.pstrip-leave-end{border-radius:0 5px 5px 0!important;margin-left:-7px;position:relative;z-index:2;}
+.pstrip-leave-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.4);padding:0 3px;z-index:3;}
 .heatmap-cell.hm-today:not(.hm-empty):not(.hm-sun){outline:2px solid var(--color-primary);outline-offset:1px;}
 .heatmap-cell.hm-clinic-closed{background-image:repeating-linear-gradient(45deg,rgba(0,0,0,0.08) 0px,rgba(0,0,0,0.08) 2px,transparent 2px,transparent 5px)!important;opacity:0.6;}
 .hm-sep td{height:6px;background:var(--color-surface,#f8fafc);border-top:2px solid var(--color-border);}
