@@ -79,7 +79,10 @@ export function buildHeatmap(year, people = PEOPLE) {
     // Row 2 : lettres jour de semaine (col 1 occupée par rowspan)
     let wdCells = '';
     for (let d = 1; d <= 31; d++) {
-      if (d > nbDays) { wdCells += '<td></td>'; continue; }
+      if (d > nbDays) {
+        wdCells += '<td></td>';
+        continue;
+      }
       const wd = isoWeekday(new Date(year, month, d));
       const cls = wd === 6 ? ' hm1-wd-sun' : wd === 5 ? ' hm1-wd-sat' : '';
       wdCells += `<td class="hm1-wd${cls}">${WEEKDAY_NAMES[wd].slice(0, 2)}</td>`;
@@ -88,9 +91,22 @@ export function buildHeatmap(year, people = PEOPLE) {
 
     // Lignes par personne
     people.forEach((person) => {
+      // Retourne vrai si le jour dd du mois courant est absent (les week-ends brisent les runs)
+      const isAbsDay = (dd) => {
+        if (dd < 1 || dd > nbDays) return false;
+        const dt = new Date(year, month, dd);
+        const w = isoWeekday(dt);
+        if (w === 5 || w === 6) return false;
+        const i = fmtISO(dt);
+        return getSlotState(i, person.id, 'M') === 'absent' || getSlotState(i, person.id, 'AM') === 'absent';
+      };
+
       let cells = '';
       for (let d = 1; d <= 31; d++) {
-        if (d > nbDays) { cells += '<td class="hm1-c hm1-em"></td>'; continue; }
+        if (d > nbDays) {
+          cells += '<td class="hm1-c hm1-em"></td>';
+          continue;
+        }
         const date = new Date(year, month, d);
         const iso = fmtISO(date);
         const wd = isoWeekday(date);
@@ -109,7 +125,10 @@ export function buildHeatmap(year, people = PEOPLE) {
           const amState = getSlotState(iso, person.id, 'AM');
           if (mState === 'absent' || amState === 'absent') {
             const label = getSlotLabel(iso, person.id, 'M') || getSlotLabel(iso, person.id, 'AM') || '';
-            cls += ' hm1-abs';
+            const prevAbs = isAbsDay(d - 1);
+            const nextAbs = isAbsDay(d + 1);
+            const runCls = prevAbs && nextAbs ? ' run-mid' : !prevAbs && nextAbs ? ' run-start' : prevAbs ? ' run-end' : '';
+            cls += ' hm1-abs' + runCls;
             titleSuffix = label ? ` — Absent (${label})` : ' — Absent';
           } else if (mState === 'present' || amState === 'present') {
             cls += ' hm1-pre';

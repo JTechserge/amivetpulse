@@ -939,6 +939,10 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .hm1-cc{background-image:repeating-linear-gradient(45deg,rgba(0,0,0,0.08) 0px,rgba(0,0,0,0.08) 2px,transparent 2px,transparent 5px);}
 .hm1-today{outline:1px solid var(--color-primary)!important;outline-offset:1px;}
 .hm1-sep td{height:5px;}
+/* Fusion visuelle des runs d'absence (box-shadow comble le border-spacing 2px sans changer le layout) */
+.hm1-abs.run-start{border-radius:4px 0 0 4px;box-shadow:2px 0 0 var(--color-absent);}
+.hm1-abs.run-mid{border-radius:0;box-shadow:-2px 0 0 var(--color-absent),2px 0 0 var(--color-absent);}
+.hm1-abs.run-end{border-radius:0 4px 4px 0;box-shadow:-2px 0 0 var(--color-absent);}
 /* Feature 2 : Fusion visuelle congés (vue grille mensuelle)
    Gap entre jours = padding(3px) + border(0.5px) + padding(3px) = ~7px
    → marges négatives pour combler le blanc entre colonnes */
