@@ -762,8 +762,9 @@ function buildWeekGrid(year, month, people) {
             continue;
           }
           const ri = leaveRuns?.[person.id]?.[iso];
-          // Cellules non-isWeekStart absorbées par le span précédent — sauter
-          if (ri && !ri.isWeekStart) {
+          // Cellules non-isWeekStart absorbées par le span précédent — seulement si le run a un label
+          // (sinon weekRunLen=1 et le span ne couvre pas ces cellules → elles doivent être rendues normalement)
+          if (ri && !ri.isWeekStart && ri.hasLabel) {
             wi++;
             continue;
           }
