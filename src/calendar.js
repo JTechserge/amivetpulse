@@ -804,11 +804,12 @@ function buildWeekGrid(year, month, people) {
             const spanStyle = span > 1 ? `grid-column:span ${span};` : '';
             // Pour les runs avec label, forcer la couleur du type de congé sur toutes les halves
             // (sinon seule la half du slot absent du jour isWeekStart prend la couleur)
-            const leaveHalfCls = ri.hasLabel
-              ? ({ repos: ' cal-wg-half-off', pending: ' cal-wg-half-leave-pending', conge: ' cal-wg-half-absent' }[
-                  ri.leaveType
-                ] ?? ' cal-wg-half-absent')
-              : null;
+            const leaveHalfCls =
+              ri.weekRunLen > 1 || ri.hasLabel
+                ? ({ repos: ' cal-wg-half-off', pending: ' cal-wg-half-leave-pending', conge: ' cal-wg-half-absent' }[
+                    ri.leaveType
+                  ] ?? ' cal-wg-half-absent')
+                : null;
             const halves = SLOTS.map((slot) => {
               const info = cellRenderInfo(iso, person.id, slot);
               const lockCls = locked ? ' cal-wg-half-locked' : noEdit ? ' cal-wg-half-readonly' : '';
