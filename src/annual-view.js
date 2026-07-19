@@ -1,7 +1,7 @@
 import { PEOPLE, WEEKDAY_NAMES, MONTH_SHORT } from './config.js';
 import { escapeHTML, formatNum, daysInMonth, isSunday, fmtISO, isoWeekday, holidayName, formatFR } from './utils.js';
 import { store } from './store.js';
-import { isASVPerson, getSlotState, getSlotLabel, getLeaveDecision, getOvertimeHours, getDayComment } from './slots.js';
+import { isASVPerson, getSlotState, getSlotLabel, getLeaveDecision, getOvertimeHours, getDayComment, isClinicClosed } from './slots.js';
 
 let _switchSubPage, _switchView, _openDaySidebar, _saveViewState, _buildLegendColors, _GROUP_VIEWS;
 export function setupAnnualView({ switchSubPage, switchView, openDaySidebar, saveViewState, buildLegendColors, GROUP_VIEWS }) {
@@ -48,49 +48,115 @@ export function heatmapSlotColor(person, iso, slot){
 }
 
 export function buildHeatmap(year, people = PEOPLE){
-  const dayHeaderCells = Array.from({length:31}, (_,i)=>`<th>${i+1}</th>`).join('');
+  const todayISO = fmtISO(new Date());
+  const dayNums = Array.from({length:31}, (_,i)=>`<th class="hm-daynum">${i+1}</th>`).join('');
+
   let rows = '';
   for(let month=0; month<12; month++){
     const nbDays = daysInMonth(year, month);
-    // Ligne fine "jours de la semaine" propre à ce mois — recalculée à chaque bloc car le
-    // 1er d'un mois ne tombe pas forcément le même jour de semaine que le mois suivant.
-    let weekdayCols = '';
+
+    // Sous-ligne jours de la semaine pour ce mois
+    let wdCols = '';
     for(let day=1; day<=31; day++){
-      if(day > nbDays){ weekdayCols += `<td class="heatmap-weekday-cell empty-cell"></td>`; continue; }
-      const wd = isoWeekday(new Date(year, month, day));
-      weekdayCols += `<td class="heatmap-weekday-cell${wd===6?' is-sunday':wd===5?' is-saturday':''}">${WEEKDAY_NAMES[wd][0]}</td>`;
+      if(day > nbDays){ wdCols += `<td class="hm-wd-cell hm-empty"></td>`; continue; }
+      const date = new Date(year, month, day);
+      const iso = fmtISO(date);
+      const wd = isoWeekday(date);
+      const isSat = wd === 5, isSun = wd === 6;
+      const isToday = iso === todayISO;
+      wdCols += `<td class="hm-wd-cell${isSun?' hm-sun':isSat?' hm-sat':''}${isToday?' hm-today':''}">` +
+        `${WEEKDAY_NAMES[wd].slice(0,2)}</td>`;
     }
-    rows += `<tr class="heatmap-weekday-row"><th class="heatmap-month-label" rowspan="${people.length+1}">${MONTH_SHORT[month]}</th><th class="heatmap-row-label"></th>${weekdayCols}</tr>`;
+
+    rows += `<tr class="hm-wd-row">` +
+      `<th class="hm-month-lbl" rowspan="${people.length+1}">${MONTH_SHORT[month]}</th>` +
+      `<th class="hm-person-lbl hm-wd-lbl"></th>` +
+      wdCols + `</tr>`;
+
     people.forEach(person=>{
-      let cols = '';
+      let cells = '';
       for(let day=1; day<=31; day++){
-        if(day > nbDays){ cols += `<td><div class="heatmap-cell empty-cell"></div></td>`; continue; }
-        const date = new Date(year, month, day);
-        const iso = fmtISO(date);
-        if(isSunday(date)){
-          cols += `<td><div class="heatmap-cell" style="background:var(--color-sunday);cursor:default;" title="${formatFR(iso)} — Fermé"></div></td>`;
+        if(day > nbDays){
+          cells += `<td class="hm-day-td"><div class="heatmap-cell hm-empty"></div></td>`;
           continue;
         }
+        const date = new Date(year, month, day);
+        const iso = fmtISO(date);
+        const wd = isoWeekday(date);
+        const isSun = wd === 6;
+        const isToday = iso === todayISO;
+
+        if(isSun){
+          cells += `<td class="hm-day-td${isToday?' hm-today':''}">` +
+            `<div class="heatmap-cell hm-sun" title="${formatFR(iso)} — Dimanche"></div></td>`;
+          continue;
+        }
+
+        const clinicClosed = isClinicClosed(iso);
         const mState = getSlotState(iso, person.id, 'M');
         const amState = getSlotState(iso, person.id, 'AM');
-        const colorM = heatmapSlotColor(person, iso, 'M'), colorAM = heatmapSlotColor(person, iso, 'AM');
-        let style = mState === amState
+        const colorM = heatmapSlotColor(person, iso, 'M');
+        const colorAM = heatmapSlotColor(person, iso, 'AM');
+        const bgStyle = mState === amState
           ? `background:${colorM};`
-          : `background:linear-gradient(to bottom, ${colorM} 50%, ${colorAM} 50%);`;
+          : `background:linear-gradient(to bottom,${colorM} 50%,${colorAM} 50%);`;
         const hName = holidayName(iso);
-        if(hName) style += 'box-shadow:0 0 0 2px var(--color-holiday) inset;';
+        const extraStyle = hName ? 'outline:2px solid var(--color-holiday);outline-offset:-2px;' : '';
         const overtime = getOvertimeHours(iso, person.id);
-        const title = `${formatFR(iso)}${hName?' — '+hName:''} — Matin : ${stateLabel(iso,person.id,'M')} · Après-midi : ${stateLabel(iso,person.id,'AM')}${overtime>0?' · +'+formatNum(overtime)+'h sup.':''}`;
-        cols += `<td><div class="heatmap-cell" data-date="${iso}" style="${style}" title="${escapeHTML(title)}" tabindex="0" role="button" aria-label="Détail du ${formatFR(iso)}"></div></td>`;
+        const isAbsent = mState === 'absent' || amState === 'absent';
+        const label = isAbsent ? (getSlotLabel(iso, person.id, 'M') || getSlotLabel(iso, person.id, 'AM') || '') : '';
+
+        // Fusion visuelle des congés : vérification voisins dans le même mois (en sautant dim)
+        let mergeClass = '';
+        if(isAbsent){
+          let pd = day - 1;
+          while(pd >= 1 && isoWeekday(new Date(year,month,pd)) === 6) pd--;
+          let nd = day + 1;
+          while(nd <= nbDays && isoWeekday(new Date(year,month,nd)) === 6) nd++;
+          const prevAbs = pd >= 1 && (()=>{
+            const pi = fmtISO(new Date(year,month,pd));
+            return getSlotState(pi,person.id,'M')==='absent' || getSlotState(pi,person.id,'AM')==='absent';
+          })();
+          const nextAbs = nd <= nbDays && (()=>{
+            const ni = fmtISO(new Date(year,month,nd));
+            return getSlotState(ni,person.id,'M')==='absent' || getSlotState(ni,person.id,'AM')==='absent';
+          })();
+          if(prevAbs && nextAbs) mergeClass = ' hm-leave-mid';
+          else if(prevAbs) mergeClass = ' hm-leave-end';
+          else if(nextAbs) mergeClass = ' hm-leave-start';
+        }
+
+        const title = `${formatFR(iso)}${hName?' — '+hName:''} — Matin : ${stateLabel(iso,person.id,'M')} · Après-midi : ${stateLabel(iso,person.id,'AM')}${label?' ('+label+')':''}${overtime>0?' · +'+formatNum(overtime)+'h sup.':''}${clinicClosed?' · 🔒 Clinique fermée':''}`;
+        const cellCls = `heatmap-cell${mergeClass}${clinicClosed?' hm-clinic-closed':''}${isToday?' hm-today':''}`;
+
+        cells += `<td class="hm-day-td${isToday?' hm-today':''}">` +
+          `<div class="${cellCls}" data-date="${iso}" style="${bgStyle}${extraStyle}" ` +
+          `title="${escapeHTML(title)}" tabindex="0" role="button" aria-label="Détail du ${formatFR(iso)}"></div></td>`;
       }
-      rows += `<tr><th class="heatmap-row-label" style="color:${person.color}">${person.short}</th>${cols}</tr>`;
+
+      rows += `<tr class="hm-person-row">` +
+        `<th class="hm-person-lbl" style="color:${person.color}">${person.short}</th>` +
+        cells + `</tr>`;
     });
+
+    if(month < 11) rows += `<tr class="hm-sep"><td colspan="33"></td></tr>`;
   }
+
   return `
     <div class="heatmap-wrap">
       <table class="heatmap-table">
-        <colgroup><col class="col-month"><col class="col-label">${'<col>'.repeat(31)}</colgroup>
-        <thead><tr><th></th><th></th>${dayHeaderCells}</tr></thead>
+        <colgroup>
+          <col class="col-month">
+          <col class="col-label">
+          ${'<col class="col-day">'.repeat(31)}
+        </colgroup>
+        <thead>
+          <tr class="hm-header-row">
+            <th class="hm-corner"></th>
+            <th class="hm-corner hm-corner-2"></th>
+            ${dayNums}
+          </tr>
+        </thead>
         <tbody>${rows}</tbody>
       </table>
     </div>

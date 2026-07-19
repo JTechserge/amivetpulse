@@ -141,6 +141,14 @@ export function dayNoteKey(iso, pid){ return `${iso}_${pid}_day_note`; }
 export function getDayNote(iso, pid){ return store.DATA.slots[dayNoteKey(iso, pid)] || ''; }
 export function setDayNote(iso, pid, v){ if(v) store.DATA.slots[dayNoteKey(iso, pid)] = v; else delete store.DATA.slots[dayNoteKey(iso, pid)]; }
 
+/* ---------- Fermeture de la clinique ---------- */
+export function clinicClosedKey(iso){ return `${iso}_clinic_closed`; }
+export function isClinicClosed(iso){ return !!store.DATA.slots[clinicClosedKey(iso)]; }
+export function setClinicClosed(iso, closed){
+  if(closed) store.DATA.slots[clinicClosedKey(iso)] = true;
+  else delete store.DATA.slots[clinicClosedKey(iso)];
+}
+
 // Retourne true si la date est un jour de travail contractuel pour cette personne.
 // saturdayOnly → seulement le samedi (Carla). workingDays → jours spécifiques (1=Lun…6=Sam).
 // Sans contrainte définie, tous les jours ouvrés sont valides.

@@ -9,7 +9,7 @@ import { escapeHTML, formatNum, formatHHMM, signedHHMM, roundTo15min, daysInMont
   getWeekMondayDate,
 } from './utils.js';
 import { store } from './store.js';
-import { getSlotState, getOvertimeHours, isASVPerson, getDayNominal, getDayDeficitH, getDayAllOtH } from './slots.js';
+import { getSlotState, getOvertimeHours, isASVPerson, getDayNominal, getDayDeficitH, getDayAllOtH, isClinicClosed } from './slots.js';
 import { getSignatureDetail } from './signatures.js';
 
 const today = new Date();
@@ -25,6 +25,7 @@ export function computeYearStats(year){
       overtimeHoursByMonth: new Array(12).fill(0),
     };
   });
+  let openSaturdaysYear = 0;
   for(let month=0; month<12; month++){
     const nbDays = daysInMonth(year, month);
     for(let day=1; day<=nbDays; day++){
@@ -32,6 +33,7 @@ export function computeYearStats(year){
       if(isSunday(date)) continue;
       const iso = fmtISO(date);
       const saturday = isSaturday(date);
+      if(saturday && !isClinicClosed(iso)) openSaturdaysYear++;
       all.forEach(p=>{
         let presentAny = false;
         SLOTS.forEach(slot=>{
@@ -39,7 +41,7 @@ export function computeYearStats(year){
           if(state === 'present'){ stats[p.id].halfDaysByMonth[month]++; presentAny = true; }
           else if(state === 'absent'){ stats[p.id].absentHalfDaysByMonth[month]++; }
         });
-        if(saturday && presentAny) stats[p.id].saturdaysByMonth[month]++;
+        if(saturday && !isClinicClosed(iso) && presentAny) stats[p.id].saturdaysByMonth[month]++;
         if(isASVPerson(p.id)){
           const isPresent3=getSlotState(iso,p.id,'M')==='present'||getSlotState(iso,p.id,'AM')==='present';
           if(isPresent3) stats[p.id].overtimeHoursByMonth[month]+=getDayAllOtH(iso,p.id)-getDayDeficitH(iso,p.id)+getOvertimeHours(iso,p.id);
@@ -54,6 +56,8 @@ export function computeYearStats(year){
     s.totalHalfDays = s.halfDaysByMonth.reduce((a,b)=>a+b,0);
     s.totalAbsentHalfDays = s.absentHalfDaysByMonth.reduce((a,b)=>a+b,0);
     s.totalSaturdays = s.saturdaysByMonth.reduce((a,b)=>a+b,0);
+    s.openSaturdaysYear = openSaturdaysYear;
+    s.saturdayPct = openSaturdaysYear > 0 ? Math.round(s.totalSaturdays / openSaturdaysYear * 100) : null;
     s.totalOvertimeHours = roundTo15min(s.overtimeHoursByMonth.reduce((a,b)=>a+b,0));
     let busiest = 0;
     s.halfDaysByMonth.forEach((v,i)=>{ if(v > s.halfDaysByMonth[busiest]) busiest = i; });
@@ -86,7 +90,7 @@ export function buildPersonCard(year, personId){
       <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${person.color}"></div></div>
       <div class="stat-row"><span class="stat-label">Demi-journées de présence</span><span class="stat-value">${stats.totalHalfDays}</span></div>
       ${stats.totalOvertimeHours !== 0 ? `<div class="stat-row"><span class="stat-label">Heures supp. / en déficit</span><span class="stat-value" style="color:${otColor}">${signedHHMM(stats.totalOvertimeHours)}</span></div>` : ''}
-      <div class="stat-row"><span class="stat-label">Samedis travaillés</span><span class="stat-value big" style="color:${person.color}">${stats.totalSaturdays}</span></div>
+      <div class="stat-row"><span class="stat-label">Samedis travaillés</span><span class="stat-value big" style="color:${person.color}">${stats.totalSaturdays}${stats.saturdayPct !== null ? ` <span class="stat-pct">/ ${stats.openSaturdaysYear} (${stats.saturdayPct}%)</span>` : ''}</span></div>
       <div class="stat-row"><span class="stat-label">Jours de congés</span><span class="stat-value">${formatNum(vacationDays)}</span></div>
       <div class="stat-row"><span class="stat-label">Mois le plus chargé</span><span class="stat-value">${MONTH_NAMES[stats.busiestMonth]}</span></div>
     </div>

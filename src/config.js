@@ -109,5 +109,5 @@ export function personOf(id){ return PEOPLE.find(p=>p.id===id) || ASV_PEOPLE.fin
 
 export const MONTH_NAMES  = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 export const MONTH_SHORT  = ['Janv','Févr','Mars','Avr','Mai','Juin','Juil','Août','Sept','Oct','Nov','Déc'];
-export const WEEKDAY_NAMES = ['Lu','Ma','Me','Je','Ve','Sa','Di']; // lundi = 0
+export const WEEKDAY_NAMES = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']; // lundi = 0
 export const WEEKDAY_FULL  = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];

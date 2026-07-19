@@ -358,7 +358,7 @@ function renderWeekViewASV(){
   const baseCanEdit = isVetUser || _canEditSlot(pid);
   function canEditDay(d){ return baseCanEdit && !isMonthSigned(pid, d.getFullYear(), d.getMonth()); }
   const canEditWeek = days.some(d => canEditDay(d));
-  const DAY_SHORT = ['Lu','Ma','Me','Je','Ve','Sa'];
+  const DAY_SHORT = ['Lun','Mar','Mer','Jeu','Ven','Sam'];
 
   function _isDayOff(d){ const iso2=fmtISO(d); return getSlotState(iso2,pid,'M')==='absent'&&getSlotState(iso2,pid,'AM')==='absent'; }
   function isDayPresent(d){ const iso2=fmtISO(d); return getSlotState(iso2,pid,'M')==='present'||getSlotState(iso2,pid,'AM')==='present'; }

@@ -926,6 +926,52 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .week-table th,.week-table td{border:1px solid var(--color-border);vertical-align:top;}
 .week-th{background:var(--color-secondary);font-size:11.5px;font-weight:700;text-align:center;padding:3px 4px;min-width:80px;}
 .week-th.is-today{background:var(--color-primary);color:#fff;}
+
+/* ===== Feature 5 : Highlight aujourd'hui (plus visible) ===== */
+.cal-wg-day-today{box-shadow:inset 0 0 0 2px var(--color-primary);background-color:rgba(82,130,255,0.05);}
+.cth.is-today{background:rgba(82,130,255,0.07)!important;}
+
+/* ===== Feature 4 : Fermeture clinique mensuelle ===== */
+.cal-wg-day-clinic-closed{background:repeating-linear-gradient(45deg,rgba(0,0,0,0.03) 0px,rgba(0,0,0,0.03) 4px,transparent 4px,transparent 8px);}
+.cal-wg-day-clinic-closed .cal-wg-daynum{opacity:0.5;}
+.cal-wg-tool-btn.clinic-close-active{background:rgba(239,68,68,0.12);border-radius:4px;}
+.clinic-bulk-actions{display:flex;gap:8px;flex-wrap:wrap;padding:8px 0 4px;margin:0 2px;}
+.clinic-bulk-actions .btn{font-size:12px;padding:5px 10px;}
+
+/* ===== Feature 6 : Vue annuelle redessinée ===== */
+.heatmap-wrap{overflow:auto;max-height:72vh;border:1px solid var(--color-border);border-radius:8px;background:var(--color-card);}
+.heatmap-table{border-collapse:collapse;min-width:max-content;font-size:11px;}
+.col-month{width:32px;}
+.col-label{width:58px;}
+.col-day{width:27px;}
+.hm-corner{position:sticky;top:0;left:0;z-index:5;background:var(--color-card);border-bottom:2px solid var(--color-border);}
+.hm-corner.hm-corner-2{left:32px;z-index:4;}
+.hm-daynum{position:sticky;top:0;z-index:2;background:var(--color-card);padding:5px 2px;text-align:center;font-weight:600;font-size:11px;border-bottom:2px solid var(--color-border);min-width:27px;}
+.hm-month-lbl{position:sticky;left:0;z-index:3;background:var(--color-card);padding:4px 2px;font-weight:700;font-size:11px;text-align:center;vertical-align:middle;border-right:1px solid var(--color-border);white-space:nowrap;}
+.hm-person-lbl{position:sticky;left:32px;z-index:2;background:var(--color-card);padding:2px 5px;font-size:11px;font-weight:600;white-space:nowrap;border-right:1px solid var(--color-border);min-width:58px;}
+.hm-wd-lbl{font-size:10px;font-weight:400;color:var(--color-text-muted);}
+.hm-wd-cell{text-align:center;font-size:9px;color:var(--color-text-muted);padding:2px 0;height:16px;}
+.hm-wd-cell.hm-sat{color:#6366F1;}
+.hm-wd-cell.hm-sun{color:#DC2626;}
+.hm-wd-cell.hm-today{color:var(--color-primary);font-weight:700;}
+.hm-day-td{padding:1px 0;vertical-align:middle;text-align:center;}
+.hm-day-td.hm-today{background:rgba(82,130,255,0.07);}
+.heatmap-cell{display:inline-block;width:23px;height:19px;border-radius:3px;cursor:pointer;vertical-align:middle;}
+.heatmap-cell:hover{opacity:0.75;outline:2px solid var(--color-primary);outline-offset:1px;}
+.heatmap-cell:focus{outline:2px solid var(--color-primary);outline-offset:1px;}
+.heatmap-cell.hm-empty{background:transparent;cursor:default;}
+.heatmap-cell.hm-empty:hover{outline:none;opacity:1;}
+.heatmap-cell.hm-sun{background:var(--color-sunday,#f1f5f9);cursor:default;}
+.heatmap-cell.hm-sun:hover{outline:none;opacity:1;}
+/* Feature 2 : Fusion visuelle congés (vue annuelle) */
+.heatmap-cell.hm-leave-start{border-radius:3px 0 0 3px;margin-right:0;width:24px;}
+.heatmap-cell.hm-leave-mid{border-radius:0;margin:0;width:27px;}
+.heatmap-cell.hm-leave-end{border-radius:0 3px 3px 0;margin-left:0;width:24px;}
+.heatmap-cell.hm-today:not(.hm-empty):not(.hm-sun){outline:2px solid var(--color-primary);outline-offset:1px;}
+.heatmap-cell.hm-clinic-closed{background-image:repeating-linear-gradient(45deg,rgba(0,0,0,0.08) 0px,rgba(0,0,0,0.08) 2px,transparent 2px,transparent 5px)!important;opacity:0.6;}
+.hm-sep td{height:6px;background:var(--color-surface,#f8fafc);border-top:2px solid var(--color-border);}
+/* ===== Feature 3 : % Samedis dashboard ===== */
+.stat-pct{font-size:12px;color:var(--color-text-muted);font-weight:400;}
 .week-th.is-holiday{background:#FEF3C7;color:#92400E;}
 .week-th.is-sunday{background:#F1F5F9;color:var(--color-text-muted);}
 .week-time-label{width:40px;font-size:9px;color:var(--color-text-muted);text-align:right;padding:3px 4px 0 0;background:var(--color-secondary);font-weight:600;white-space:nowrap;}

@@ -22,6 +22,7 @@ import {
   getOvertimeHours, setOvertimeHours,
   shiftTypeKey, getShiftType, getDayAllOtH, getDayDeficitH,
   setEarlyDep, setWeekOtMins, setLunchOtMins, setDayNote,
+  isClinicClosed, setClinicClosed,
 } from './slots.js';
 import {
   getWeekAlerts, computeWeekTotalHours, renderWeekViewASV,
@@ -484,7 +485,8 @@ function buildWeekGrid(year, month, people){
   }
   if(week.length > 0){ while(week.length < 7) week.push(null); weeks.push(week); }
 
-  const DAY_LETTERS = ['L','M','M','J','V','SA', isASV ? 'Alertes' : 'DI'];
+  const DAY_LETTERS = ['Lun','Mar','Mer','Jeu','Ven','Sam', isASV ? 'Alertes' : 'Dim'];
+  const isVetAdmin = !isASV && (store.currentUser?.role === 'admin' || store.currentUser?.role === 'vet');
   const head = `<div class="cal-wg-head"><div class="cal-wg-dh cal-wg-dh-label" aria-hidden="true"></div>${DAY_LETTERS.map((l,i)=>
     `<div class="cal-wg-dh${i>=5?' cal-wg-dh-we':''}" ${i===6&&isASV?'title="Motif d\'alerte réglementaire"':''}>${l}</div>`
   ).join('')}</div>`;
@@ -515,8 +517,11 @@ function buildWeekGrid(year, month, people){
       if(isSun) dayCls += ' cal-wg-day-su';
       if(hName) dayCls += ' cal-wg-day-holiday';
       if(iso === todayISO) dayCls += ' cal-wg-day-today';
+      const clinicClosed = !isSun && isClinicClosed(iso);
+      if(clinicClosed) dayCls += ' cal-wg-day-clinic-closed';
 
       const toolsHtml = !isSun ? `<div class="cal-wg-tools">
+        ${isVetAdmin ? `<button class="cal-wg-tool-btn${clinicClosed?' clinic-close-active':''}" data-clinic-close="${iso}" title="${clinicClosed?'Clinique fermée — cliquer pour rouvrir':'Fermer la clinique ce jour'}">${clinicClosed?'🔒':'🏥'}</button>` : ''}
         <button class="cal-wg-tool-btn${comment?' has-comment':''}" data-action="comment" data-date="${iso}" aria-label="Commentaire du ${day}/${month+1}" title="${comment?escapeHTML(comment):'Ajouter un commentaire'}">💬</button>
         <button class="cal-wg-tool-btn" data-action="edit-day" data-date="${iso}" aria-label="Édition rapide du ${day}/${month+1}">✏️</button>
       </div>` : '<div class="cal-wg-tools"></div>';
@@ -861,6 +866,12 @@ function renderCalendarView(viewKey){
     <p class="section-desc">Cliquez sur une cellule pour faire défiler Vide → Présent → Absent. Clic droit (ou appui long) sur une cellule pour saisir un motif d'absence.</p>
     ${buildCalendarToolbar(viewKey)}
     ${buildCalendarGrid(viewKey)}
+    ${!viewKey.startsWith('asv') && (store.currentUser?.role === 'admin' || store.currentUser?.role === 'vet') ? `
+      <div class="clinic-bulk-actions">
+        <button class="btn btn-sm" id="close-all-sats">🔒 Fermer tous les samedis du mois</button>
+        <button class="btn btn-sm" id="open-all-sats">🔓 Ouvrir tous les samedis du mois</button>
+      </div>
+    ` : ''}
     ${buildPrintSignatureStatusHtml(viewKey)}
     ${buildLegend(cfg.people)}
     ${buildSignaturePanelHtml(viewKey)}
@@ -871,6 +882,30 @@ function renderCalendarView(viewKey){
   container.querySelectorAll('[data-admin-request-sign]').forEach(btn=>{
     btn.onclick = ()=> adminRequestSignature(viewKey, btn.dataset.adminRequestSign);
   });
+  if(!viewKey.startsWith('asv') && (store.currentUser?.role === 'admin' || store.currentUser?.role === 'vet')){
+    container.querySelectorAll('[data-clinic-close]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const iso = btn.dataset.clinicClose;
+        setClinicClosed(iso, !isClinicClosed(iso));
+        _saveData();
+        renderCalendarView(viewKey);
+      });
+    });
+    const {year, navState} = cfg;
+    const mnth = navState.month;
+    const closeAllBtn = container.querySelector('#close-all-sats');
+    const openAllBtn = container.querySelector('#open-all-sats');
+    if(closeAllBtn) closeAllBtn.addEventListener('click', ()=>{
+      const nb = daysInMonth(year, mnth);
+      for(let d=1; d<=nb; d++){ const dt = new Date(year,mnth,d); if(dt.getDay()===6) setClinicClosed(fmtISO(dt),true); }
+      _saveData(); renderCalendarView(viewKey);
+    });
+    if(openAllBtn) openAllBtn.addEventListener('click', ()=>{
+      const nb = daysInMonth(year, mnth);
+      for(let d=1; d<=nb; d++){ const dt = new Date(year,mnth,d); if(dt.getDay()===6) setClinicClosed(fmtISO(dt),false); }
+      _saveData(); renderCalendarView(viewKey);
+    });
+  }
 }
 
 function calViewKeyOfEventTarget(target){
