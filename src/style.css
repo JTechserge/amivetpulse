@@ -955,6 +955,8 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .pstrip-leave-labeled .cell-mark{display:none;}
 .pstrip-leave-labeled .cal-wg-half{font-size:0;}
 .pstrip-leave-labeled .pstrip-leave-label{font-size:11px;}
+.pstrip-leave-label.lbl-repos{color:#7C2D12;text-shadow:none;}
+.pstrip-leave-label.lbl-conge{color:#7F1D1D;text-shadow:none;}
 /* ===== Feature 3 : % Samedis dashboard ===== */
 .stat-pct{font-size:12px;color:var(--color-text-muted);font-weight:400;}
 .week-th.is-holiday{background:#FEF3C7;color:#92400E;}

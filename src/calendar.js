@@ -615,6 +615,26 @@ function buildWeekGrid(year, month, people) {
 
   // Pré-calcul séquences de congés par personne pour la fusion visuelle dans la grille
   const leaveRuns = {};
+  // Construit les entrées d'un run et stocke le type de congé pour la couleur du label
+  const buildRun = (runDays, pid) => {
+    const lbl = getSlotLabel(runDays[0], pid, 'M') || getSlotLabel(runDays[0], pid, 'AM') || '';
+    const lc = lbl.toLowerCase();
+    const isRepos = lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé';
+    const decision = !isRepos && isASVPerson(pid)
+      ? (getLeaveDecision(runDays[0], pid, 'M') || getLeaveDecision(runDays[0], pid, 'AM') || 'pending')
+      : null;
+    const leaveType = isRepos ? 'repos' : decision === 'pending' ? 'pending' : 'conge';
+    // Label par défaut pour les runs ≥ 2 jours sans label explicite (ex. congés vétérinaires)
+    const displayLabel = lbl || (runDays.length >= 2 && leaveType !== 'pending' ? 'Congé' : '');
+    runDays.forEach((ri, i) => {
+      leaveRuns[pid][ri] = {
+        pos: runDays.length === 1 ? 'single' : i === 0 ? 'start' : i === runDays.length - 1 ? 'end' : 'mid',
+        label: i === 0 ? displayLabel : '',
+        hasLabel: !!displayLabel,
+        leaveType,
+      };
+    });
+  };
   people.forEach((p) => {
     leaveRuns[p.id] = {};
     let runDays = [];
@@ -626,27 +646,11 @@ function buildWeekGrid(year, month, people) {
       if (isAbs) {
         runDays.push(di);
       } else if (runDays.length) {
-        const lbl = getSlotLabel(runDays[0], p.id, 'M') || getSlotLabel(runDays[0], p.id, 'AM') || '';
-        runDays.forEach((ri, i) => {
-          leaveRuns[p.id][ri] = {
-            pos: runDays.length === 1 ? 'single' : i === 0 ? 'start' : i === runDays.length - 1 ? 'end' : 'mid',
-            label: i === 0 ? lbl : '',
-            hasLabel: !!lbl,
-          };
-        });
+        buildRun(runDays, p.id);
         runDays = [];
       }
     }
-    if (runDays.length) {
-      const lbl = getSlotLabel(runDays[0], p.id, 'M') || getSlotLabel(runDays[0], p.id, 'AM') || '';
-      runDays.forEach((ri, i) => {
-        leaveRuns[p.id][ri] = {
-          pos: runDays.length === 1 ? 'single' : i === 0 ? 'start' : i === runDays.length - 1 ? 'end' : 'mid',
-          label: i === 0 ? lbl : '',
-          hasLabel: !!lbl,
-        };
-      });
-    }
+    if (runDays.length) buildRun(runDays, p.id);
   });
 
   const weekBlocksHtml = weeks
@@ -725,7 +729,7 @@ function buildWeekGrid(year, month, people) {
               const rCls = ri ? ` pstrip-leave-${ri.pos}${ri.hasLabel ? ' pstrip-leave-labeled' : ''}` : '';
               const rLabel =
                 ri && (ri.pos === 'start' || ri.pos === 'single') && ri.label
-                  ? `<div class="pstrip-leave-label">${escapeHTML(ri.label)}</div>`
+                  ? `<div class="pstrip-leave-label lbl-${ri.leaveType}">${escapeHTML(ri.label)}</div>`
                   : '';
               return `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}${rCls}" data-person="${person.id}" style="position:relative;">${halves}${rLabel}</div>`;
             })
