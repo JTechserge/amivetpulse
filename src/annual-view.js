@@ -114,6 +114,7 @@ export function buildHeatmap(year, people = PEOPLE) {
 
         let cls = 'hm1-c';
         let titleSuffix = '';
+        let extraAttr = '';
         if (wd === 6) {
           cls += ' hm1-su';
           titleSuffix = ' — Dimanche';
@@ -127,9 +128,11 @@ export function buildHeatmap(year, people = PEOPLE) {
             const label = getSlotLabel(iso, person.id, 'M') || getSlotLabel(iso, person.id, 'AM') || '';
             const prevAbs = isAbsDay(d - 1);
             const nextAbs = isAbsDay(d + 1);
-            const runCls = prevAbs && nextAbs ? ' run-mid' : !prevAbs && nextAbs ? ' run-start' : prevAbs ? ' run-end' : '';
+            const runCls =
+              prevAbs && nextAbs ? ' run-mid' : !prevAbs && nextAbs ? ' run-start' : prevAbs ? ' run-end' : '';
             cls += ' hm1-abs' + runCls;
             titleSuffix = label ? ` — Absent (${label})` : ' — Absent';
+            if (label && !prevAbs) extraAttr = ` data-lbl="${escapeHTML(label)}"`;
           } else if (mState === 'present' || amState === 'present') {
             cls += ' hm1-pre';
             titleSuffix = ' — Présent';
@@ -140,7 +143,7 @@ export function buildHeatmap(year, people = PEOPLE) {
           if (isToday) cls += ' hm1-today';
         }
 
-        cells += `<td class="${cls}" data-date="${iso}" title="${escapeHTML(formatFR(iso) + titleSuffix)}" tabindex="0" role="button" aria-label="Détail du ${formatFR(iso)}"></td>`;
+        cells += `<td class="${cls}" data-date="${iso}"${extraAttr} title="${escapeHTML(formatFR(iso) + titleSuffix)}" tabindex="0" role="button" aria-label="Détail du ${formatFR(iso)}"></td>`;
       }
       rows += `<tr><td class="hm1-plbl" style="color:${person.color}">${person.short}</td>${cells}</tr>`;
     });

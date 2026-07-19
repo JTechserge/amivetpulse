@@ -942,6 +942,8 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .hm1-abs.run-start{border-radius:4px 0 0 4px;box-shadow:2px 0 0 var(--color-absent);}
 .hm1-abs.run-mid{border-radius:0;box-shadow:-2px 0 0 var(--color-absent),2px 0 0 var(--color-absent);}
 .hm1-abs.run-end{border-radius:0 4px 4px 0;box-shadow:-2px 0 0 var(--color-absent);}
+.hm1-abs[data-lbl]{position:relative;}
+.hm1-abs[data-lbl]::after{content:attr(data-lbl);position:absolute;top:50%;left:0;right:0;transform:translateY(-50%);font-size:8px;font-weight:700;color:#fff;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 3px;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.4);z-index:1;}
 /* Feature 2 : Fusion visuelle congés (vue grille mensuelle)
    Gap entre jours = padding(3px) + border(0.5px) + padding(3px) = ~7px
    → marges négatives pour combler le blanc entre colonnes */
