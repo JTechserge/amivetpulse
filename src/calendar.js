@@ -640,6 +640,7 @@ function buildWeekGrid(year, month, people) {
         hasLabel: !!displayLabel,
         leaveType,
         weekRunLen,
+        isWeekStart,
       };
     });
   };
@@ -669,7 +670,8 @@ function buildWeekGrid(year, month, people) {
           if (day === null) return `<div class="cal-wg-day cal-wg-day-empty" aria-hidden="true"></div>`;
           const date = new Date(year, month, day);
           const iso = fmtISO(date);
-          const isSat = wd === 5, isSun = wd === 6;
+          const isSat = wd === 5,
+            isSun = wd === 6;
           const hName = holidayName(iso);
           const comment = getDayComment(iso);
           let dayCls = 'cal-wg-day';
@@ -720,12 +722,14 @@ function buildWeekGrid(year, month, people) {
           }
           const date = new Date(year, month, day);
           const iso = fmtISO(date);
-          if (wd === 6) { // Dimanche
+          if (wd === 6) {
+            // Dimanche
             if (isASV && sunISO) {
               const als = getWeekAlerts(person.id, sunISO);
-              cells += als.length > 0
-                ? `<div class="cal-wg-pstrip" data-person="${person.id}" style="min-height:18px;display:flex;align-items:center;justify-content:center;"><button class="week-alert-btn" data-alert-person="${person.id}" data-alerts="${escapeHTML(JSON.stringify(als))}" title="Cliquer pour voir le détail">⚠️ ${als.length}</button></div>`
-                : `<div class="cal-wg-pstrip" data-person="${person.id}" style="min-height:18px;"></div>`;
+              cells +=
+                als.length > 0
+                  ? `<div class="cal-wg-pstrip" data-person="${person.id}" style="min-height:18px;display:flex;align-items:center;justify-content:center;"><button class="week-alert-btn" data-alert-person="${person.id}" data-alerts="${escapeHTML(JSON.stringify(als))}" title="Cliquer pour voir le détail">⚠️ ${als.length}</button></div>`
+                  : `<div class="cal-wg-pstrip" data-person="${person.id}" style="min-height:18px;"></div>`;
             } else {
               cells += `<div class="cal-wg-pstrip" data-person="${person.id}"></div>`;
             }
@@ -738,9 +742,12 @@ function buildWeekGrid(year, month, people) {
             continue;
           }
           const ri = leaveRuns?.[person.id]?.[iso];
-          // Cellules mid/end absorbées par le span de la cellule start — sauter
-          if (ri && ri.pos !== 'start' && ri.pos !== 'single') { wi++; continue; }
-          if (ri && (ri.pos === 'start' || ri.pos === 'single')) {
+          // Cellules non-isWeekStart absorbées par le span précédent — sauter
+          if (ri && !ri.isWeekStart) {
+            wi++;
+            continue;
+          }
+          if (ri && ri.isWeekStart) {
             const span = ri.weekRunLen;
             const spanStyle = span > 1 ? `grid-column:span ${span};` : '';
             const halves = SLOTS.map((slot) => {
@@ -749,7 +756,9 @@ function buildWeekGrid(year, month, people) {
               const stateCls = info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
               return `<div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(iso, person.id, slot)}"></div>`;
             }).join('');
-            const lbl = ri.label ? `<div class="pstrip-leave-label-merged lbl-${ri.leaveType}">${escapeHTML(ri.label)}</div>` : '';
+            const lbl = ri.label
+              ? `<div class="pstrip-leave-label-merged lbl-${ri.leaveType}">${escapeHTML(ri.label)}</div>`
+              : '';
             cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="${spanStyle}position:relative">${halves}${lbl}</div>`;
             wi += span;
             continue;
