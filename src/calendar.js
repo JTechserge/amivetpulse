@@ -745,7 +745,8 @@ function buildWeekGrid(year, month, people) {
                   ? `<div class="pstrip-leave-label lbl-${ri.leaveType}">${escapeHTML(ri.label)}</div>`
                   : '';
               const wlVar = ri?.weekRunLen > 1 ? `;--wl:${ri.weekRunLen}` : '';
-              return `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}${rCls}" data-person="${person.id}" style="position:relative${wlVar}">${halves}${rLabel}</div>`;
+              const zVar = ri?.label ? ';z-index:4' : '';
+              return `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}${rCls}" data-person="${person.id}" style="position:relative${wlVar}${zVar}">${halves}${rLabel}</div>`;
             })
             .join('');
 
