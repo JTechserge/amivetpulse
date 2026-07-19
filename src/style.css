@@ -553,7 +553,7 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
    ============================================================ */
 .cal-wg{border:1px solid var(--color-border);border-radius:var(--radius-card);overflow:hidden;background:var(--color-surface);}
 .cal-wg-head{display:grid;grid-template-columns:40px repeat(6,1fr) 0.5fr;background:var(--color-secondary);border-bottom:1px solid var(--color-border);}
-.cal-wg-dh{padding:8px 0;text-align:center;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--color-text-muted);border-right:0.5px solid var(--color-border);}
+.cal-wg-dh{padding:8px 0;text-align:center;font-size:9px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;color:var(--color-text-muted);border-right:0.5px solid var(--color-border);}
 .cal-wg-dh:last-child{border-right:none;}
 .cal-wg-dh-we{opacity:0.6;}
 .cal-wg-person-legend{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--color-border);background:var(--color-surface);}
@@ -928,7 +928,7 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .week-th.is-today{background:var(--color-primary);color:#fff;}
 
 /* ===== Feature 5 : Highlight aujourd'hui (plus visible) ===== */
-.cal-wg-day-today{box-shadow:inset 0 0 0 2px var(--color-primary);background-color:rgba(82,130,255,0.05);}
+.cal-wg-day-today{box-shadow:inset 0 0 0 1px var(--color-primary);background-color:rgba(82,130,255,0.03);}
 .cth.is-today{background:rgba(82,130,255,0.07)!important;}
 
 /* ===== Feature 4 : Fermeture clinique mensuelle ===== */
@@ -963,10 +963,18 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .heatmap-cell.hm-empty:hover{outline:none;opacity:1;}
 .heatmap-cell.hm-sun{background:var(--color-sunday,#f1f5f9);cursor:default;}
 .heatmap-cell.hm-sun:hover{outline:none;opacity:1;}
-/* Feature 2 : Fusion visuelle congés (vue annuelle) */
-.heatmap-cell.hm-leave-start{border-radius:3px 0 0 3px;margin-right:0;width:24px;}
-.heatmap-cell.hm-leave-mid{border-radius:0;margin:0;width:27px;}
-.heatmap-cell.hm-leave-end{border-radius:0 3px 3px 0;margin-left:0;width:24px;}
+/* Feature 2 : Fusion colspan congés (vue annuelle) */
+.hm-leave-merged{padding:0;vertical-align:middle;border-radius:3px;overflow:hidden;}
+.hm-leave-cell{display:flex;align-items:center;justify-content:center;width:100%;height:19px;cursor:pointer;border-radius:3px;position:relative;}
+.hm-leave-cell:hover{opacity:0.75;outline:2px solid var(--color-primary);outline-offset:1px;}
+.hm-leave-cell:focus{outline:2px solid var(--color-primary);outline-offset:1px;}
+.hm-leave-label{font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px;text-shadow:0 1px 2px rgba(0,0,0,.4);pointer-events:none;max-width:100%;}
+.hm-empty-col{padding:0;background:transparent;}
+/* Feature 2 : Fusion visuelle congés (vue grille mensuelle) */
+.pstrip-leave-start{border-radius:5px 0 0 5px!important;}
+.pstrip-leave-mid{border-radius:0!important;}
+.pstrip-leave-end{border-radius:0 5px 5px 0!important;}
+.pstrip-leave-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.4);padding:0 3px;z-index:1;}
 .heatmap-cell.hm-today:not(.hm-empty):not(.hm-sun){outline:2px solid var(--color-primary);outline-offset:1px;}
 .heatmap-cell.hm-clinic-closed{background-image:repeating-linear-gradient(45deg,rgba(0,0,0,0.08) 0px,rgba(0,0,0,0.08) 2px,transparent 2px,transparent 5px)!important;opacity:0.6;}
 .hm-sep td{height:6px;background:var(--color-surface,#f8fafc);border-top:2px solid var(--color-border);}
