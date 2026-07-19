@@ -620,16 +620,20 @@ function buildWeekGrid(year, month, people) {
     const lbl = getSlotLabel(runDays[0], pid, 'M') || getSlotLabel(runDays[0], pid, 'AM') || '';
     const lc = lbl.toLowerCase();
     const isRepos = lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé';
-    const decision = !isRepos && isASVPerson(pid)
-      ? (getLeaveDecision(runDays[0], pid, 'M') || getLeaveDecision(runDays[0], pid, 'AM') || 'pending')
-      : null;
+    const decision =
+      !isRepos && isASVPerson(pid)
+        ? getLeaveDecision(runDays[0], pid, 'M') || getLeaveDecision(runDays[0], pid, 'AM') || 'pending'
+        : null;
     const leaveType = isRepos ? 'repos' : decision === 'pending' ? 'pending' : 'conge';
     // Label par défaut pour les runs ≥ 2 jours sans label explicite (ex. congés vétérinaires)
     const displayLabel = lbl || (runDays.length >= 2 && leaveType !== 'pending' ? 'Congé' : '');
     runDays.forEach((ri, i) => {
+      // Affiche le label sur le 1er jour du run ET sur chaque lundi (début de nouvelle semaine dans la grille)
+      const d = parseInt(ri.slice(8, 10), 10);
+      const isWeekStart = i === 0 || isoWeekday(new Date(year, month, d)) === 0;
       leaveRuns[pid][ri] = {
         pos: runDays.length === 1 ? 'single' : i === 0 ? 'start' : i === runDays.length - 1 ? 'end' : 'mid',
-        label: i === 0 ? displayLabel : '',
+        label: isWeekStart ? displayLabel : '',
         hasLabel: !!displayLabel,
         leaveType,
       };
@@ -728,7 +732,7 @@ function buildWeekGrid(year, month, people) {
               const ri = leaveRuns?.[person.id]?.[iso];
               const rCls = ri ? ` pstrip-leave-${ri.pos}${ri.hasLabel ? ' pstrip-leave-labeled' : ''}` : '';
               const rLabel =
-                ri && (ri.pos === 'start' || ri.pos === 'single') && ri.label
+                ri && ri.label
                   ? `<div class="pstrip-leave-label lbl-${ri.leaveType}">${escapeHTML(ri.label)}</div>`
                   : '';
               return `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}${rCls}" data-person="${person.id}" style="position:relative;">${halves}${rLabel}</div>`;
