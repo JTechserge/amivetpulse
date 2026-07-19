@@ -4,7 +4,6 @@ import {
   SLOTS,
   SLOT_LABELS,
   MONTH_NAMES,
-  WEEKDAY_NAMES,
   WEEKLY_MAX_HOURS,
   SUPABASE_FUNCTIONS_URL,
   personOf,
@@ -338,51 +337,8 @@ function _splitMonthIntoHalves(year, month) {
   return [half1, half2].filter((h) => h.length > 0);
 }
 
-function nextSlotAcrossSunday(iso, slot) {
-  let date = new Date(iso + 'T00:00:00');
-  let slotIdx = SLOTS.indexOf(slot) + 1;
-  if (slotIdx >= SLOTS.length) {
-    slotIdx = 0;
-    date = new Date(date.getTime() + 86400000);
-  }
-  if (!isSunday(date)) return null;
-  date = new Date(date.getTime() + 86400000);
-  return { iso: fmtISO(date), slot: SLOTS[slotIdx] };
-}
 
-function prevSlotAcrossSunday(iso, slot) {
-  let date = new Date(iso + 'T00:00:00');
-  let slotIdx = SLOTS.indexOf(slot) - 1;
-  if (slotIdx < 0) {
-    slotIdx = SLOTS.length - 1;
-    date = new Date(date.getTime() - 86400000);
-  }
-  if (!isSunday(date)) return null;
-  date = new Date(date.getTime() - 86400000);
-  return { iso: fmtISO(date), slot: SLOTS[slotIdx] };
-}
 
-function collectContiguousAbsentSlots(personId, iso, slot, direction) {
-  const result = [];
-  let date = new Date(iso + 'T00:00:00');
-  let slotIdx = SLOTS.indexOf(slot);
-  while (!isSunday(date)) {
-    const curIso = fmtISO(date);
-    const curSlot = SLOTS[slotIdx];
-    if (getSlotState(curIso, personId, curSlot) !== 'absent') break;
-    if (direction > 0) result.push({ iso: curIso, slot: curSlot });
-    else result.unshift({ iso: curIso, slot: curSlot });
-    slotIdx += direction;
-    if (slotIdx < 0) {
-      slotIdx = SLOTS.length - 1;
-      date = new Date(date.getTime() - 86400000);
-    } else if (slotIdx >= SLOTS.length) {
-      slotIdx = 0;
-      date = new Date(date.getTime() + 86400000);
-    }
-  }
-  return result;
-}
 
 function propagateLabelAcrossSunday(personId, slots, label) {
   if (!slots.length) return;
@@ -446,104 +402,6 @@ function eraseFullRun(personId, iso) {
   }
 }
 
-function buildPersonRowCells(year, month, days, personId) {
-  let html = '';
-  let run = null;
-  const locked = isMonthSigned(personId, year, month);
-  const noEdit = !_canEditSlot(personId); // lecture seule (pas les droits sur cette ligne)
-  const blocked = locked || noEdit; // data-action="locked" bloque TOUS les handlers
-  const blockCls = locked ? ' cal-cell-locked' : noEdit ? ' cal-cell-readonly' : '';
-  const blockTitle = locked ? 'Feuille de présence signée — verrouillée' : noEdit ? 'Lecture seule' : '';
-  const flush = () => {
-    if (!run) return;
-    const first = run.slots[0],
-      last = run.slots[run.slots.length - 1];
-    const ariaRange = run.slots.length > 1 ? `du ${formatFR(first.iso)} au ${formatFR(last.iso)}` : formatFR(first.iso);
-    const info = cellRenderInfo(first.iso, personId, first.slot);
-    const mergedMonCls = run.startMon ? ' is-monday' : '';
-    html += `<td class="cal-cell state-${info.stateClass}${blockCls}${mergedMonCls}" colspan="${run.colspan}"
-      ${blocked ? 'data-action="locked"' : `data-slots='${JSON.stringify(run.slots)}'`} data-person="${personId}"
-      tabindex="0" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}"
-      aria-label="${personOf(personId).short} ${ariaRange} — ${cellAriaLabel(first.iso, personId, first.slot)}">${info.html}</td>`;
-    run = null;
-  };
-  // Un dimanche peut être "absorbé" dans une case fusionnée (sans devenir une vraie
-  // demi-journée de données) pour un congé vétérinaire (toujours validé d'office, aucune
-  // approbation n'existant pour eux) ou pour une demande de congé ASV en attente ou
-  // validée — à condition que le motif se poursuive identique de l'autre côté. Une demande
-  // ASV refusée garde toujours le dimanche comme case "fermée" séparée.
-  const canBridgeSunday = (decision) => !isASVPerson(personId) || decision === 'pending' || decision === 'approved';
-  // (pas d'accumulation OT inline — getWeekAlerts utilise computeWeekTotalHours)
-  days.forEach((day) => {
-    const date = new Date(year, month, day);
-    const iso = fmtISO(date);
-    if (isSunday(date)) {
-      if (run && canBridgeSunday(run.decision)) {
-        const nextIso = fmtISO(new Date(date.getTime() + 86400000));
-        const nextState = getSlotState(nextIso, personId, 'M');
-        const nextLabel = nextState === 'absent' ? getSlotLabel(nextIso, personId, 'M') : '';
-        const nextDecision =
-          nextState === 'absent' && isASVPerson(personId)
-            ? getLeaveDecision(nextIso, personId, 'M') || 'pending'
-            : null;
-        if (nextState === 'absent' && nextLabel === run.label && nextDecision === run.decision) {
-          run.colspan += 2;
-          return;
-        }
-      }
-      flush();
-      if (isASVPerson(personId)) {
-        const alerts = getWeekAlerts(personId, iso);
-        if (alerts.length > 0) {
-          const alertHtml = alerts
-            .map(
-              (a) =>
-                `<div style="font-size:9px;color:#DC2626;font-weight:700;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a}</div>`
-            )
-            .join('');
-          html += `<td class="cal-cell sunday-cell" colspan="2" title="${escapeHTML(alerts.join(' · '))}" style="vertical-align:middle;padding:2px 3px;"><div style="display:flex;flex-direction:column;gap:1px;align-items:center;">${alertHtml}</div></td>`;
-        } else {
-          html += `<td class="cal-cell sunday-cell" colspan="2" aria-hidden="true"></td>`;
-        }
-      } else {
-        html += `<td class="cal-cell sunday-cell" colspan="2" aria-hidden="true"></td>`;
-      }
-      return;
-    }
-    // Jour non contractuel (ex. Carla = samedi uniquement, ou jours définis par quotité)
-    if (isASVPerson(personId) && !isPersonWorkingDay(personId, date)) {
-      flush();
-      html += `<td class="cal-cell cal-cell-nonworking" colspan="2" aria-hidden="true" title="Jour non travaillé"></td>`;
-      return;
-    }
-    const isMonday = isoWeekday(date) === 0;
-    SLOTS.forEach((slot) => {
-      const state = getSlotState(iso, personId, slot);
-      const label = state === 'absent' ? getSlotLabel(iso, personId, slot) : '';
-      const decision =
-        state === 'absent' && isASVPerson(personId) ? getLeaveDecision(iso, personId, slot) || 'pending' : null;
-      const monCls = isMonday && slot === 'M' ? ' is-monday' : '';
-      if (state === 'absent') {
-        if (run && run.label === label && run.decision === decision) {
-          run.slots.push({ iso, slot });
-          run.colspan += 1;
-        } else {
-          flush();
-          run = { label, decision, slots: [{ iso, slot }], colspan: 1, startMon: isMonday && slot === 'M' };
-        }
-      } else {
-        flush();
-        const info = cellRenderInfo(iso, personId, slot);
-        html += `<td class="cal-cell state-${info.stateClass}${blockCls}${monCls}" style="${info.style}"
-          data-date="${iso}" data-person="${personId}" data-slot="${slot}" data-slot-short="${slot === 'M' ? 'M' : 'A'}" ${blocked ? 'data-action="locked"' : ''}
-          tabindex="0" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}"
-          aria-label="${cellAriaLabel(iso, personId, slot)}">${info.html}</td>`;
-      }
-    });
-  });
-  flush();
-  return html;
-}
 
 function buildOvertimeRowCells(year, month, days, people) {
   let html = '';
@@ -652,10 +510,9 @@ function buildWeekGrid(year, month, people) {
     <span class="cal-wg-status-tag cal-wg-status-absent">Absent</span>
   </div>`;
 
-  // Pré-calcul séquences de congés par personne pour la fusion visuelle dans la grille
   const leaveRuns = {};
-  // Construit les entrées d'un run et stocke le type de congé pour la couleur du label
-  const buildRun = (runDays, pid) => {
+  if (!isASV) {
+    const buildRun = (runDays, pid) => {
     // Pas de fusion pour une seule demi-journée isolée
     if (runDays.length === 1 && SLOTS.filter((s) => getSlotState(runDays[0], pid, s) === 'absent').length <= 1) return;
     const lbl = getSlotLabel(runDays[0], pid, 'M') || getSlotLabel(runDays[0], pid, 'AM') || '';
@@ -733,7 +590,8 @@ function buildWeekGrid(year, month, people) {
       }
     }
     if (runDays.length) buildRun(runDays, p.id);
-  });
+    });
+  }
 
   const weekBlocksHtml = weeks
     .map((weekDays, weekIdx) => {
@@ -827,9 +685,12 @@ function buildWeekGrid(year, month, people) {
             // (sinon seule la half du slot absent du jour isWeekStart prend la couleur)
             const leaveHalfCls =
               ri.weekRunLen > 1 || ri.hasLabel
-                ? ({ repos: ' cal-wg-half-off', pending: ' cal-wg-half-leave-pending', conge: ' cal-wg-half-absent', sick: ' cal-wg-half-sick' }[
-                    ri.leaveType
-                  ] ?? ' cal-wg-half-absent')
+                ? ({
+                    repos: ' cal-wg-half-off',
+                    pending: ' cal-wg-half-leave-pending',
+                    conge: ' cal-wg-half-absent',
+                    sick: ' cal-wg-half-sick',
+                  }[ri.leaveType] ?? ' cal-wg-half-absent')
                 : null;
             const halves = SLOTS.map((slot) => {
               const info = cellRenderInfo(iso, person.id, slot);
@@ -838,14 +699,12 @@ function buildWeekGrid(year, month, people) {
                 leaveHalfCls && info.state === 'absent'
                   ? leaveHalfCls
                   : info.stateClass
-                  ? ` cal-wg-half-${info.stateClass}`
-                  : '';
+                    ? ` cal-wg-half-${info.stateClass}`
+                    : '';
               return `<div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(iso, person.id, slot)}"></div>`;
             }).join('');
             const lbl = ri.label
               ? `<div class="pstrip-leave-label-merged lbl-${ri.leaveType}">${escapeHTML(ri.label)}</div>`
-              : ri.leaveType === 'pending'
-              ? `<div class="pstrip-leave-label-merged lbl-pending"><span class="cell-mark">⏳</span></div>`
               : '';
             cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="${spanStyle}position:relative">${halves}${lbl}</div>`;
             wi += span;
@@ -940,74 +799,6 @@ function buildWeekGrid(year, month, people) {
   return `<div class="cal-wg">${head}${legendHtml}${weekBlocksHtml}</div>`;
 }
 
-function _buildHalfTable(year, month, days, people) {
-  let headCells = '';
-  days.forEach((day) => {
-    const date = new Date(year, month, day);
-    const iso = fmtISO(date);
-    const wd = isoWeekday(date);
-    const sunday = wd === 6;
-    const saturday = wd === 5;
-    const hName = holidayName(iso);
-    const isToday = fmtISO(today) === iso;
-    const comment = getDayComment(iso);
-
-    let thClasses = ['cth'];
-    if (sunday) thClasses.push('is-sunday');
-    if (saturday) thClasses.push('is-saturday');
-    if (hName) thClasses.push('is-holiday');
-    if (isToday) thClasses.push('is-today');
-    if (wd === 0) thClasses.push('is-monday');
-
-    let inner = `
-      <div class="cal-weekday">${WEEKDAY_NAMES[wd]}</div>
-      <div class="cal-daynum">${day}</div>
-      ${hName ? `<div class="cal-holiday-dot" title="Férié — ${escapeHTML(hName)}"></div>` : ''}
-    `;
-    if (!sunday) {
-      inner += `
-        <div class="cal-col-tools">
-          <button class="cal-icon-btn ${comment ? 'has-comment' : ''}" data-action="comment" data-date="${iso}" aria-label="Commentaire du ${day}/${month + 1}${comment ? ' (présent)' : ''}" title="${comment ? escapeHTML(comment) : 'Ajouter un commentaire'}">💬</button>
-          <button class="cal-icon-btn" data-action="edit-day" data-date="${iso}" aria-label="Édition rapide du ${day}/${month + 1}">✏️</button>
-        </div>
-      `;
-    }
-    headCells += `<th colspan="2" class="${thClasses.join(' ')}" data-col-date="${iso}">${inner}</th>`;
-  });
-
-  let bodyRows = '';
-  people.forEach((person) => {
-    const locked = isMonthSigned(person.id, year, month);
-    const archived = person.archived === true;
-    const labelColor = archived ? 'var(--color-text-muted)' : person.color;
-    const labelText = `${person.short}${locked ? ' 🔒' : ''}${archived ? ' (archivé)' : ''}`;
-    const labelTitle = archived ? 'Archivé — lecture seule' : locked ? 'Feuille de présence signée — verrouillée' : '';
-    bodyRows += `
-      <tr${archived ? ' class="cal-row-archived"' : ''}>
-        <th class="row-label${archived ? ' row-label-archived' : ''}" style="color:${labelColor}" ${labelTitle ? `title="${labelTitle}"` : ''}>${labelText}</th>
-        ${buildPersonRowCells(year, month, days, person.id)}
-      </tr>
-    `;
-  });
-  // Ligne supplémentaire, uniquement pour le calendrier ASV : un clic sur un jour ouvre une
-  // pop-up où saisir les heures sup de chacune des ASV pour cette date.
-  if (people.length > 0 && isASVPerson(people[0].id)) {
-    bodyRows += `
-      <tr>
-        <th class="row-label overtime-row-label" style="color:var(--color-text-muted);" title="Heures supplémentaires">Heures supplémentaires</th>
-        ${buildOvertimeRowCells(year, month, days, people)}
-      </tr>
-    `;
-  }
-
-  return `
-    <table class="cal-table">
-      <colgroup><col class="col-label">${days.map(() => '<col><col>').join('')}</colgroup>
-      <thead><tr><th class="row-label corner"></th>${headCells}</tr></thead>
-      <tbody>${bodyRows}</tbody>
-    </table>
-  `;
-}
 
 function buildCalendarGrid(viewKey) {
   const cfg = store.CAL_VIEWS[viewKey];
@@ -2028,7 +1819,6 @@ export {
   updateHalfDOM,
   buildCalendarGrid,
   buildWeekGrid,
-  buildPersonRowCells,
   buildOvertimeRowCells,
   buildLegendColors,
   buildLegend,
