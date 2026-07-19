@@ -50,7 +50,7 @@ export function stateLabel(iso, personId, slot) {
 // Reprend exactement les mêmes couleurs que le calendrier mensuel (cellRenderInfo).
 export function heatmapSlotColor(person, iso, slot) {
   const state = getSlotState(iso, person.id, slot);
-  if (state === 'present') return person.present.bg;
+  if (state === 'present') return '#6EE7A0';
   if (state === 'absent') {
     if (isASVPerson(person.id)) {
       const decision = getLeaveDecision(iso, person.id, slot) || 'pending';
@@ -99,7 +99,11 @@ export function buildHeatmap(year, people = PEOPLE) {
       let cells = '';
       let day = 1;
       while (day <= 31) {
-        if (day > nbDays) { cells += `<td class="hm-day-td hm-empty-col"></td>`; day++; continue; }
+        if (day > nbDays) {
+          cells += `<td class="hm-day-td hm-empty-col"></td>`;
+          day++;
+          continue;
+        }
         const date = new Date(year, month, day);
         const iso = fmtISO(date);
         const wd = isoWeekday(date);
@@ -111,7 +115,8 @@ export function buildHeatmap(year, people = PEOPLE) {
           cells +=
             `<td class="hm-day-td${isToday ? ' hm-today' : ''}">` +
             `<div class="heatmap-cell hm-sun" title="${formatFR(iso)} — Dimanche"></div></td>`;
-          day++; continue;
+          day++;
+          continue;
         }
 
         const mState = getSlotState(iso, person.id, 'M');
@@ -130,7 +135,8 @@ export function buildHeatmap(year, people = PEOPLE) {
             if (isoWeekday(nd) === 6) break;
             const ni = fmtISO(nd);
             if (getSlotState(ni, person.id, 'M') !== 'absent' && getSlotState(ni, person.id, 'AM') !== 'absent') break;
-            runLen++; nextDay++;
+            runLen++;
+            nextDay++;
           }
           const titleRun = `${formatFR(runStartISO)}${runLen > 1 ? ` → ${formatFR(fmtISO(new Date(year, month, nextDay - 1)))}` : ''} — Absence${label ? ' (' + label + ')' : ''}${clinicClosed ? ' · 🔒 Fermée' : ''}`;
           cells +=
