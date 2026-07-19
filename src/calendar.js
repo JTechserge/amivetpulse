@@ -631,6 +631,7 @@ function buildWeekGrid(year, month, people) {
           leaveRuns[p.id][ri] = {
             pos: runDays.length === 1 ? 'single' : i === 0 ? 'start' : i === runDays.length - 1 ? 'end' : 'mid',
             label: i === 0 ? lbl : '',
+            hasLabel: !!lbl,
           };
         });
         runDays = [];
@@ -642,6 +643,7 @@ function buildWeekGrid(year, month, people) {
         leaveRuns[p.id][ri] = {
           pos: runDays.length === 1 ? 'single' : i === 0 ? 'start' : i === runDays.length - 1 ? 'end' : 'mid',
           label: i === 0 ? lbl : '',
+          hasLabel: !!lbl,
         };
       });
     }
@@ -720,7 +722,7 @@ function buildWeekGrid(year, month, people) {
             aria-label="${cellAriaLabel(iso, person.id, slot)}">${info.html || (slot === 'M' ? 'M' : 'A')}</div>`;
               }).join('');
               const ri = leaveRuns?.[person.id]?.[iso];
-              const rCls = ri ? ` pstrip-leave-${ri.pos}` : '';
+              const rCls = ri ? ` pstrip-leave-${ri.pos}${ri.hasLabel ? ' pstrip-leave-labeled' : ''}` : '';
               const rLabel =
                 ri && (ri.pos === 'start' || ri.pos === 'single') && ri.label
                   ? `<div class="pstrip-leave-label">${escapeHTML(ri.label)}</div>`
