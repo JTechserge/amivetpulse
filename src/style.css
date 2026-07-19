@@ -940,7 +940,7 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 
 /* ===== Feature 6 : Vue annuelle redessinée ===== */
 .heatmap-wrap{overflow:auto;max-height:72vh;border:1px solid var(--color-border);border-radius:8px;background:var(--color-card);}
-.heatmap-table{border-collapse:collapse;min-width:max-content;font-size:11px;}
+.heatmap-table{border-collapse:separate;border-spacing:2px;min-width:max-content;font-size:11px;}
 .col-month{width:32px;}
 .col-label{width:58px;}
 .col-day{width:32px;}
