@@ -56,6 +56,7 @@ import {
   isClinicClosed,
   setClinicClosed,
 } from './slots.js';
+import { computeLeaveBlocks } from './leave-blocks.js';
 import {
   getWeekAlerts,
   computeWeekTotalHours,
@@ -337,9 +338,6 @@ function _splitMonthIntoHalves(year, month) {
   return [half1, half2].filter((h) => h.length > 0);
 }
 
-
-
-
 function propagateLabelAcrossSunday(personId, slots, label) {
   if (!slots.length) return;
   const startDate = new Date(slots[0].iso + 'T00:00:00');
@@ -401,7 +399,6 @@ function eraseFullRun(personId, iso) {
     delete store.DATA.slots[shiftTypeKey(isoD, personId)];
   }
 }
-
 
 function buildOvertimeRowCells(year, month, days, people) {
   let html = '';
@@ -513,85 +510,91 @@ function buildWeekGrid(year, month, people) {
   const leaveRuns = {};
   if (!isASV) {
     const buildRun = (runDays, pid) => {
-    // Pas de fusion pour une seule demi-journée isolée
-    if (runDays.length === 1 && SLOTS.filter((s) => getSlotState(runDays[0], pid, s) === 'absent').length <= 1) return;
-    const lbl = getSlotLabel(runDays[0], pid, 'M') || getSlotLabel(runDays[0], pid, 'AM') || '';
-    const lc = lbl.toLowerCase();
-    const isSick = lc === 'maladie' || lc === 'arrêt maladie' || lc === 'arrêt';
-    const isRepos = lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé';
-    const decision =
-      !isRepos && !isSick && isASVPerson(pid)
-        ? getLeaveDecision(runDays[0], pid, 'M') || getLeaveDecision(runDays[0], pid, 'AM') || 'pending'
-        : null;
-    const leaveType = isSick ? 'sick' : isRepos ? 'repos' : decision === 'pending' ? 'pending' : 'conge';
-    // Label par défaut pour les runs ≥ 2 jours sans label explicite (ex. congés vétérinaires)
-    const displayLabel = lbl || (runDays.length >= 2 && leaveType !== 'pending' ? 'Congé' : '');
-    runDays.forEach((ri, i) => {
-      const d = parseInt(ri.slice(8, 10), 10);
-      const dWD = isoWeekday(new Date(year, month, d));
-      // isWeekStart : 1er jour du run OU 1er jour ouvré d'une nouvelle semaine calendaire.
-      // On compare l'indice de jour de semaine avec celui du jour précédent du run :
-      // si inférieur ou égal → on a franchi un weekend, donc nouvelle semaine.
-      // Cette logique fonctionne même quand le lundi n'est pas un jour travaillé (ASV).
-      const prevD = i > 0 ? parseInt(runDays[i - 1].slice(8, 10), 10) : null;
-      const prevWD = prevD !== null ? isoWeekday(new Date(year, month, prevD)) : null;
-      const isWeekStart = i === 0 || dWD <= prevWD;
-      // Compte les cellules ouvrées du segment jusqu'au franchissement de semaine suivant
-      let weekRunLen = 1;
-      if (isWeekStart) {
-        for (let j = i + 1; j < runDays.length; j++) {
-          const jWD = isoWeekday(new Date(year, month, parseInt(runDays[j].slice(8, 10), 10)));
-          const prevJWD = isoWeekday(new Date(year, month, parseInt(runDays[j - 1].slice(8, 10), 10)));
-          if (jWD <= prevJWD) break; // franchissement de semaine
-          weekRunLen++;
+      // Pas de fusion pour une seule demi-journée isolée
+      if (runDays.length === 1 && SLOTS.filter((s) => getSlotState(runDays[0], pid, s) === 'absent').length <= 1)
+        return;
+      const lbl = getSlotLabel(runDays[0], pid, 'M') || getSlotLabel(runDays[0], pid, 'AM') || '';
+      const lc = lbl.toLowerCase();
+      const isSick = lc === 'maladie' || lc === 'arrêt maladie' || lc === 'arrêt';
+      const isRepos = lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé';
+      const decision =
+        !isRepos && !isSick && isASVPerson(pid)
+          ? getLeaveDecision(runDays[0], pid, 'M') || getLeaveDecision(runDays[0], pid, 'AM') || 'pending'
+          : null;
+      const leaveType = isSick ? 'sick' : isRepos ? 'repos' : decision === 'pending' ? 'pending' : 'conge';
+      // Label par défaut pour les runs ≥ 2 jours sans label explicite (ex. congés vétérinaires)
+      const displayLabel = lbl || (runDays.length >= 2 && leaveType !== 'pending' ? 'Congé' : '');
+      runDays.forEach((ri, i) => {
+        const d = parseInt(ri.slice(8, 10), 10);
+        const dWD = isoWeekday(new Date(year, month, d));
+        // isWeekStart : 1er jour du run OU 1er jour ouvré d'une nouvelle semaine calendaire.
+        // On compare l'indice de jour de semaine avec celui du jour précédent du run :
+        // si inférieur ou égal → on a franchi un weekend, donc nouvelle semaine.
+        // Cette logique fonctionne même quand le lundi n'est pas un jour travaillé (ASV).
+        const prevD = i > 0 ? parseInt(runDays[i - 1].slice(8, 10), 10) : null;
+        const prevWD = prevD !== null ? isoWeekday(new Date(year, month, prevD)) : null;
+        const isWeekStart = i === 0 || dWD <= prevWD;
+        // Compte les cellules ouvrées du segment jusqu'au franchissement de semaine suivant
+        let weekRunLen = 1;
+        if (isWeekStart) {
+          for (let j = i + 1; j < runDays.length; j++) {
+            const jWD = isoWeekday(new Date(year, month, parseInt(runDays[j].slice(8, 10), 10)));
+            const prevJWD = isoWeekday(new Date(year, month, parseInt(runDays[j - 1].slice(8, 10), 10)));
+            if (jWD <= prevJWD) break; // franchissement de semaine
+            weekRunLen++;
+          }
         }
-      }
-      leaveRuns[pid][ri] = {
-        pos: runDays.length === 1 ? 'single' : i === 0 ? 'start' : i === runDays.length - 1 ? 'end' : 'mid',
-        label: isWeekStart ? displayLabel : '',
-        hasLabel: !!displayLabel,
-        leaveType,
-        weekRunLen,
-        isWeekStart,
-      };
-    });
-  };
-  // Détermine la "clé de type" d'une journée absente pour détecter les changements de type
-  // entre jours consécutifs et éviter de fusionner des types différents (ex. congé + maladie).
-  const dayRunType = (iso, pid) => {
-    const lbl = (getSlotLabel(iso, pid, 'M') || getSlotLabel(iso, pid, 'AM') || '').toLowerCase().trim();
-    if (lbl === 'repos' || lbl === 'repos planifié' || lbl === 'non travaillé') return 'repos';
-    if (lbl === 'maladie' || lbl === 'arrêt maladie' || lbl === 'arrêt') return 'sick';
-    if (lbl && lbl !== 'congé') return 'lbl:' + lbl;
-    if (isASVPerson(pid)) return getLeaveDecision(iso, pid, 'M') || getLeaveDecision(iso, pid, 'AM') || 'pending';
-    return 'conge';
-  };
-  people.forEach((p) => {
-    leaveRuns[p.id] = {};
-    let runDays = [];
-    let runType = null;
-    for (let d = 1; d <= nbDays; d++) {
-      const dt = new Date(year, month, d);
-      if (isoWeekday(dt) === 6) continue;
-      const di = fmtISO(dt);
-      const isAbs = getSlotState(di, p.id, 'M') === 'absent' || getSlotState(di, p.id, 'AM') === 'absent';
-      if (isAbs) {
-        const t = dayRunType(di, p.id);
-        if (runDays.length > 0 && t !== runType) {
+        leaveRuns[pid][ri] = {
+          pos: runDays.length === 1 ? 'single' : i === 0 ? 'start' : i === runDays.length - 1 ? 'end' : 'mid',
+          label: isWeekStart ? displayLabel : '',
+          hasLabel: !!displayLabel,
+          leaveType,
+          weekRunLen,
+          isWeekStart,
+        };
+      });
+    };
+    // Détermine la "clé de type" d'une journée absente pour détecter les changements de type
+    // entre jours consécutifs et éviter de fusionner des types différents (ex. congé + maladie).
+    const dayRunType = (iso, pid) => {
+      const lbl = (getSlotLabel(iso, pid, 'M') || getSlotLabel(iso, pid, 'AM') || '').toLowerCase().trim();
+      if (lbl === 'repos' || lbl === 'repos planifié' || lbl === 'non travaillé') return 'repos';
+      if (lbl === 'maladie' || lbl === 'arrêt maladie' || lbl === 'arrêt') return 'sick';
+      if (lbl && lbl !== 'congé') return 'lbl:' + lbl;
+      if (isASVPerson(pid)) return getLeaveDecision(iso, pid, 'M') || getLeaveDecision(iso, pid, 'AM') || 'pending';
+      return 'conge';
+    };
+    people.forEach((p) => {
+      leaveRuns[p.id] = {};
+      let runDays = [];
+      let runType = null;
+      for (let d = 1; d <= nbDays; d++) {
+        const dt = new Date(year, month, d);
+        if (isoWeekday(dt) === 6) continue;
+        const di = fmtISO(dt);
+        const isAbs = getSlotState(di, p.id, 'M') === 'absent' || getSlotState(di, p.id, 'AM') === 'absent';
+        if (isAbs) {
+          const t = dayRunType(di, p.id);
+          if (runDays.length > 0 && t !== runType) {
+            buildRun(runDays, p.id);
+            runDays = [];
+          }
+          if (!runDays.length) runType = t;
+          runDays.push(di);
+        } else if (runDays.length) {
           buildRun(runDays, p.id);
           runDays = [];
+          runType = null;
         }
-        if (!runDays.length) runType = t;
-        runDays.push(di);
-      } else if (runDays.length) {
-        buildRun(runDays, p.id);
-        runDays = [];
-        runType = null;
       }
-    }
-    if (runDays.length) buildRun(runDays, p.id);
+      if (runDays.length) buildRun(runDays, p.id);
     });
   }
+
+  // Carte des blocs fusionnés par personne, calculée une fois pour tout le mois (ASV uniquement)
+  const personBlockMaps = isASV
+    ? new Map(people.map((p) => [p.id, computeLeaveBlocks(p.id, year, month)]))
+    : null;
 
   const weekBlocksHtml = weeks
     .map((weekDays, weekIdx) => {
@@ -671,6 +674,31 @@ function buildWeekGrid(year, month, people) {
             cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}"><div class="cal-wg-half cal-wg-half-nonworking" aria-hidden="true"></div><div class="cal-wg-half cal-wg-half-nonworking" aria-hidden="true"></div></div>`;
             wi++;
             continue;
+          }
+          // Fusion ASV : blocs contigus calculés par computeLeaveBlocks
+          if (isASV) {
+            const bi = personBlockMaps?.get(person.id)?.get(iso);
+            if (bi?.segmentStart) {
+              const lockCls = locked ? ' cal-wg-half-locked' : noEdit ? ' cal-wg-half-readonly' : '';
+              const halves = SLOTS.map((slot) => {
+                const info = cellRenderInfo(iso, person.id, slot);
+                const stateCls = info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
+                return `<div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(iso, person.id, slot)}"></div>`;
+              }).join('');
+              const lblTypeCls = { repos: ' lbl-repos', sick: ' lbl-sick' }[bi.visualType] ?? '';
+              const lbl = bi.label
+                ? `<div class="pstrip-leave-label-merged${lblTypeCls}">${escapeHTML(bi.label)}</div>`
+                : bi.visualType === 'pending'
+                  ? `<div class="pstrip-leave-label-merged"><span class="cell-mark">⏳</span></div>`
+                  : '';
+              cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="grid-column:span ${bi.spanDays};position:relative">${halves}${lbl}</div>`;
+              wi += bi.spanDays;
+              continue;
+            }
+            if (bi && !bi.segmentStart) {
+              wi++;
+              continue;
+            }
           }
           const ri = leaveRuns?.[person.id]?.[iso];
           // Cellules non-isWeekStart absorbées dans le span du isWeekStart
@@ -798,7 +826,6 @@ function buildWeekGrid(year, month, people) {
 
   return `<div class="cal-wg">${head}${legendHtml}${weekBlocksHtml}</div>`;
 }
-
 
 function buildCalendarGrid(viewKey) {
   const cfg = store.CAL_VIEWS[viewKey];
