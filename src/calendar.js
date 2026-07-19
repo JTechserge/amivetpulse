@@ -623,14 +623,22 @@ function buildWeekGrid(year, month, people) {
     // Label par défaut pour les runs ≥ 2 jours sans label explicite (ex. congés vétérinaires)
     const displayLabel = lbl || (runDays.length >= 2 && leaveType !== 'pending' ? 'Congé' : '');
     runDays.forEach((ri, i) => {
-      // Affiche le label sur le 1er jour du run ET sur chaque lundi (début de nouvelle semaine dans la grille)
       const d = parseInt(ri.slice(8, 10), 10);
-      const isWeekStart = i === 0 || isoWeekday(new Date(year, month, d)) === 0;
-      // Compte les cellules du segment courant jusqu'à la prochaine semaine (pour centrer le label sur toute la fusion)
+      const dWD = isoWeekday(new Date(year, month, d));
+      // isWeekStart : 1er jour du run OU 1er jour ouvré d'une nouvelle semaine calendaire.
+      // On compare l'indice de jour de semaine avec celui du jour précédent du run :
+      // si inférieur ou égal → on a franchi un weekend, donc nouvelle semaine.
+      // Cette logique fonctionne même quand le lundi n'est pas un jour travaillé (ASV).
+      const prevD = i > 0 ? parseInt(runDays[i - 1].slice(8, 10), 10) : null;
+      const prevWD = prevD !== null ? isoWeekday(new Date(year, month, prevD)) : null;
+      const isWeekStart = i === 0 || dWD <= prevWD;
+      // Compte les cellules ouvrées du segment jusqu'au franchissement de semaine suivant
       let weekRunLen = 1;
       if (isWeekStart && displayLabel) {
         for (let j = i + 1; j < runDays.length; j++) {
-          if (isoWeekday(new Date(year, month, parseInt(runDays[j].slice(8, 10), 10))) === 0) break;
+          const jWD = isoWeekday(new Date(year, month, parseInt(runDays[j].slice(8, 10), 10)));
+          const prevJWD = isoWeekday(new Date(year, month, parseInt(runDays[j - 1].slice(8, 10), 10)));
+          if (jWD <= prevJWD) break; // franchissement de semaine
           weekRunLen++;
         }
       }
