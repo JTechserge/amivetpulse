@@ -917,16 +917,15 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .clinic-bulk-actions .btn{font-size:12px;padding:5px 10px;}
 
 /* ===== Feature 6 : Vue annuelle — heatmap uniforme ===== */
-.hm1-table{border-collapse:separate;border-spacing:2px;min-width:max-content;font-size:11px;}
+.hm1-table{border-collapse:separate;border-spacing:2px;width:100%;table-layout:fixed;font-size:11px;}
 .hm1-col-lbl{width:60px;}
-.hm1-col-day{width:32px;}
 .hm1-mlbl{font-size:11px;font-weight:700;color:var(--color-text-muted);text-align:right;padding-right:8px;white-space:nowrap;vertical-align:middle;position:sticky;left:0;background:var(--color-card);z-index:3;}
 .hm1-plbl{font-size:10px;font-weight:600;padding-right:8px;text-align:right;white-space:nowrap;vertical-align:middle;position:sticky;left:0;background:var(--color-card);z-index:3;min-width:60px;}
 .hm1-dn{font-size:9px;color:var(--color-text-muted);text-align:center;padding-bottom:2px;font-variant-numeric:tabular-nums;}
 .hm1-wd{font-size:8.5px;color:var(--color-text-muted);text-align:center;padding-bottom:3px;}
 .hm1-wd-sat{color:#6366F1;}
 .hm1-wd-sun{color:#DC2626;}
-.hm1-c{width:32px;height:26px;border-radius:4px;cursor:pointer;}
+.hm1-c{height:26px;border-radius:4px;cursor:pointer;}
 .hm1-c:hover{opacity:.75;outline:2px solid var(--color-primary);outline-offset:1px;}
 .hm1-c:focus{outline:2px solid var(--color-primary);outline-offset:1px;}
 .hm1-we,.hm1-su,.hm1-em{cursor:default;}
