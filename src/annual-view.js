@@ -101,8 +101,27 @@ export function buildHeatmap(year, people = PEOPLE) {
         return getSlotState(i, person.id, 'M') === 'absent' || getSlotState(i, person.id, 'AM') === 'absent';
       };
 
+      // Pré-calcul : runs d'absence avec label → colspan pour centrer le motif
+      const runColspans = new Map(); // jour de début → longueur du run
+      const absorbedDays = new Set(); // jours absorbés par un colspan
+      for (let dd = 1; dd <= nbDays; dd++) {
+        if (!isAbsDay(dd)) continue;
+        if (isAbsDay(dd - 1)) continue; // pas un début de run
+        const iso0 = fmtISO(new Date(year, month, dd));
+        const lbl0 = getSlotLabel(iso0, person.id, 'M') || getSlotLabel(iso0, person.id, 'AM') || '';
+        if (!lbl0) continue;
+        let runLen = 1;
+        let nd = dd + 1;
+        while (nd <= nbDays && isAbsDay(nd)) { runLen++; nd++; }
+        if (runLen > 1) {
+          runColspans.set(dd, runLen);
+          for (let i = dd + 1; i < dd + runLen; i++) absorbedDays.add(i);
+        }
+      }
+
       let cells = '';
       for (let d = 1; d <= 31; d++) {
+        if (absorbedDays.has(d)) continue; // absorbé par colspan précédent
         if (d > nbDays) {
           cells += '<td class="hm1-c hm1-em"></td>';
           continue;
@@ -128,11 +147,17 @@ export function buildHeatmap(year, people = PEOPLE) {
             const label = getSlotLabel(iso, person.id, 'M') || getSlotLabel(iso, person.id, 'AM') || '';
             const prevAbs = isAbsDay(d - 1);
             const nextAbs = isAbsDay(d + 1);
-            const runCls =
-              prevAbs && nextAbs ? ' run-mid' : !prevAbs && nextAbs ? ' run-start' : prevAbs ? ' run-end' : '';
-            cls += ' hm1-abs' + runCls;
+            if (runColspans.has(d)) {
+              const runLen = runColspans.get(d);
+              cls += ' hm1-abs run-labeled';
+              extraAttr = ` colspan="${runLen}" data-lbl="${escapeHTML(label)}"`;
+            } else {
+              const runCls =
+                prevAbs && nextAbs ? ' run-mid' : !prevAbs && nextAbs ? ' run-start' : prevAbs ? ' run-end' : '';
+              cls += ' hm1-abs' + runCls;
+              if (label && !prevAbs) extraAttr = ` data-lbl="${escapeHTML(label)}"`;
+            }
             titleSuffix = label ? ` — Absent (${label})` : ' — Absent';
-            if (label && !prevAbs) extraAttr = ` data-lbl="${escapeHTML(label)}"`;
           } else if (mState === 'present' || amState === 'present') {
             cls += ' hm1-pre';
             titleSuffix = ' — Présent';
