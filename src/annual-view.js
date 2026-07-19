@@ -147,20 +147,17 @@ export function buildHeatmap(year, people = PEOPLE) {
             `</div></td>`;
           day = nextDay;
         } else {
-          const colorM = heatmapSlotColor(person, iso, 'M');
-          const colorAM = heatmapSlotColor(person, iso, 'AM');
-          const bgStyle =
-            mState === amState
-              ? `background:${colorM};`
-              : `background:linear-gradient(to bottom,${colorM} 50%,${colorAM} 50%);`;
+          // Option 1 : une couleur unie par jour — pas de split M/AM
+          const isPresent = mState === 'present' || amState === 'present';
+          const bg = isPresent ? '#6EE7A0' : 'transparent';
           const hName = holidayName(iso);
           const extraStyle = hName ? 'outline:2px solid var(--color-holiday);outline-offset:-2px;' : '';
           const overtime = getOvertimeHours(iso, person.id);
           const title = `${formatFR(iso)}${hName ? ' — ' + hName : ''} — Mat : ${stateLabel(iso, person.id, 'M')} · AM : ${stateLabel(iso, person.id, 'AM')}${overtime > 0 ? ' · +' + formatNum(overtime) + 'h' : ''}${clinicClosed ? ' · 🔒 Fermée' : ''}`;
-          const cellCls = `heatmap-cell${clinicClosed ? ' hm-clinic-closed' : ''}${isToday ? ' hm-today' : ''}`;
+          const cellCls = `heatmap-cell${!isPresent ? ' hm-empty' : ''}${clinicClosed ? ' hm-clinic-closed' : ''}${isToday ? ' hm-today' : ''}`;
           cells +=
             `<td class="hm-day-td${isToday ? ' hm-today' : ''}">` +
-            `<div class="${cellCls}" data-date="${iso}" style="${bgStyle}${extraStyle}" ` +
+            `<div class="${cellCls}" data-date="${iso}" style="background:${bg};${extraStyle}" ` +
             `title="${escapeHTML(title)}" tabindex="0" role="button" aria-label="Détail du ${formatFR(iso)}"></div></td>`;
           day++;
         }
