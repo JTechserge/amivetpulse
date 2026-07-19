@@ -631,11 +631,20 @@ function buildWeekGrid(year, month, people) {
       // Affiche le label sur le 1er jour du run ET sur chaque lundi (début de nouvelle semaine dans la grille)
       const d = parseInt(ri.slice(8, 10), 10);
       const isWeekStart = i === 0 || isoWeekday(new Date(year, month, d)) === 0;
+      // Compte les cellules du segment courant jusqu'à la prochaine semaine (pour centrer le label sur toute la fusion)
+      let weekRunLen = 1;
+      if (isWeekStart && displayLabel) {
+        for (let j = i + 1; j < runDays.length; j++) {
+          if (isoWeekday(new Date(year, month, parseInt(runDays[j].slice(8, 10), 10))) === 0) break;
+          weekRunLen++;
+        }
+      }
       leaveRuns[pid][ri] = {
         pos: runDays.length === 1 ? 'single' : i === 0 ? 'start' : i === runDays.length - 1 ? 'end' : 'mid',
         label: isWeekStart ? displayLabel : '',
         hasLabel: !!displayLabel,
         leaveType,
+        weekRunLen,
       };
     });
   };
@@ -735,7 +744,8 @@ function buildWeekGrid(year, month, people) {
                 ri && ri.label
                   ? `<div class="pstrip-leave-label lbl-${ri.leaveType}">${escapeHTML(ri.label)}</div>`
                   : '';
-              return `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}${rCls}" data-person="${person.id}" style="position:relative;">${halves}${rLabel}</div>`;
+              const wlVar = ri?.weekRunLen > 1 ? `;--wl:${ri.weekRunLen}` : '';
+              return `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}${rCls}" data-person="${person.id}" style="position:relative${wlVar}">${halves}${rLabel}</div>`;
             })
             .join('');
 
