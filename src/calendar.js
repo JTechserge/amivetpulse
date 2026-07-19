@@ -656,14 +656,17 @@ function buildWeekGrid(year, month, people) {
   const leaveRuns = {};
   // Construit les entrées d'un run et stocke le type de congé pour la couleur du label
   const buildRun = (runDays, pid) => {
+    // Pas de fusion pour une seule demi-journée isolée
+    if (runDays.length === 1 && SLOTS.filter((s) => getSlotState(runDays[0], pid, s) === 'absent').length <= 1) return;
     const lbl = getSlotLabel(runDays[0], pid, 'M') || getSlotLabel(runDays[0], pid, 'AM') || '';
     const lc = lbl.toLowerCase();
+    const isSick = lc === 'maladie' || lc === 'arrêt maladie' || lc === 'arrêt';
     const isRepos = lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé';
     const decision =
-      !isRepos && isASVPerson(pid)
+      !isRepos && !isSick && isASVPerson(pid)
         ? getLeaveDecision(runDays[0], pid, 'M') || getLeaveDecision(runDays[0], pid, 'AM') || 'pending'
         : null;
-    const leaveType = isRepos ? 'repos' : decision === 'pending' ? 'pending' : 'conge';
+    const leaveType = isSick ? 'sick' : isRepos ? 'repos' : decision === 'pending' ? 'pending' : 'conge';
     // Label par défaut pour les runs ≥ 2 jours sans label explicite (ex. congés vétérinaires)
     const displayLabel = lbl || (runDays.length >= 2 && leaveType !== 'pending' ? 'Congé' : '');
     runDays.forEach((ri, i) => {
@@ -696,19 +699,37 @@ function buildWeekGrid(year, month, people) {
       };
     });
   };
+  // Détermine la "clé de type" d'une journée absente pour détecter les changements de type
+  // entre jours consécutifs et éviter de fusionner des types différents (ex. congé + maladie).
+  const dayRunType = (iso, pid) => {
+    const lbl = (getSlotLabel(iso, pid, 'M') || getSlotLabel(iso, pid, 'AM') || '').toLowerCase().trim();
+    if (lbl === 'repos' || lbl === 'repos planifié' || lbl === 'non travaillé') return 'repos';
+    if (lbl === 'maladie' || lbl === 'arrêt maladie' || lbl === 'arrêt') return 'sick';
+    if (lbl && lbl !== 'congé') return 'lbl:' + lbl;
+    if (isASVPerson(pid)) return getLeaveDecision(iso, pid, 'M') || getLeaveDecision(iso, pid, 'AM') || 'pending';
+    return 'conge';
+  };
   people.forEach((p) => {
     leaveRuns[p.id] = {};
     let runDays = [];
+    let runType = null;
     for (let d = 1; d <= nbDays; d++) {
       const dt = new Date(year, month, d);
       if (isoWeekday(dt) === 6) continue;
       const di = fmtISO(dt);
       const isAbs = getSlotState(di, p.id, 'M') === 'absent' || getSlotState(di, p.id, 'AM') === 'absent';
       if (isAbs) {
+        const t = dayRunType(di, p.id);
+        if (runDays.length > 0 && t !== runType) {
+          buildRun(runDays, p.id);
+          runDays = [];
+        }
+        if (!runDays.length) runType = t;
         runDays.push(di);
       } else if (runDays.length) {
         buildRun(runDays, p.id);
         runDays = [];
+        runType = null;
       }
     }
     if (runDays.length) buildRun(runDays, p.id);
@@ -806,18 +827,25 @@ function buildWeekGrid(year, month, people) {
             // (sinon seule la half du slot absent du jour isWeekStart prend la couleur)
             const leaveHalfCls =
               ri.weekRunLen > 1 || ri.hasLabel
-                ? ({ repos: ' cal-wg-half-off', pending: ' cal-wg-half-leave-pending', conge: ' cal-wg-half-absent' }[
+                ? ({ repos: ' cal-wg-half-off', pending: ' cal-wg-half-leave-pending', conge: ' cal-wg-half-absent', sick: ' cal-wg-half-sick' }[
                     ri.leaveType
                   ] ?? ' cal-wg-half-absent')
                 : null;
             const halves = SLOTS.map((slot) => {
               const info = cellRenderInfo(iso, person.id, slot);
               const lockCls = locked ? ' cal-wg-half-locked' : noEdit ? ' cal-wg-half-readonly' : '';
-              const stateCls = leaveHalfCls ?? (info.stateClass ? ` cal-wg-half-${info.stateClass}` : '');
+              const stateCls =
+                leaveHalfCls && info.state === 'absent'
+                  ? leaveHalfCls
+                  : info.stateClass
+                  ? ` cal-wg-half-${info.stateClass}`
+                  : '';
               return `<div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(iso, person.id, slot)}"></div>`;
             }).join('');
             const lbl = ri.label
               ? `<div class="pstrip-leave-label-merged lbl-${ri.leaveType}">${escapeHTML(ri.label)}</div>`
+              : ri.leaveType === 'pending'
+              ? `<div class="pstrip-leave-label-merged lbl-pending"><span class="cell-mark">⏳</span></div>`
               : '';
             cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="${spanStyle}position:relative">${halves}${lbl}</div>`;
             wi += span;
