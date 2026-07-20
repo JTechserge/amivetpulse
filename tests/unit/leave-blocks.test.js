@@ -38,15 +38,30 @@ describe('computeLeaveBlocks', () => {
     store.DATA.slots = {};
   });
 
-  // 1. Plage démarrant en après-midi et finissant en matinée
-  test('plage PM→M : seuls lun-AM + mar-M absents → un bloc de 2 colonnes', () => {
-    setSlotAbsent('2026-07-06', 'AM'); // lundi après-midi uniquement
-    setSlotAbsent('2026-07-07', 'M'); // mardi matin uniquement
+  // 1. Jours partiels aux deux extrémités → pas de fusion
+  test('plage PM→M : lun-AM + mar-M absents → pas de fusion (jours partiels aux deux bouts)', () => {
+    setSlotAbsent('2026-07-06', 'AM'); // lundi après-midi seulement
+    setSlotAbsent('2026-07-07', 'M'); // mardi matin seulement
 
     const map = computeLeaveBlocks(PID, 2026, 6);
 
-    expect(map.get('2026-07-06')).toMatchObject({ segmentStart: true, spanDays: 2, visualType: 'pending' });
-    expect(map.get('2026-07-07')).toEqual({ segmentStart: false });
+    // Aucune journée complète → aucun bloc fusionné
+    expect(map.size).toBe(0);
+  });
+
+  // 1b. Début en demi-journée : le jour partiel est exclu, la fusion ne couvre que les jours complets
+  test('début PM : lun-AM + mar-complet + mer-complet → bloc fusionné [mar-mer], lun exclu', () => {
+    setSlotAbsent('2026-07-06', 'AM'); // lundi après-midi seulement (partiel)
+    setDayAbsent('2026-07-07');        // mardi complet
+    setDayAbsent('2026-07-08');        // mercredi complet
+
+    const map = computeLeaveBlocks(PID, 2026, 6);
+
+    // Lundi partiel : exclu du bloc fusionné → absent de la Map
+    expect(map.has('2026-07-06')).toBe(false);
+    // Fusion mar-mer (wd 1→2), span = 2
+    expect(map.get('2026-07-07')).toMatchObject({ segmentStart: true, spanDays: 2, visualType: 'pending' });
+    expect(map.get('2026-07-08')).toEqual({ segmentStart: false });
     expect(map.size).toBe(2);
   });
 

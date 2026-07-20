@@ -95,15 +95,29 @@ export function computeLeaveBlocks(pid, year, month) {
       if (!days.length || days[days.length - 1] !== h.iso) days.push(h.iso);
     }
 
+    // Premier et dernier slot du bloc, pour détecter les journées partielles aux extrémités
+    const firstHalf = block.halves[0];
+    const lastHalf = block.halves[block.halves.length - 1];
+
     // Découpage par frontière de semaine, puis alimentation de la Map
     let segStart = 0;
     for (let i = 1; i <= days.length; i++) {
       const boundary = i === days.length || crossesWeekBoundary(days[i - 1], days[i]);
       if (!boundary) continue;
 
-      const seg = days.slice(segStart, i);
+      let seg = days.slice(segStart, i);
       segStart = i;
-      if (seg.length < 2) continue; // segment d'un seul jour → pas de cellule fusionnée
+
+      // Élaguer le premier jour si le bloc démarre en après-midi (M présent, AM absent)
+      if (seg.length > 0 && firstHalf.iso === seg[0] && firstHalf.slot !== SLOTS[0]) {
+        seg = seg.slice(1);
+      }
+      // Élaguer le dernier jour si le bloc se termine en matinée (M absent, AM présent)
+      if (seg.length > 0 && lastHalf.iso === seg[seg.length - 1] && lastHalf.slot !== SLOTS[SLOTS.length - 1]) {
+        seg = seg.slice(0, -1);
+      }
+
+      if (seg.length < 2) continue; // moins de 2 journées complètes → pas de cellule fusionnée
 
       const startIso = seg[0],
         endIso = seg[seg.length - 1];
