@@ -599,7 +599,8 @@ function buildWeekGrid(year, month, people) {
       // Rangée d'en-têtes : jours seulement (sans bandes de personnes)
       const headerCols = weekDays
         .map((day, wd) => {
-          if (day === null) return `<div class="cal-wg-day cal-wg-day-empty" aria-hidden="true" style="grid-column:span 2"></div>`;
+          if (day === null)
+            return `<div class="cal-wg-day cal-wg-day-empty" aria-hidden="true" style="grid-column:span 2"></div>`;
           const date = new Date(year, month, day);
           const iso = fmtISO(date);
           const isSat = wd === 5,
@@ -705,7 +706,7 @@ function buildWeekGrid(year, month, people) {
                 : bi.visualType === 'pending'
                   ? `<div class="pstrip-leave-label-merged"><span class="cell-mark">⏳</span></div>`
                   : '';
-              cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}${pstripBgCls}" data-person="${person.id}" style="grid-column:span ${spanHalves};position:relative">${lbl}</div>`;
+              cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}${pstripBgCls}" data-person="${person.id}" data-erase-date="${iso}" style="grid-column:span ${spanHalves};position:relative">${lbl}</div>`;
 
               // Jour partiel en fin (M absent, AM travaillé) : rendre AM séparément (1 demi-col)
               if (endSlot !== SLOTS[SLOTS.length - 1]) {
@@ -1659,10 +1660,23 @@ function initCalendarInteractions() {
   // data-action="locked" bloque tous les handlers pour les mois signés / lecture seule.
   document.addEventListener('mousedown', (e) => {
     const cell = e.target.closest('.cal-wg-half');
-    if (!cell || cell.dataset.action) return;
-    if (!_canEditSlot(cell.dataset.person)) return;
-    e.preventDefault();
-    startDrag(cell);
+    if (cell && !cell.dataset.action) {
+      if (!_canEditSlot(cell.dataset.person)) return;
+      e.preventDefault();
+      startDrag(cell);
+      return;
+    }
+    // Bloc fusionné ASV : pas de .cal-wg-half visible → gomme directement sur le pstrip
+    if (store.calMonthPaintMode === 'erase') {
+      const pstrip = e.target.closest('.cal-wg-pstrip[data-erase-date]');
+      if (pstrip && _canEditSlot(pstrip.dataset.person)) {
+        e.preventDefault();
+        _snapshotBeforeChange();
+        eraseFullRun(pstrip.dataset.person, pstrip.dataset.eraseDate);
+        const vk = calViewKeyOfEventTarget(pstrip);
+        if (vk) renderCalendarView(vk);
+      }
+    }
   });
   document.addEventListener('mouseover', (e) => {
     if (!dragCtx) return;
@@ -1674,9 +1688,20 @@ function initCalendarInteractions() {
     'touchstart',
     (e) => {
       const cell = e.target.closest('.cal-wg-half');
-      if (!cell || cell.dataset.action) return;
-      if (!_canEditSlot(cell.dataset.person)) return;
-      startDrag(cell);
+      if (cell && !cell.dataset.action) {
+        if (!_canEditSlot(cell.dataset.person)) return;
+        startDrag(cell);
+        return;
+      }
+      if (store.calMonthPaintMode === 'erase') {
+        const pstrip = e.target.closest('.cal-wg-pstrip[data-erase-date]');
+        if (pstrip && _canEditSlot(pstrip.dataset.person)) {
+          _snapshotBeforeChange();
+          eraseFullRun(pstrip.dataset.person, pstrip.dataset.eraseDate);
+          const vk = calViewKeyOfEventTarget(pstrip);
+          if (vk) renderCalendarView(vk);
+        }
+      }
     },
     { passive: true }
   );

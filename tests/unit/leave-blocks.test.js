@@ -41,12 +41,19 @@ describe('computeLeaveBlocks', () => {
   // 1. Plage démarrant en PM et finissant en M → bloc avec startSlot/endSlot partiels
   test('plage PM→M : lun-AM + mar-M absents → bloc de 2 demi-colonnes, slots partiels aux bords', () => {
     setSlotAbsent('2026-07-06', 'AM'); // lundi après-midi seulement
-    setSlotAbsent('2026-07-07', 'M');  // mardi matin seulement
+    setSlotAbsent('2026-07-07', 'M'); // mardi matin seulement
 
     const map = computeLeaveBlocks(PID, 2026, 6);
 
     // spanHalves=2 (AM lun + M mar), startSlot='AM', endSlot='M'
-    expect(map.get('2026-07-06')).toMatchObject({ segmentStart: true, spanDays: 2, spanHalves: 2, startSlot: 'AM', endSlot: 'M', visualType: 'pending' });
+    expect(map.get('2026-07-06')).toMatchObject({
+      segmentStart: true,
+      spanDays: 2,
+      spanHalves: 2,
+      startSlot: 'AM',
+      endSlot: 'M',
+      visualType: 'pending',
+    });
     expect(map.get('2026-07-07')).toMatchObject({ segmentStart: false });
     expect(map.size).toBe(2);
   });
@@ -54,13 +61,19 @@ describe('computeLeaveBlocks', () => {
   // 1b. Début en PM : le premier jour partiel est inclus dans le bloc, startSlot='AM'
   test('début PM : lun-AM + mar-complet + mer-complet → bloc [lun-AM..mer-AM], startSlot=AM', () => {
     setSlotAbsent('2026-07-06', 'AM'); // lundi après-midi seulement (partiel)
-    setDayAbsent('2026-07-07');        // mardi complet
-    setDayAbsent('2026-07-08');        // mercredi complet
+    setDayAbsent('2026-07-07'); // mardi complet
+    setDayAbsent('2026-07-08'); // mercredi complet
 
     const map = computeLeaveBlocks(PID, 2026, 6);
 
     // Lundi EST dans le bloc (startSlot='AM') ; spanHalves=5 (AM+M+AM+M+AM)
-    expect(map.get('2026-07-06')).toMatchObject({ segmentStart: true, spanDays: 3, spanHalves: 5, startSlot: 'AM', endSlot: 'AM' });
+    expect(map.get('2026-07-06')).toMatchObject({
+      segmentStart: true,
+      spanDays: 3,
+      spanHalves: 5,
+      startSlot: 'AM',
+      endSlot: 'AM',
+    });
     expect(map.get('2026-07-07')).toEqual({ segmentStart: false });
     expect(map.get('2026-07-08')).toEqual({ segmentStart: false });
     expect(map.size).toBe(3);

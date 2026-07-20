@@ -117,7 +117,15 @@ export function computeLeaveBlocks(pid, year, month) {
       const spanDays = isoWeekday(new Date(endIso + 'T00:00:00')) - isoWeekday(new Date(startIso + 'T00:00:00')) + 1;
       const visualType = halfVisualType(startIso, pid, startSlot);
 
-      result.set(startIso, { segmentStart: true, spanDays, spanHalves, startSlot, endSlot, label: block.lbl, visualType });
+      result.set(startIso, {
+        segmentStart: true,
+        spanDays,
+        spanHalves,
+        startSlot,
+        endSlot,
+        label: block.lbl,
+        visualType,
+      });
       for (let j = 1; j < seg.length; j++) {
         result.set(seg[j], { segmentStart: false });
       }
