@@ -95,37 +95,29 @@ export function computeLeaveBlocks(pid, year, month) {
       if (!days.length || days[days.length - 1] !== h.iso) days.push(h.iso);
     }
 
-    // Premier et dernier slot du bloc, pour détecter les journées partielles aux extrémités
-    const firstHalf = block.halves[0];
-    const lastHalf = block.halves[block.halves.length - 1];
-
     // Découpage par frontière de semaine, puis alimentation de la Map
     let segStart = 0;
     for (let i = 1; i <= days.length; i++) {
       const boundary = i === days.length || crossesWeekBoundary(days[i - 1], days[i]);
       if (!boundary) continue;
 
-      let seg = days.slice(segStart, i);
+      const seg = days.slice(segStart, i);
       segStart = i;
+      if (seg.length < 2) continue; // segment d'un seul jour → pas de cellule fusionnée
 
-      // Élaguer le premier jour si le bloc démarre en après-midi (M présent, AM absent)
-      if (seg.length > 0 && firstHalf.iso === seg[0] && firstHalf.slot !== SLOTS[0]) {
-        seg = seg.slice(1);
-      }
-      // Élaguer le dernier jour si le bloc se termine en matinée (M absent, AM présent)
-      if (seg.length > 0 && lastHalf.iso === seg[seg.length - 1] && lastHalf.slot !== SLOTS[SLOTS.length - 1]) {
-        seg = seg.slice(0, -1);
-      }
-
-      if (seg.length < 2) continue; // moins de 2 journées complètes → pas de cellule fusionnée
+      // Demi-journées absentes appartenant à ce segment
+      const segSet = new Set(seg);
+      const segHalves = block.halves.filter((h) => segSet.has(h.iso));
+      const spanHalves = segHalves.length; // nombre de demi-colonnes du bloc visuel
+      const startSlot = segHalves[0]?.slot ?? SLOTS[0];
+      const endSlot = segHalves[segHalves.length - 1]?.slot ?? SLOTS[SLOTS.length - 1];
 
       const startIso = seg[0],
         endIso = seg[seg.length - 1];
       const spanDays = isoWeekday(new Date(endIso + 'T00:00:00')) - isoWeekday(new Date(startIso + 'T00:00:00')) + 1;
-      const firstSlot = block.halves.find((h) => h.iso === startIso)?.slot ?? SLOTS[0];
-      const visualType = halfVisualType(startIso, pid, firstSlot);
+      const visualType = halfVisualType(startIso, pid, startSlot);
 
-      result.set(startIso, { segmentStart: true, spanDays, label: block.lbl, visualType });
+      result.set(startIso, { segmentStart: true, spanDays, spanHalves, startSlot, endSlot, label: block.lbl, visualType });
       for (let j = 1; j < seg.length; j++) {
         result.set(seg[j], { segmentStart: false });
       }

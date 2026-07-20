@@ -38,31 +38,32 @@ describe('computeLeaveBlocks', () => {
     store.DATA.slots = {};
   });
 
-  // 1. Jours partiels aux deux extrémités → pas de fusion
-  test('plage PM→M : lun-AM + mar-M absents → pas de fusion (jours partiels aux deux bouts)', () => {
+  // 1. Plage démarrant en PM et finissant en M → bloc avec startSlot/endSlot partiels
+  test('plage PM→M : lun-AM + mar-M absents → bloc de 2 demi-colonnes, slots partiels aux bords', () => {
     setSlotAbsent('2026-07-06', 'AM'); // lundi après-midi seulement
-    setSlotAbsent('2026-07-07', 'M'); // mardi matin seulement
+    setSlotAbsent('2026-07-07', 'M');  // mardi matin seulement
 
     const map = computeLeaveBlocks(PID, 2026, 6);
 
-    // Aucune journée complète → aucun bloc fusionné
-    expect(map.size).toBe(0);
+    // spanHalves=2 (AM lun + M mar), startSlot='AM', endSlot='M'
+    expect(map.get('2026-07-06')).toMatchObject({ segmentStart: true, spanDays: 2, spanHalves: 2, startSlot: 'AM', endSlot: 'M', visualType: 'pending' });
+    expect(map.get('2026-07-07')).toMatchObject({ segmentStart: false });
+    expect(map.size).toBe(2);
   });
 
-  // 1b. Début en demi-journée : le jour partiel est exclu, la fusion ne couvre que les jours complets
-  test('début PM : lun-AM + mar-complet + mer-complet → bloc fusionné [mar-mer], lun exclu', () => {
+  // 1b. Début en PM : le premier jour partiel est inclus dans le bloc, startSlot='AM'
+  test('début PM : lun-AM + mar-complet + mer-complet → bloc [lun-AM..mer-AM], startSlot=AM', () => {
     setSlotAbsent('2026-07-06', 'AM'); // lundi après-midi seulement (partiel)
     setDayAbsent('2026-07-07');        // mardi complet
     setDayAbsent('2026-07-08');        // mercredi complet
 
     const map = computeLeaveBlocks(PID, 2026, 6);
 
-    // Lundi partiel : exclu du bloc fusionné → absent de la Map
-    expect(map.has('2026-07-06')).toBe(false);
-    // Fusion mar-mer (wd 1→2), span = 2
-    expect(map.get('2026-07-07')).toMatchObject({ segmentStart: true, spanDays: 2, visualType: 'pending' });
+    // Lundi EST dans le bloc (startSlot='AM') ; spanHalves=5 (AM+M+AM+M+AM)
+    expect(map.get('2026-07-06')).toMatchObject({ segmentStart: true, spanDays: 3, spanHalves: 5, startSlot: 'AM', endSlot: 'AM' });
+    expect(map.get('2026-07-07')).toEqual({ segmentStart: false });
     expect(map.get('2026-07-08')).toEqual({ segmentStart: false });
-    expect(map.size).toBe(2);
+    expect(map.size).toBe(3);
   });
 
   // 2. Plage sur deux semaines consécutives → deux segments, label sur chacun

@@ -552,7 +552,7 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
    Calendrier — grille par semaine (buildWeekGrid)
    ============================================================ */
 .cal-wg{border:1px solid var(--color-border);border-radius:var(--radius-card);overflow:hidden;background:var(--color-surface);}
-.cal-wg-head{display:grid;grid-template-columns:40px repeat(6,1fr) 0.5fr;background:var(--color-secondary);border-bottom:1px solid var(--color-border);}
+.cal-wg-head{display:grid;grid-template-columns:40px repeat(12,1fr) 0.5fr;background:var(--color-secondary);border-bottom:1px solid var(--color-border);}
 .cal-wg-dh{padding:8px 0;text-align:center;font-size:9px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;color:var(--color-text-muted);border-right:0.5px solid var(--color-border);}
 .cal-wg-dh:last-child{border-right:none;}
 .cal-wg-dh-we{opacity:0.6;}
@@ -563,7 +563,7 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-wg-status-absent::before{background:var(--color-absent);}
 .cal-wg-status-pending::before{background:var(--color-leave-pending);}
 .cal-wg-week-block+.cal-wg-week-block{border-top:3px solid var(--color-secondary);}
-.cal-wg-week{display:grid;grid-template-columns:40px repeat(6,1fr) 0.5fr;row-gap:2px;}
+.cal-wg-week{display:grid;grid-template-columns:40px repeat(12,1fr) 0.5fr;row-gap:2px;}
 .cal-wg-week-ot{display:flex;align-items:center;gap:10px;padding:3px 12px;background:var(--color-secondary);border-top:1px solid var(--color-border);font-size:11px;flex-wrap:wrap;}
 .cal-wg-day{border-right:0.5px solid var(--color-border);display:flex;flex-direction:column;}
 .cal-wg-day:last-child{border-right:none;}
@@ -1351,8 +1351,8 @@ body.role-asv [data-view="dashboard"]{display:none;}
   #dash-sub-medical .recap-table td[data-label="Actions"]::before { display:none; }
 
   /* ── T8 · Grille semaine mobile ── */
-  .cal-wg-head { grid-template-columns:24px repeat(6,1fr) 0.4fr; }
-  .cal-wg-week { grid-template-columns:24px repeat(6,1fr) 0.4fr; }
+  .cal-wg-head { grid-template-columns:24px repeat(12,1fr) 0.4fr; }
+  .cal-wg-week { grid-template-columns:24px repeat(12,1fr) 0.4fr; }
   .cal-wg-day { min-height:68px; }
   .cal-wg-daynum { width:20px; height:20px; font-size:11px; }
   .cal-wg-day-head { padding:4px 4px 2px; min-height:26px; gap:2px; }
