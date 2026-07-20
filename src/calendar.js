@@ -592,9 +592,7 @@ function buildWeekGrid(year, month, people) {
   }
 
   // Carte des blocs fusionnés par personne, calculée une fois pour tout le mois (ASV uniquement)
-  const personBlockMaps = isASV
-    ? new Map(people.map((p) => [p.id, computeLeaveBlocks(p.id, year, month)]))
-    : null;
+  const personBlockMaps = isASV ? new Map(people.map((p) => [p.id, computeLeaveBlocks(p.id, year, month)])) : null;
 
   const weekBlocksHtml = weeks
     .map((weekDays, weekIdx) => {

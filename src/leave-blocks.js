@@ -8,7 +8,7 @@ function halfTypeKey(iso, pid, slot) {
   const lc = lbl.toLowerCase().trim();
   if (lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé') return 'repos';
   if (lc === 'maladie' || lc === 'arrêt maladie' || lc === 'arrêt') return 'sick';
-  const dec = isASVPerson(pid) ? (getLeaveDecision(iso, pid, slot) || 'pending') : 'conge';
+  const dec = isASVPerson(pid) ? getLeaveDecision(iso, pid, slot) || 'pending' : 'conge';
   return dec + (lbl ? ':' + lc : '');
 }
 
@@ -25,7 +25,8 @@ function halfVisualType(iso, pid, slot) {
 // Vrai si les deux demi-journées sont directement adjacentes dans la séquence chronologique
 // (SLOTS[last]→SLOTS[0] lendemain en sautant le dimanche, ou SLOTS[n]→SLOTS[n+1] même jour).
 function isAdjacentHalf(iso1, s1, iso2, s2) {
-  const i1 = SLOTS.indexOf(s1), i2 = SLOTS.indexOf(s2);
+  const i1 = SLOTS.indexOf(s1),
+    i2 = SLOTS.indexOf(s2);
   if (iso1 === iso2) return i2 === i1 + 1;
   if (i1 !== SLOTS.length - 1 || i2 !== 0) return false;
   let d = new Date(iso1 + 'T00:00:00');
@@ -104,9 +105,9 @@ export function computeLeaveBlocks(pid, year, month) {
       segStart = i;
       if (seg.length < 2) continue; // segment d'un seul jour → pas de cellule fusionnée
 
-      const startIso = seg[0], endIso = seg[seg.length - 1];
-      const spanDays =
-        isoWeekday(new Date(endIso + 'T00:00:00')) - isoWeekday(new Date(startIso + 'T00:00:00')) + 1;
+      const startIso = seg[0],
+        endIso = seg[seg.length - 1];
+      const spanDays = isoWeekday(new Date(endIso + 'T00:00:00')) - isoWeekday(new Date(startIso + 'T00:00:00')) + 1;
       const firstSlot = block.halves.find((h) => h.iso === startIso)?.slot ?? SLOTS[0];
       const visualType = halfVisualType(startIso, pid, firstSlot);
 

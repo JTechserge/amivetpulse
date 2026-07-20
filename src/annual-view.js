@@ -1,4 +1,5 @@
 import { PEOPLE, WEEKDAY_NAMES, MONTH_SHORT } from './config.js';
+import { computeLeaveBlocks } from './leave-blocks.js';
 import { escapeHTML, formatNum, daysInMonth, isSunday, fmtISO, isoWeekday, holidayName, formatFR } from './utils.js';
 import { store } from './store.js';
 import {
@@ -91,7 +92,9 @@ export function buildHeatmap(year, people = PEOPLE) {
 
     // Lignes par personne
     people.forEach((person) => {
-      // Retourne vrai si le jour dd est un jour ouvré absent (weekends brisent les runs)
+      const isPersonASV = isASVPerson(person.id);
+
+      // Retourne vrai si le jour dd est un jour ouvré absent (sam/dim brisent les runs — vétérinaires)
       const isAbsDay = (dd) => {
         if (dd < 1 || dd > nbDays) return false;
         const dt = new Date(year, month, dd);
@@ -106,7 +109,8 @@ export function buildHeatmap(year, people = PEOPLE) {
         const lbl = getSlotLabel(iso, person.id, 'M') || getSlotLabel(iso, person.id, 'AM') || '';
         const lc = lbl.toLowerCase().trim();
         if (lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé') return 'off';
-        if (isASVPerson(person.id)) {
+        if (isPersonASV && (lc === 'maladie' || lc === 'arrêt maladie' || lc === 'arrêt')) return 'sick';
+        if (isPersonASV) {
           const dec = getLeaveDecision(iso, person.id, 'M') || getLeaveDecision(iso, person.id, 'AM') || 'pending';
           if (dec === 'rejected') return 'rejected';
           if (dec === 'pending') return 'pending';
@@ -114,66 +118,73 @@ export function buildHeatmap(year, people = PEOPLE) {
         return '';
       };
 
-      // isAbsDayOrSat : absent tout jour sauf dimanche (idem buildRun : samedis inclus, dimanches sautés)
-      const isAbsDayOrSat = (dd) => {
-        if (dd < 1 || dd > nbDays) return false;
-        if (isoWeekday(new Date(year, month, dd)) === 6) return false;
-        const iso = fmtISO(new Date(year, month, dd));
-        return getSlotState(iso, person.id, 'M') === 'absent' || getSlotState(iso, person.id, 'AM') === 'absent';
-      };
-
-      // superRunLabel : pour chaque super-run d'absence (samedis inclus, dimanches traversés),
-      // propaguer le label du 1er jour absent à tous les débuts de runs weekday du même super-run.
-      const superRunLabel = new Map(); // weekday run-start dd → { label, type }
-      {
-        let sp = 1;
-        while (sp <= nbDays) {
-          if (isoWeekday(new Date(year, month, sp)) === 6) { sp++; continue; }
-          if (!isAbsDayOrSat(sp)) { sp++; continue; }
-          let prevD = sp - 1;
-          while (prevD >= 1 && isoWeekday(new Date(year, month, prevD)) === 6) prevD--;
-          if (prevD >= 1 && isAbsDayOrSat(prevD)) { sp++; continue; }
-          const isoSp = fmtISO(new Date(year, month, sp));
-          const lbl = getSlotLabel(isoSp, person.id, 'M') || getSlotLabel(isoSp, person.id, 'AM') || '';
-          if (lbl) {
-            const typeSp = absType(isoSp);
-            let end = sp;
-            let ptr = sp + 1;
-            while (ptr <= nbDays) {
-              if (isoWeekday(new Date(year, month, ptr)) === 6) { ptr++; continue; }
-              if (!isAbsDayOrSat(ptr)) break;
-              end = ptr; ptr++;
-            }
-            for (let d2 = sp; d2 <= end; d2++) {
-              if (!isAbsDay(d2)) continue;
-              if (isAbsDay(d2 - 1)) continue;
-              superRunLabel.set(d2, { label: lbl, type: typeSp });
-            }
-            sp = end + 1;
-          } else { sp++; }
-        }
-      }
-
-      // Pré-calcul : runs d'absence avec label → colspan pour centrer le motif
-      const runColspans = new Map(); // dd → { runLen, label, type }
+      // runColspans : dd → { runLen, label, type }   absorbedDays : Set<dd>
+      const runColspans = new Map();
       const absorbedDays = new Set();
-      for (let dd = 1; dd <= nbDays; dd++) {
-        if (!isAbsDay(dd)) continue;
-        if (isAbsDay(dd - 1)) continue; // pas un début de run
-        const iso0 = fmtISO(new Date(year, month, dd));
-        const srEntry = superRunLabel.get(dd);
-        const lbl0 = getSlotLabel(iso0, person.id, 'M') || getSlotLabel(iso0, person.id, 'AM') || (srEntry?.label ?? '');
-        if (!lbl0) continue;
-        const type0 = srEntry ? srEntry.type : absType(iso0);
-        let runLen = 1;
-        let nd = dd + 1;
-        while (nd <= nbDays && isAbsDay(nd)) {
-          runLen++;
-          nd++;
+
+      if (isPersonASV) {
+        // ASV : blocs calculés par computeLeaveBlocks — même logique que la vue mensuelle
+        const vtypeToHm1 = { repos: 'off', sick: 'sick', pending: 'pending', rejected: 'rejected' };
+        computeLeaveBlocks(person.id, year, month).forEach((bi, iso) => {
+          const d = parseInt(iso.slice(8, 10), 10);
+          if (bi.segmentStart) {
+            runColspans.set(d, { runLen: bi.spanDays, label: bi.label || '', type: vtypeToHm1[bi.visualType] ?? '' });
+          } else {
+            absorbedDays.add(d);
+          }
+        });
+      } else {
+        // Vétérinaires : propagation du label via super-run (samedis inclus, dimanches traversés)
+        const isAbsDayOrSat = (dd) => {
+          if (dd < 1 || dd > nbDays) return false;
+          if (isoWeekday(new Date(year, month, dd)) === 6) return false;
+          const iso = fmtISO(new Date(year, month, dd));
+          return getSlotState(iso, person.id, 'M') === 'absent' || getSlotState(iso, person.id, 'AM') === 'absent';
+        };
+
+        const superRunLabel = new Map();
+        {
+          let sp = 1;
+          while (sp <= nbDays) {
+            if (isoWeekday(new Date(year, month, sp)) === 6) { sp++; continue; }
+            if (!isAbsDayOrSat(sp)) { sp++; continue; }
+            let prevD = sp - 1;
+            while (prevD >= 1 && isoWeekday(new Date(year, month, prevD)) === 6) prevD--;
+            if (prevD >= 1 && isAbsDayOrSat(prevD)) { sp++; continue; }
+            const isoSp = fmtISO(new Date(year, month, sp));
+            const lbl = getSlotLabel(isoSp, person.id, 'M') || getSlotLabel(isoSp, person.id, 'AM') || '';
+            if (lbl) {
+              const typeSp = absType(isoSp);
+              let end = sp, ptr = sp + 1;
+              while (ptr <= nbDays) {
+                if (isoWeekday(new Date(year, month, ptr)) === 6) { ptr++; continue; }
+                if (!isAbsDayOrSat(ptr)) break;
+                end = ptr; ptr++;
+              }
+              for (let d2 = sp; d2 <= end; d2++) {
+                if (!isAbsDay(d2)) continue;
+                if (isAbsDay(d2 - 1)) continue;
+                superRunLabel.set(d2, { label: lbl, type: typeSp });
+              }
+              sp = end + 1;
+            } else { sp++; }
+          }
         }
-        if (runLen > 1) {
-          runColspans.set(dd, { runLen, label: lbl0, type: type0 });
-          for (let i = dd + 1; i < dd + runLen; i++) absorbedDays.add(i);
+
+        for (let dd = 1; dd <= nbDays; dd++) {
+          if (!isAbsDay(dd)) continue;
+          if (isAbsDay(dd - 1)) continue;
+          const iso0 = fmtISO(new Date(year, month, dd));
+          const srEntry = superRunLabel.get(dd);
+          const lbl0 = getSlotLabel(iso0, person.id, 'M') || getSlotLabel(iso0, person.id, 'AM') || (srEntry?.label ?? '');
+          if (!lbl0) continue;
+          const type0 = srEntry ? srEntry.type : absType(iso0);
+          let runLen = 1, nd = dd + 1;
+          while (nd <= nbDays && isAbsDay(nd)) { runLen++; nd++; }
+          if (runLen > 1) {
+            runColspans.set(dd, { runLen, label: lbl0, type: type0 });
+            for (let i = dd + 1; i < dd + runLen; i++) absorbedDays.add(i);
+          }
         }
       }
 
@@ -203,17 +214,22 @@ export function buildHeatmap(year, people = PEOPLE) {
           const amState = getSlotState(iso, person.id, 'AM');
           if (mState === 'absent' || amState === 'absent') {
             const label = getSlotLabel(iso, person.id, 'M') || getSlotLabel(iso, person.id, 'AM') || '';
-            const prevAbs = isAbsDay(d - 1);
-            const nextAbs = isAbsDay(d + 1);
             const tc = absType(iso);
             const typeCls = tc ? ` hm1-type-${tc}` : '';
             if (runColspans.has(d)) {
               const { runLen, label: lbl, type } = runColspans.get(d);
               const tcs = type ? ` hm1-type-${type}` : '';
               cls += ` hm1-abs run-labeled${tcs}`;
-              extraAttr = ` colspan="${runLen}" data-lbl="${escapeHTML(lbl)}"`;
-              titleSuffix = ` — Absent (${lbl})`;
+              if (lbl) {
+                extraAttr = ` colspan="${runLen}" data-lbl="${escapeHTML(lbl)}"`;
+                titleSuffix = ` — Absent (${lbl})`;
+              } else {
+                extraAttr = ` colspan="${runLen}"`;
+                titleSuffix = ' — Absent';
+              }
             } else {
+              const prevAbs = !isPersonASV && isAbsDay(d - 1);
+              const nextAbs = !isPersonASV && isAbsDay(d + 1);
               const runCls =
                 prevAbs && nextAbs ? ' run-mid' : !prevAbs && nextAbs ? ' run-start' : prevAbs ? ' run-end' : '';
               cls += ' hm1-abs' + runCls + typeCls;

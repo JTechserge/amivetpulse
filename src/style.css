@@ -943,11 +943,13 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .hm1-abs.run-end{border-radius:0 4px 4px 0;box-shadow:-2px 0 0 var(--color-absent);}
 .hm1-type-off{background:var(--color-off);}
 .hm1-type-pending{background:var(--color-leave-pending);}
+.hm1-type-sick{background:var(--color-sick);}
 .hm1-type-rejected{background:var(--color-leave-rejected);}
 .hm1-abs.run-labeled{border-radius:4px;box-shadow:none;position:relative;}
 .hm1-abs[data-lbl]{position:relative;}
 .hm1-abs[data-lbl]::after{content:attr(data-lbl);position:absolute;top:50%;left:0;right:0;transform:translateY(-50%);font-size:8px;font-weight:700;color:var(--color-absent-text);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 3px;pointer-events:none;z-index:1;}
 .hm1-type-off[data-lbl]::after{color:var(--color-off-text);}
+.hm1-type-sick[data-lbl]::after{color:var(--color-sick-text);}
 .hm1-type-pending[data-lbl]::after{color:var(--color-leave-pending-text);}
 .hm1-type-rejected[data-lbl]::after{color:var(--color-leave-rejected-text);}
 /* Feature 2 : Fusion visuelle congés (vue grille mensuelle)
