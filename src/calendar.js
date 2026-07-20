@@ -678,10 +678,27 @@ function buildWeekGrid(year, month, people) {
             const bi = personBlockMaps?.get(person.id)?.get(iso);
             if (bi?.segmentStart) {
               const lockCls = locked ? ' cal-wg-half-locked' : noEdit ? ' cal-wg-half-readonly' : '';
+              // Couleur du type de congé sur les demi-cells absentes + fond du conteneur
+              const leaveHalfCls = {
+                repos: ' cal-wg-half-off',
+                sick: ' cal-wg-half-sick',
+                pending: ' cal-wg-half-leave-pending',
+                approved: ' cal-wg-half-leave-approved',
+                rejected: ' cal-wg-half-absent',
+              }[bi.visualType] ?? ' cal-wg-half-absent';
+              const pstripBgCls = {
+                repos: ' pstrip-bg-repos',
+                sick: ' pstrip-bg-sick',
+                pending: ' pstrip-bg-pending',
+                approved: ' pstrip-bg-approved',
+                rejected: ' pstrip-bg-absent',
+              }[bi.visualType] ?? '';
+              // Chaque demi-cell prend exactement 1 demi-colonne (pas 50 % du bloc N-jours)
+              const halfW = `flex:none;width:calc(50% / ${bi.spanDays});`;
               const halves = SLOTS.map((slot) => {
                 const info = cellRenderInfo(iso, person.id, slot);
-                const stateCls = info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
-                return `<div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(iso, person.id, slot)}"></div>`;
+                const stateCls = info.state === 'absent' ? leaveHalfCls : info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
+                return `<div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${halfW}${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(iso, person.id, slot)}"></div>`;
               }).join('');
               const lblTypeCls = { repos: ' lbl-repos', sick: ' lbl-sick' }[bi.visualType] ?? '';
               const lbl = bi.label
@@ -689,7 +706,7 @@ function buildWeekGrid(year, month, people) {
                 : bi.visualType === 'pending'
                   ? `<div class="pstrip-leave-label-merged"><span class="cell-mark">⏳</span></div>`
                   : '';
-              cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="grid-column:span ${bi.spanDays};position:relative">${halves}${lbl}</div>`;
+              cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}${pstripBgCls}" data-person="${person.id}" style="grid-column:span ${bi.spanDays};position:relative">${halves}${lbl}</div>`;
               wi += bi.spanDays;
               continue;
             }
@@ -1147,6 +1164,14 @@ function startDrag(cell) {
 
 function applyPaint(cell, value) {
   const { date: iso, person: personId, slot } = cell.dataset;
+  // Outil congé : ne jamais écraser un arrêt maladie ou repos planifié déjà posé
+  if (dragCtx.paintMode === 'conge') {
+    const lc = getSlotLabel(iso, personId, slot).toLowerCase().trim();
+    if (
+      lc === 'maladie' || lc === 'arrêt maladie' || lc === 'arrêt' ||
+      lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé'
+    ) return;
+  }
   dragCtx.touched.add(`${iso}|${personId}|${slot}`);
   if (dragCtx.paintMode === 'opening') {
     setSlotState(iso, personId, slot, 'present');
