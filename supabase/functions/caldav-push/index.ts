@@ -3,7 +3,7 @@
 // de chaque vétérinaire qui a configuré ses identifiants Apple.
 // Pas de dépendance externe : uniquement fetch + btoa (disponibles dans Deno).
 
-const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const CORS_HEADERS = {
@@ -36,9 +36,9 @@ function isoNextDay(iso: string) {
 }
 
 function buildVEvent(personId: string, iso: string): string {
-  const uid     = caldavUid(personId, iso);
+  const uid = caldavUid(personId, iso);
   const dtstamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-  const label   = PERSON_LABELS[personId] ?? personId;
+  const label = PERSON_LABELS[personId] ?? personId;
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -102,14 +102,17 @@ async function discoverCalendars(appleId: string, appPassword: string) {
     body: `<?xml version="1.0" encoding="UTF-8"?><D:propfind xmlns:D="DAV:"><D:prop><D:current-user-principal/></D:prop></D:propfind>`,
   });
   if (!r1.ok) {
-    if (r1.status === 401) throw new Error('Identifiants invalides — vérifiez votre Apple ID et le mot de passe d\'application.');
+    if (r1.status === 401)
+      throw new Error("Identifiants invalides — vérifiez votre Apple ID et le mot de passe d'application.");
     throw new Error(`Connexion iCloud impossible (HTTP ${r1.status}).`);
   }
   const xml1 = await r1.text();
-  const principalMatch = xml1.match(/<[^:>]*:?current-user-principal[^>]*>[\s\S]*?<[^:>]*:?href[^>]*>([\s\S]*?)<\/[^>]+>/i);
+  const principalMatch = xml1.match(
+    /<[^:>]*:?current-user-principal[^>]*>[\s\S]*?<[^:>]*:?href[^>]*>([\s\S]*?)<\/[^>]+>/i
+  );
   if (!principalMatch) throw new Error('Réponse iCloud inattendue — principal introuvable.');
   const principalPath = principalMatch[1].trim();
-  const principalUrl  = principalPath.startsWith('http') ? principalPath : `https://caldav.icloud.com${principalPath}`;
+  const principalUrl = principalPath.startsWith('http') ? principalPath : `https://caldav.icloud.com${principalPath}`;
 
   // Étape 2 : calendar-home-set
   const r2 = await fetch(principalUrl, {
@@ -126,7 +129,7 @@ async function discoverCalendars(appleId: string, appPassword: string) {
   const homeMatch = xml2.match(/<[^:>]*:?calendar-home-set[^>]*>[\s\S]*?<[^:>]*:?href[^>]*>([\s\S]*?)<\/[^>]+>/i);
   if (!homeMatch) throw new Error('Aucun calendrier domestique trouvé sur ce compte iCloud.');
   const homePath = homeMatch[1].trim();
-  const homeUrl  = homePath.startsWith('http') ? homePath : `https://caldav.icloud.com${homePath}`;
+  const homeUrl = homePath.startsWith('http') ? homePath : `https://caldav.icloud.com${homePath}`;
 
   // Étape 3 : liste des calendriers (Depth:1)
   const r3 = await fetch(homeUrl, {
@@ -141,17 +144,20 @@ async function discoverCalendars(appleId: string, appPassword: string) {
   if (!r3.ok) throw new Error(`Liste des calendriers impossible (HTTP ${r3.status}).`);
   const xml3 = await r3.text();
 
+  // Parsing permissif : iCloud peut omettre le préfixe namespace sur <calendar/>.
+  // Filtre fiable : les collections calendrier iCloud ont toujours "/calendars/" dans l'URL
+  // et ne terminent pas par "/calendars/" (qui serait le home lui-même).
   const calendars: Array<{ name: string; url: string }> = [];
-  for (const block of xml3.matchAll(/<[^:>]*:?response[^>]*>([\s\S]*?)<\/[^:>]*:?response>/gi)) {
-    const content = block[1];
-    if (!/<[^:>]*:?calendar[^/\s>]*\s*\/>/i.test(content)) continue;
-    const hrefM = content.match(/<[^:>]*:?href[^>]*>([\s\S]*?)<\/[^:>]*:?href>/i);
-    const nameM = content.match(/<[^:>]*:?displayname[^>]*>([\s\S]*?)<\/[^:>]*:?displayname>/i);
-    if (!hrefM) continue;
-    const href = hrefM[1].trim();
-    const name = nameM ? nameM[1].trim() : href;
-    const url  = href.startsWith('http') ? href : `https://caldav.icloud.com${href}`;
-    calendars.push({ name, url });
+  const hrefRe = /<[^>]*:?href[^>]*>\s*([^\s<]+)\s*<\/[^>]*:?href>/gi;
+  for (const m of xml3.matchAll(hrefRe)) {
+    const path = m[1].trim();
+    if (!path.includes('/calendars/') || path.endsWith('/calendars/')) continue;
+    const idx = m.index!;
+    const ctx = xml3.slice(Math.max(0, idx - 100), idx + 600);
+    const nameM = ctx.match(/<[^>]*:?displayname[^>]*>([\s\S]*?)<\/[^>]*:?displayname>/i);
+    const name = nameM ? nameM[1].trim() : (path.split('/').filter(Boolean).pop() ?? path);
+    const url = path.startsWith('http') ? path : `https://caldav.icloud.com${path}`;
+    if (!calendars.some((c) => c.url === url)) calendars.push({ name, url });
   }
   return calendars;
 }
@@ -168,16 +174,15 @@ Deno.serve(async (req) => {
     if (body.action === 'discover') {
       const { apple_id, app_password } = body as { apple_id: string; app_password: string };
       if (!apple_id || !app_password) {
-        return new Response(
-          JSON.stringify({ error: 'apple_id et app_password requis.' }),
-          { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
-        );
+        return new Response(JSON.stringify({ error: 'apple_id et app_password requis.' }), {
+          status: 400,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
       }
       const calendars = await discoverCalendars(apple_id, app_password);
-      return new Response(
-        JSON.stringify({ calendars }),
-        { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
-      );
+      return new Response(JSON.stringify({ calendars }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
     }
 
     // ── Action push : déclenchée en fire-and-forget depuis save-planning ─────
@@ -185,10 +190,9 @@ Deno.serve(async (req) => {
       changes: Array<{ personId: string; iso: string; isPresent: boolean }>;
     };
     if (!Array.isArray(changes) || changes.length === 0) {
-      return new Response(
-        JSON.stringify({ ok: true, skipped: 'no changes' }),
-        { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
-      );
+      return new Response(JSON.stringify({ ok: true, skipped: 'no changes' }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
     }
 
     // Grouper par personId pour lire les credentials une seule fois par personne
@@ -203,7 +207,7 @@ Deno.serve(async (req) => {
       // Lecture credentials via service_role — le mot de passe n'est jamais exposé au frontend
       const credsRes = await fetch(
         `${SUPABASE_URL}/rest/v1/calendar_sync_tokens?person_id=eq.${personId}&select=caldav_apple_id,caldav_app_password,caldav_calendar_url`,
-        { headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+        { headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` } }
       );
       const credsRows = await credsRes.json();
       const creds = credsRows?.[0];
@@ -211,7 +215,7 @@ Deno.serve(async (req) => {
         continue; // CalDAV non configuré pour cette personne → skip silencieux
       }
 
-      const b64  = btoa(`${creds.caldav_apple_id}:${creds.caldav_app_password}`);
+      const b64 = btoa(`${creds.caldav_apple_id}:${creds.caldav_app_password}`);
       const stat = { pushed: 0, deleted: 0, errors: [] as string[] };
       results[personId] = stat;
 
@@ -232,15 +236,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(
-      JSON.stringify({ ok: true, results }),
-      { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
-    );
+    return new Response(JSON.stringify({ ok: true, results }), {
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
   } catch (e) {
     console.error('[caldav-push]', e);
-    return new Response(
-      JSON.stringify({ error: String(e) }),
-      { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
-    );
+    return new Response(JSON.stringify({ error: String(e) }), {
+      status: 500,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
   }
 });
