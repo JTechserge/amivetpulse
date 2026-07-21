@@ -946,6 +946,152 @@ function openEditUserModal(userId, users, onBack) {
 }
 
 const CALENDAR_SYNC_COLORS = ['#0F766E', '#2563EB', '#7C3AED', '#DC2626', '#16A34A', '#EA580C'];
+const CALDAV_PUSH_URL = `${SUPABASE_FUNCTIONS_URL}caldav-push`;
+
+async function getCaldavStatus(personId) {
+  const res = await fetch(`${SUPABASE_URL}rpc/get_caldav_status`, {
+    method: 'POST',
+    headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ p_person_id: personId }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const rows = await res.json();
+  return rows[0] || { apple_id: null, calendar_url: null, is_configured: false };
+}
+
+async function saveCaldavCredentials(personId, appleId, appPassword, calendarUrl) {
+  const res = await fetch(`${SUPABASE_URL}rpc/save_caldav_credentials`, {
+    method: 'POST',
+    headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      p_person_id: personId,
+      p_apple_id: appleId,
+      p_app_password: appPassword,
+      p_calendar_url: calendarUrl,
+    }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+async function clearCaldavCredentials(personId) {
+  const res = await fetch(`${SUPABASE_URL}rpc/clear_caldav_credentials`, {
+    method: 'POST',
+    headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ p_person_id: personId }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+async function discoverCaldavCalendars(appleId, appPassword) {
+  const res = await fetch(CALDAV_PUSH_URL, {
+    method: 'POST',
+    headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ action: 'discover', apple_id: appleId, app_password: appPassword }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data.calendars || [];
+}
+
+function caldavSectionHtml(caldavStatus) {
+  if (caldavStatus.is_configured) {
+    return `
+      <div class="caldav-section">
+        <div style="font-size:12.5px;font-weight:600;margin-bottom:6px;">📲 Push iCloud (présences)</div>
+        <p style="font-size:11.5px;color:#15803D;margin-bottom:8px;">✅ Configuré — ${escapeHTML(caldavStatus.apple_id)}</p>
+        <button type="button" class="btn" data-caldav-edit style="font-size:12px;margin-bottom:4px;width:100%;justify-content:center;">Modifier les identifiants</button>
+        <button type="button" class="btn" data-caldav-clear style="font-size:12px;width:100%;justify-content:center;color:#B91C1C;border-color:#FCA5A5;">Désactiver le push iCloud</button>
+      </div>`;
+  }
+  return `
+    <div class="caldav-section">
+      <div style="font-size:12.5px;font-weight:600;margin-bottom:6px;">📲 Push iCloud (présences)</div>
+      <p style="font-size:11px;color:var(--color-text-muted);margin-bottom:8px;">Les jours de présence s'affichent instantanément dans votre calendrier iCloud. Nécessite un <a href="https://appleid.apple.com" target="_blank" style="color:var(--color-primary);">mot de passe d'application Apple</a>.</p>
+      <label style="font-size:11.5px;display:block;margin-bottom:2px;">Apple ID</label>
+      <input type="email" data-caldav-apple-id placeholder="exemple@icloud.com" style="width:100%;padding:7px 10px;border:1px solid var(--color-border);border-radius:6px;font-size:12px;font-family:inherit;margin-bottom:8px;box-sizing:border-box;">
+      <label style="font-size:11.5px;display:block;margin-bottom:2px;">Mot de passe d'application</label>
+      <input type="password" data-caldav-app-password placeholder="xxxx-xxxx-xxxx-xxxx" style="width:100%;padding:7px 10px;border:1px solid var(--color-border);border-radius:6px;font-size:12px;font-family:inherit;margin-bottom:8px;box-sizing:border-box;">
+      <button type="button" class="btn" data-caldav-discover style="width:100%;justify-content:center;font-size:12px;margin-bottom:8px;">Découvrir mes calendriers iCloud</button>
+      <div data-caldav-calendar-picker style="display:none;margin-bottom:8px;">
+        <label style="font-size:11.5px;display:block;margin-bottom:2px;">Choisir un calendrier</label>
+        <select data-caldav-select style="width:100%;padding:7px 10px;border:1px solid var(--color-border);border-radius:6px;font-size:12px;font-family:inherit;box-sizing:border-box;background:var(--color-surface);"></select>
+      </div>
+      <div data-caldav-error style="font-size:11.5px;color:#B91C1C;margin-bottom:6px;display:none;"></div>
+      <button type="button" class="btn btn-primary" data-caldav-save style="width:100%;justify-content:center;font-size:12px;" disabled>Activer le push iCloud</button>
+    </div>`;
+}
+
+function wireCaldavSection(sectionEl, person, initialStatus) {
+  let caldavStatus = initialStatus;
+
+  function refresh(newStatus) {
+    caldavStatus = newStatus;
+    // eslint-disable-next-line no-unsanitized/property
+    sectionEl.innerHTML = caldavSectionHtml(caldavStatus);
+    wireCaldavSection(sectionEl, person, caldavStatus);
+  }
+
+  if (caldavStatus.is_configured) {
+    sectionEl.querySelector('[data-caldav-edit]').onclick = () => {
+      refresh({ is_configured: false, apple_id: null, calendar_url: null });
+    };
+    sectionEl.querySelector('[data-caldav-clear]').onclick = async () => {
+      await clearCaldavCredentials(person.id);
+      refresh({ is_configured: false, apple_id: null, calendar_url: null });
+      showToast(`Push iCloud de ${person.short} désactivé`, '📲');
+    };
+    return;
+  }
+
+  const appleIdEl   = sectionEl.querySelector('[data-caldav-apple-id]');
+  const passwordEl  = sectionEl.querySelector('[data-caldav-app-password]');
+  const discoverBtn = sectionEl.querySelector('[data-caldav-discover]');
+  const pickerEl    = sectionEl.querySelector('[data-caldav-calendar-picker]');
+  const selectEl    = sectionEl.querySelector('[data-caldav-select]');
+  const errorEl     = sectionEl.querySelector('[data-caldav-error]');
+  const saveBtn     = sectionEl.querySelector('[data-caldav-save]');
+
+  function showError(msg) { errorEl.textContent = msg; errorEl.style.display = 'block'; }
+  function clearError()   { errorEl.style.display = 'none'; }
+
+  discoverBtn.onclick = async () => {
+    clearError();
+    const appleId     = appleIdEl.value.trim();
+    const appPassword = passwordEl.value.trim();
+    if (!appleId || !appPassword) { showError('Renseignez votre Apple ID et le mot de passe d\'application.'); return; }
+    discoverBtn.disabled = true;
+    discoverBtn.textContent = 'Connexion…';
+    try {
+      const calendars = await discoverCaldavCalendars(appleId, appPassword);
+      if (calendars.length === 0) { showError('Aucun calendrier trouvé sur ce compte iCloud.'); return; }
+      selectEl.innerHTML = calendars.map((c) => `<option value="${escapeHTML(c.url)}">${escapeHTML(c.name)}</option>`).join('');
+      pickerEl.style.display = 'block';
+      saveBtn.disabled = false;
+    } catch (e) {
+      showError(e.message || 'Connexion iCloud impossible.');
+    } finally {
+      discoverBtn.disabled = false;
+      discoverBtn.textContent = 'Découvrir mes calendriers iCloud';
+    }
+  };
+
+  saveBtn.onclick = async () => {
+    clearError();
+    const appleId     = appleIdEl.value.trim();
+    const appPassword = passwordEl.value.trim();
+    const calendarUrl = selectEl.value;
+    if (!appleId || !appPassword || !calendarUrl) { showError('Complétez tous les champs.'); return; }
+    saveBtn.disabled = true;
+    try {
+      await saveCaldavCredentials(person.id, appleId, appPassword, calendarUrl);
+      refresh({ is_configured: true, apple_id: appleId, calendar_url: calendarUrl });
+      showToast(`Push iCloud configuré pour ${person.short}`, '📲');
+    } catch (e) {
+      showError('Erreur lors de la sauvegarde. Réessayez.');
+      saveBtn.disabled = false;
+    }
+  };
+}
 
 async function getCalendarSyncStatus(personId) {
   const res = await fetch(`${SUPABASE_URL}rpc/get_calendar_sync_status`, {
@@ -999,6 +1145,7 @@ function calendarSyncPersonBlockHtml(person) {
         <span class="text-muted" id="cal-sync-status-${person.id}" style="font-size:12px;">Chargement…</span>
       </div>
       <div id="cal-sync-body-${person.id}" style="margin-top:10px;"></div>
+      <div id="cal-sync-caldav-${person.id}" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--color-border);"></div>
     </div>
   `;
 }
@@ -1132,6 +1279,7 @@ function openCalendarSyncModal() {
   };
 
   PEOPLE.forEach((person) => {
+    // Flux ICS (existant)
     getCalendarSyncStatus(person.id)
       .then((status) => {
         renderCalendarSyncPersonBody(box, person, status, '');
@@ -1140,6 +1288,21 @@ function openCalendarSyncModal() {
         box.querySelector(`#cal-sync-status-${person.id}`).textContent = 'Connexion impossible';
         console.warn(e);
       });
+
+    // Push CalDAV (nouveau)
+    const caldavEl = box.querySelector(`#cal-sync-caldav-${person.id}`);
+    if (caldavEl) {
+      getCaldavStatus(person.id)
+        .then((caldavStatus) => {
+          // eslint-disable-next-line no-unsanitized/property
+          caldavEl.innerHTML = caldavSectionHtml(caldavStatus);
+          wireCaldavSection(caldavEl, person, caldavStatus);
+        })
+        .catch((e) => {
+          caldavEl.innerHTML = `<p style="font-size:11.5px;color:var(--color-text-muted);">Push iCloud indisponible</p>`;
+          console.warn(e);
+        });
+    }
   });
 }
 
