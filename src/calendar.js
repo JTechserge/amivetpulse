@@ -762,7 +762,7 @@ function buildWeekGrid(year, month, people) {
             const lbl = ri.label
               ? `<div class="pstrip-leave-label-merged lbl-${ri.leaveType}">${escapeHTML(ri.label)}</div>`
               : '';
-            cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="${spanStyle}position:relative">${halves}${lbl}</div>`;
+            cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" data-erase-date="${iso}" style="${spanStyle}position:relative">${halves}${lbl}</div>`;
             wi += span;
             continue;
           }
@@ -1164,7 +1164,7 @@ function startDrag(cell) {
     cancelled: false,
     touched: new Set(),
     viewKey: calViewKeyOfEventTarget(cell),
-    paintMode: (isASVDrag || store.calMonthPaintMode === 'erase') ? store.calMonthPaintMode : null,
+    paintMode: isASVDrag || store.calMonthPaintMode === 'erase' ? store.calMonthPaintMode : null,
     longPressTimer: setTimeout(() => {
       if (dragCtx && !dragCtx.moved) {
         dragCtx.cancelled = true;
