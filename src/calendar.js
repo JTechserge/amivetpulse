@@ -759,7 +759,8 @@ function buildWeekGrid(year, month, people) {
             let suffixCell = '';
             const lastWI = wi + span - 1;
             const lastDayNum = lastWI < weekDays.length ? weekDays[lastWI] : null;
-            const lastIso = lastDayNum !== null && lastDayNum !== undefined ? fmtISO(new Date(year, month, lastDayNum)) : null;
+            const lastIso =
+              lastDayNum !== null && lastDayNum !== undefined ? fmtISO(new Date(year, month, lastDayNum)) : null;
             if (lastIso && lastIso !== iso && getSlotState(lastIso, person.id, 'AM') !== 'absent') {
               const info = cellRenderInfo(lastIso, person.id, 'AM');
               const stateCls = info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
@@ -770,7 +771,11 @@ function buildWeekGrid(year, month, people) {
             const lbl = ri.label
               ? `<div class="pstrip-leave-label-merged lbl-${ri.leaveType}">${escapeHTML(ri.label)}</div>`
               : '';
-            cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}${pstripBgCls}" data-person="${person.id}" data-erase-date="${iso}" style="grid-column:span ${span * 2 - spanOffset - spanTrim};position:relative">${lbl}</div>`;
+            // Overlay invisible : cible de clic pour la gomme (même chemin que les cases normales)
+            const eraseOverlay = blocked
+              ? ''
+              : `<div class="cal-wg-half" data-date="${iso}" data-person="${person.id}" data-slot="M" data-vet-erase-overlay="1" style="position:absolute;inset:0;background:transparent;color:transparent;z-index:2;" tabindex="-1" aria-hidden="true"></div>`;
+            cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}${pstripBgCls}" data-person="${person.id}" data-erase-date="${iso}" style="grid-column:span ${span * 2 - spanOffset - spanTrim};position:relative">${eraseOverlay}${lbl}</div>`;
             cells += suffixCell;
             wi += span;
             continue;
@@ -1671,6 +1676,18 @@ function initCalendarInteractions() {
   document.addEventListener('mousedown', (e) => {
     const cell = e.target.closest('.cal-wg-half');
     if (cell && !cell.dataset.action) {
+      // Overlay VET : ne répond qu'en mode gomme — efface tout le bloc fusionné
+      if (cell.dataset.vetEraseOverlay) {
+        if (store.calMonthPaintMode === 'erase' && _canEditSlot(cell.dataset.person)) {
+          e.preventDefault();
+          _snapshotBeforeChange();
+          eraseFullRun(cell.dataset.person, cell.dataset.date);
+          _saveData();
+          const vk = calViewKeyOfEventTarget(cell);
+          if (vk) renderCalendarView(vk);
+        }
+        return;
+      }
       if (!_canEditSlot(cell.dataset.person)) return;
       e.preventDefault();
       startDrag(cell);
@@ -1700,6 +1717,17 @@ function initCalendarInteractions() {
     (e) => {
       const cell = e.target.closest('.cal-wg-half');
       if (cell && !cell.dataset.action) {
+        // Overlay VET : ne répond qu'en mode gomme — efface tout le bloc fusionné
+        if (cell.dataset.vetEraseOverlay) {
+          if (store.calMonthPaintMode === 'erase' && _canEditSlot(cell.dataset.person)) {
+            _snapshotBeforeChange();
+            eraseFullRun(cell.dataset.person, cell.dataset.date);
+            _saveData();
+            const vk = calViewKeyOfEventTarget(cell);
+            if (vk) renderCalendarView(vk);
+          }
+          return;
+        }
         if (!_canEditSlot(cell.dataset.person)) return;
         startDrag(cell);
         return;
