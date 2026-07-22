@@ -758,12 +758,11 @@ function buildWeekGrid(year, month, people) {
               const dIso = fmtISO(new Date(year, month, dNum));
               halves += SLOTS.map((slot) => {
                 const info = cellRenderInfo(dIso, person.id, slot);
-                const stateCls =
-                  leaveHalfCls && info.state === 'absent'
-                    ? leaveHalfCls
-                    : info.stateClass
-                      ? ` cal-wg-half-${info.stateClass}`
-                      : '';
+                const stateCls = leaveHalfCls
+                  ? leaveHalfCls
+                  : info.stateClass
+                    ? ` cal-wg-half-${info.stateClass}`
+                    : '';
                 return `<div class="cal-wg-half${stateCls}${lockCls}" data-date="${dIso}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(dIso, person.id, slot)}"></div>`;
               }).join('');
             }
