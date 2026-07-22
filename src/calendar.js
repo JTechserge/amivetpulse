@@ -1164,7 +1164,7 @@ function startDrag(cell) {
     cancelled: false,
     touched: new Set(),
     viewKey: calViewKeyOfEventTarget(cell),
-    paintMode: isASVDrag ? store.calMonthPaintMode : null,
+    paintMode: (isASVDrag || store.calMonthPaintMode === 'erase') ? store.calMonthPaintMode : null,
     longPressTimer: setTimeout(() => {
       if (dragCtx && !dragCtx.moved) {
         dragCtx.cancelled = true;

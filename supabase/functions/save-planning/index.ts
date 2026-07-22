@@ -12,35 +12,21 @@ import {
 // Vétérinaires éligibles au push CalDAV (ceux dont les credentials peuvent être configurés).
 const VET_PERSONS = new Set(['david', 'stephane']);
 
-// Construit la liste des changements de présence à pousser vers iCloud.
-function buildCaldavChanges(
-  oldSlots: SlotsRecord,
-  newSlots: SlotsRecord,
-): Array<{ personId: string; iso: string; isPresent: boolean }> {
+// Retourne les vétérinaires dont au moins un slot a changé → sync CalDAV complète.
+function buildCaldavAffectedPersons(oldSlots: SlotsRecord, newSlots: SlotsRecord): string[] {
   const changed = findChangedKeys(oldSlots, newSlots);
-  const affected = new Map<string, boolean>(); // "personId|iso" → isPresent
+  const affected = new Set<string>();
   const keyRe = /^(\d{4}-\d{2}-\d{2})_([^_]+)_(M|AM)$/;
   for (const { key } of changed) {
     const m = key.match(keyRe);
-    if (!m) continue;
-    const [, iso, personId] = m;
-    if (!VET_PERSONS.has(personId)) continue;
-    const mapKey = `${personId}|${iso}`;
-    if (affected.has(mapKey)) continue;
-    const isPresent =
-      newSlots[`${iso}_${personId}_M`] === 'present' ||
-      newSlots[`${iso}_${personId}_AM`] === 'present';
-    affected.set(mapKey, isPresent);
+    if (m && VET_PERSONS.has(m[2])) affected.add(m[2]);
   }
-  return Array.from(affected.entries()).map(([k, isPresent]) => {
-    const [personId, iso] = k.split('|');
-    return { personId, iso, isPresent };
-  });
+  return [...affected];
 }
 
-const SUPABASE_URL      = Deno.env.get('SUPABASE_URL')!;
-const SERVICE_ROLE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const ANON_KEY          = Deno.env.get('SUPABASE_ANON_KEY')!;
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': 'https://jtechserge.github.io',
@@ -60,7 +46,7 @@ function json(body: unknown, status = 200) {
 // Limité à l'instance courante (repart au cold start) — suffisant pour un effectif fermé.
 const _rateLimits = new Map<string, { count: number; windowStart: number }>();
 const RATE_WINDOW_MS = 60_000;
-const RATE_MAX       = 60;
+const RATE_MAX = 60;
 
 function checkRateLimit(userId: string): boolean {
   const now = Date.now();
@@ -94,7 +80,7 @@ Deno.serve(async (req) => {
     // ── 2. Profil utilisateur ────────────────────────────────────────────────
     const profRes = await fetch(
       `${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${authUser.id}&select=role,can_edit_vet_calendar,can_edit_all_asv,person_id`,
-      { headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+      { headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` } }
     );
     const profiles = await profRes.json();
     const profile = profiles?.[0];
@@ -102,17 +88,20 @@ Deno.serve(async (req) => {
 
     // ── 3. Payload ───────────────────────────────────────────────────────────
     let body: { slots?: SlotsRecord };
-    try { body = await req.json(); } catch { return json({ error: 'Corps JSON invalide.' }, 400); }
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: 'Corps JSON invalide.' }, 400);
+    }
     const { slots } = body;
     if (!slots || typeof slots !== 'object' || Array.isArray(slots)) {
       return json({ error: 'Le champ "slots" est requis et doit être un objet.' }, 400);
     }
 
     // ── 4. État actuel (diff droits ASV + diff CalDAV push) ─────────────────
-    const currentRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/planning_data?id=eq.singleton&select=data`,
-      { headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
-    );
+    const currentRes = await fetch(`${SUPABASE_URL}/rest/v1/planning_data?id=eq.singleton&select=data`, {
+      headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
+    });
     if (!currentRes.ok) throw new Error(`Lecture planning_data impossible (HTTP ${currentRes.status}).`);
     const currentRows = await currentRes.json();
     const currentSlots: SlotsRecord = currentRows?.[0]?.data ?? {};
@@ -131,7 +120,7 @@ Deno.serve(async (req) => {
         apikey: SERVICE_ROLE_KEY,
         Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
         'Content-Type': 'application/json',
-        'Prefer': 'resolution=merge-duplicates,return=minimal',
+        Prefer: 'resolution=merge-duplicates,return=minimal',
       },
       body: JSON.stringify({ id: 'singleton', data: slots, updated_at: new Date().toISOString() }),
     });
@@ -141,8 +130,8 @@ Deno.serve(async (req) => {
     }
 
     // ── 6. CalDAV push (fire-and-forget, non bloquant) ──────────────────────
-    const caldavChanges = buildCaldavChanges(currentSlots, slots);
-    if (caldavChanges.length > 0) {
+    const affectedPersons = buildCaldavAffectedPersons(currentSlots, slots);
+    if (affectedPersons.length > 0) {
       EdgeRuntime.waitUntil(
         fetch(`${SUPABASE_URL}/functions/v1/caldav-push`, {
           method: 'POST',
@@ -151,8 +140,8 @@ Deno.serve(async (req) => {
             Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ changes: caldavChanges }),
-        }).catch((e: Error) => console.warn('[save-planning] CalDAV push:', e.message)),
+          body: JSON.stringify({ persons: affectedPersons }),
+        }).catch((e: Error) => console.warn('[save-planning] CalDAV push:', e.message))
       );
     }
 

@@ -1036,6 +1036,16 @@ function wireCaldavSection(sectionEl, person, initialStatus) {
       refresh({ is_configured: false, apple_id: null, calendar_url: null });
     };
     sectionEl.querySelector('[data-caldav-clear]').onclick = async () => {
+      // Supprime d'abord les événements dans iCloud avant d'effacer les credentials
+      try {
+        await fetch(CALDAV_PUSH_URL, {
+          method: 'POST',
+          headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ action: 'clear', personId: person.id }),
+        });
+      } catch (e) {
+        console.warn('[caldav-clear]', e);
+      }
       await clearCaldavCredentials(person.id);
       refresh({ is_configured: false, apple_id: null, calendar_url: null });
       showToast(`Push iCloud de ${person.short} désactivé`, '📲');
@@ -1043,28 +1053,41 @@ function wireCaldavSection(sectionEl, person, initialStatus) {
     return;
   }
 
-  const appleIdEl   = sectionEl.querySelector('[data-caldav-apple-id]');
-  const passwordEl  = sectionEl.querySelector('[data-caldav-app-password]');
+  const appleIdEl = sectionEl.querySelector('[data-caldav-apple-id]');
+  const passwordEl = sectionEl.querySelector('[data-caldav-app-password]');
   const discoverBtn = sectionEl.querySelector('[data-caldav-discover]');
-  const pickerEl    = sectionEl.querySelector('[data-caldav-calendar-picker]');
-  const selectEl    = sectionEl.querySelector('[data-caldav-select]');
-  const errorEl     = sectionEl.querySelector('[data-caldav-error]');
-  const saveBtn     = sectionEl.querySelector('[data-caldav-save]');
+  const pickerEl = sectionEl.querySelector('[data-caldav-calendar-picker]');
+  const selectEl = sectionEl.querySelector('[data-caldav-select]');
+  const errorEl = sectionEl.querySelector('[data-caldav-error]');
+  const saveBtn = sectionEl.querySelector('[data-caldav-save]');
 
-  function showError(msg) { errorEl.textContent = msg; errorEl.style.display = 'block'; }
-  function clearError()   { errorEl.style.display = 'none'; }
+  function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+  }
+  function clearError() {
+    errorEl.style.display = 'none';
+  }
 
   discoverBtn.onclick = async () => {
     clearError();
-    const appleId     = appleIdEl.value.trim();
+    const appleId = appleIdEl.value.trim();
     const appPassword = passwordEl.value.trim();
-    if (!appleId || !appPassword) { showError('Renseignez votre Apple ID et le mot de passe d\'application.'); return; }
+    if (!appleId || !appPassword) {
+      showError("Renseignez votre Apple ID et le mot de passe d'application.");
+      return;
+    }
     discoverBtn.disabled = true;
     discoverBtn.textContent = 'Connexion…';
     try {
       const calendars = await discoverCaldavCalendars(appleId, appPassword);
-      if (calendars.length === 0) { showError('Aucun calendrier trouvé sur ce compte iCloud.'); return; }
-      selectEl.innerHTML = calendars.map((c) => `<option value="${escapeHTML(c.url)}">${escapeHTML(c.name)}</option>`).join('');
+      if (calendars.length === 0) {
+        showError('Aucun calendrier trouvé sur ce compte iCloud.');
+        return;
+      }
+      selectEl.innerHTML = calendars
+        .map((c) => `<option value="${escapeHTML(c.url)}">${escapeHTML(c.name)}</option>`)
+        .join('');
       pickerEl.style.display = 'block';
       saveBtn.disabled = false;
     } catch (e) {
@@ -1077,10 +1100,13 @@ function wireCaldavSection(sectionEl, person, initialStatus) {
 
   saveBtn.onclick = async () => {
     clearError();
-    const appleId     = appleIdEl.value.trim();
+    const appleId = appleIdEl.value.trim();
     const appPassword = passwordEl.value.trim();
     const calendarUrl = selectEl.value;
-    if (!appleId || !appPassword || !calendarUrl) { showError('Complétez tous les champs.'); return; }
+    if (!appleId || !appPassword || !calendarUrl) {
+      showError('Complétez tous les champs.');
+      return;
+    }
     saveBtn.disabled = true;
     try {
       await saveCaldavCredentials(person.id, appleId, appPassword, calendarUrl);
