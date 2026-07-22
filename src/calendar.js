@@ -368,6 +368,20 @@ function propagateLabelAcrossSunday(personId, slots, label) {
   }
 }
 
+// Vide les slots de toutes les personnes pour un jour fermé (présence, congé, label, décision)
+function clearDayAllPeople(iso) {
+  PEOPLE.forEach((p) => {
+    SLOTS.forEach((s) => {
+      if (getSlotState(iso, p.id, s) !== 'empty') {
+        setSlotState(iso, p.id, s, 'empty');
+        setSlotLabel(iso, p.id, s, '');
+        setChangeDecision(iso, p.id, s, null);
+      }
+    });
+    delete store.DATA.slots[shiftTypeKey(iso, p.id)];
+  });
+}
+
 // Efface tous les slots absents du run contigu autour de iso (ignore dimanches)
 function eraseFullRun(personId, iso) {
   const startDate = new Date(iso + 'T00:00:00');
@@ -781,11 +795,14 @@ function buildWeekGrid(year, month, people) {
             continue;
           }
           // Cellule normale (présent / vide)
+          const isClosed = isClinicClosed(iso);
           const halves = SLOTS.map((slot) => {
             const info = cellRenderInfo(iso, person.id, slot);
-            const lockCls = locked ? ' cal-wg-half-locked' : noEdit ? ' cal-wg-half-readonly' : '';
-            const stateCls = info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
-            return `<div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(iso, person.id, slot)}">${info.html || (slot === 'M' ? 'M' : 'A')}</div>`;
+            const lockCls = isClosed ? ' cal-wg-half-clinic-closed' : locked ? ' cal-wg-half-locked' : noEdit ? ' cal-wg-half-readonly' : '';
+            const stateCls = isClosed ? '' : info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
+            const isBlocked = blocked || isClosed;
+            const title = isClosed ? 'Clinique fermée' : blocked ? blockTitle : info.title || '';
+            return `<div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="${slot}" ${isBlocked ? 'data-action="locked"' : ''} style="${isClosed ? '' : info.style || ''}" tabindex="${isBlocked ? '-1' : '0'}" role="button" title="${escapeHTML(title)}" aria-label="${cellAriaLabel(iso, person.id, slot)}">${isClosed ? '' : info.html || (slot === 'M' ? 'M' : 'A')}</div>`;
           }).join('');
           cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="grid-column:span 2">${halves}</div>`;
           wi++;
@@ -1103,7 +1120,9 @@ function renderCalendarView(viewKey) {
     container.querySelectorAll('[data-clinic-close]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const iso = btn.dataset.clinicClose;
-        setClinicClosed(iso, !isClinicClosed(iso));
+        const nowClosed = !isClinicClosed(iso);
+        setClinicClosed(iso, nowClosed);
+        if (nowClosed) clearDayAllPeople(iso);
         _saveData();
         renderCalendarView(viewKey);
       });
@@ -1117,7 +1136,11 @@ function renderCalendarView(viewKey) {
         const nb = daysInMonth(year, mnth);
         for (let d = 1; d <= nb; d++) {
           const dt = new Date(year, mnth, d);
-          if (dt.getDay() === 6) setClinicClosed(fmtISO(dt), true);
+          if (dt.getDay() === 6) {
+            const isoD = fmtISO(dt);
+            setClinicClosed(isoD, true);
+            clearDayAllPeople(isoD);
+          }
         }
         _saveData();
         renderCalendarView(viewKey);

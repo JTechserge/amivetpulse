@@ -605,6 +605,8 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-wg-half-readonly:hover{filter:grayscale(20%);}
 .cal-wg-half-nonworking{background:repeating-linear-gradient(135deg,#f1f5f9 0 4px,#e8edf2 4px 8px);cursor:default;pointer-events:none;}
 .cal-wg-half-nonworking:hover{background:repeating-linear-gradient(135deg,#f1f5f9 0 4px,#e8edf2 4px 8px);}
+.cal-wg-half-clinic-closed{background:repeating-linear-gradient(45deg,#e2e8f0 0 3px,#cbd5e1 3px 6px);cursor:not-allowed;pointer-events:none;}
+.cal-wg-half-clinic-closed:hover{background:repeating-linear-gradient(45deg,#e2e8f0 0 3px,#cbd5e1 3px 6px);}
 .pstrip-archived .cal-wg-half{opacity:0.40;filter:grayscale(60%);cursor:default;}
 .pstrip-archived .cal-wg-half:hover{filter:grayscale(60%);}
 
