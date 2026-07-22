@@ -748,17 +748,25 @@ function buildWeekGrid(year, month, people) {
                     sick: ' cal-wg-half-sick',
                   }[ri.leaveType] ?? ' cal-wg-half-absent')
                 : null;
-            const halves = SLOTS.map((slot) => {
-              const info = cellRenderInfo(iso, person.id, slot);
-              const lockCls = locked ? ' cal-wg-half-locked' : noEdit ? ' cal-wg-half-readonly' : '';
-              const stateCls =
-                leaveHalfCls && info.state === 'absent'
-                  ? leaveHalfCls
-                  : info.stateClass
-                    ? ` cal-wg-half-${info.stateClass}`
-                    : '';
-              return `<div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(iso, person.id, slot)}"></div>`;
-            }).join('');
+            const lockCls = locked ? ' cal-wg-half-locked' : noEdit ? ' cal-wg-half-readonly' : '';
+            // Génère les demi-cases pour TOUS les jours du segment (pas seulement le premier)
+            // pour que chaque cellule reste cliquable même dans un bloc fusionné.
+            let halves = '';
+            for (let dj = 0; dj < span; dj++) {
+              const dNum = weekDays[wi + dj];
+              if (dNum === null || dNum === undefined) break;
+              const dIso = fmtISO(new Date(year, month, dNum));
+              halves += SLOTS.map((slot) => {
+                const info = cellRenderInfo(dIso, person.id, slot);
+                const stateCls =
+                  leaveHalfCls && info.state === 'absent'
+                    ? leaveHalfCls
+                    : info.stateClass
+                      ? ` cal-wg-half-${info.stateClass}`
+                      : '';
+                return `<div class="cal-wg-half${stateCls}${lockCls}" data-date="${dIso}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(dIso, person.id, slot)}"></div>`;
+              }).join('');
+            }
             const lbl = ri.label
               ? `<div class="pstrip-leave-label-merged lbl-${ri.leaveType}">${escapeHTML(ri.label)}</div>`
               : '';
