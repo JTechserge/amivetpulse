@@ -600,7 +600,7 @@ function buildWeekGrid(year, month, people) {
       const headerCols = weekDays
         .map((day, wd) => {
           if (day === null)
-            return `<div class="cal-wg-day cal-wg-day-empty" aria-hidden="true" style="grid-column:span 2"></div>`;
+            return `<div class="cal-wg-day cal-wg-day-empty" aria-hidden="true" style="grid-column:span ${wd === 6 ? 1 : 2}"></div>`;
           const date = new Date(year, month, day);
           const iso = fmtISO(date);
           const isSat = wd === 5,
@@ -736,16 +736,42 @@ function buildWeekGrid(year, month, people) {
           }
           if (ri && ri.isWeekStart) {
             const span = ri.weekRunLen;
-            const pstripBgCls = ({
-              repos: ' pstrip-bg-repos',
-              sick: ' pstrip-bg-sick',
-              pending: ' pstrip-bg-pending',
-              conge: ' pstrip-bg-absent',
-            }[ri.leaveType] ?? ' pstrip-bg-absent');
+            const lockCls = locked ? ' cal-wg-half-locked' : noEdit ? ' cal-wg-half-readonly' : '';
+            const pstripBgCls =
+              {
+                repos: ' pstrip-bg-repos',
+                sick: ' pstrip-bg-sick',
+                pending: ' pstrip-bg-pending',
+                conge: ' pstrip-bg-absent',
+              }[ri.leaveType] ?? ' pstrip-bg-absent';
+
+            // Jour partiel en début : M présent → rendre M séparément avant le bloc fusionné
+            let spanOffset = 0;
+            if (getSlotState(iso, person.id, 'M') !== 'absent') {
+              const info = cellRenderInfo(iso, person.id, 'M');
+              const stateCls = info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
+              cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="grid-column:span 1;position:relative"><div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="M" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(iso, person.id, 'M')}">${info.html || 'M'}</div></div>`;
+              spanOffset = 1;
+            }
+
+            // Jour partiel en fin : AM présent → rendre AM séparément après le bloc fusionné
+            let spanTrim = 0;
+            let suffixCell = '';
+            const lastWI = wi + span - 1;
+            const lastDayNum = lastWI < weekDays.length ? weekDays[lastWI] : null;
+            const lastIso = lastDayNum !== null && lastDayNum !== undefined ? fmtISO(new Date(year, month, lastDayNum)) : null;
+            if (lastIso && lastIso !== iso && getSlotState(lastIso, person.id, 'AM') !== 'absent') {
+              const info = cellRenderInfo(lastIso, person.id, 'AM');
+              const stateCls = info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
+              suffixCell = `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="grid-column:span 1;position:relative"><div class="cal-wg-half${stateCls}${lockCls}" data-date="${lastIso}" data-person="${person.id}" data-slot="AM" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(lastIso, person.id, 'AM')}">${info.html || 'A'}</div></div>`;
+              spanTrim = 1;
+            }
+
             const lbl = ri.label
               ? `<div class="pstrip-leave-label-merged lbl-${ri.leaveType}">${escapeHTML(ri.label)}</div>`
               : '';
-            cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}${pstripBgCls}" data-person="${person.id}" data-erase-date="${iso}" style="grid-column:span ${span * 2};position:relative">${lbl}</div>`;
+            cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}${pstripBgCls}" data-person="${person.id}" data-erase-date="${iso}" style="grid-column:span ${span * 2 - spanOffset - spanTrim};position:relative">${lbl}</div>`;
+            cells += suffixCell;
             wi += span;
             continue;
           }
@@ -1189,6 +1215,7 @@ function applyPaint(cell, value) {
     setSlotLabel(iso, personId, slot, 'Arrêt maladie');
   } else if (dragCtx.paintMode === 'erase') {
     eraseFullRun(personId, iso);
+    dragCtx.touched.add(`${iso}|${personId}|erase`);
   } else {
     setSlotState(iso, personId, slot, value);
   }
@@ -1656,6 +1683,7 @@ function initCalendarInteractions() {
         e.preventDefault();
         _snapshotBeforeChange();
         eraseFullRun(pstrip.dataset.person, pstrip.dataset.eraseDate);
+        _saveData();
         const vk = calViewKeyOfEventTarget(pstrip);
         if (vk) renderCalendarView(vk);
       }
@@ -1681,6 +1709,7 @@ function initCalendarInteractions() {
         if (pstrip && _canEditSlot(pstrip.dataset.person)) {
           _snapshotBeforeChange();
           eraseFullRun(pstrip.dataset.person, pstrip.dataset.eraseDate);
+          _saveData();
           const vk = calViewKeyOfEventTarget(pstrip);
           if (vk) renderCalendarView(vk);
         }
