@@ -649,7 +649,7 @@ function buildWeekGrid(year, month, people) {
           const day = weekDays[wi];
           const wd = wi;
           if (day === null) {
-            cells += `<div class="cal-wg-pstrip-null" aria-hidden="true" style="grid-column:span 2"></div>`;
+            cells += `<div class="cal-wg-pstrip-null" aria-hidden="true" style="grid-column:span ${wd === 6 ? 1 : 2}"></div>`;
             wi++;
             continue;
           }
@@ -736,40 +736,16 @@ function buildWeekGrid(year, month, people) {
           }
           if (ri && ri.isWeekStart) {
             const span = ri.weekRunLen;
-            const spanStyle = `grid-column:span ${span * 2};`;
-            // Pour les runs avec label, forcer la couleur du type de congé sur toutes les halves
-            // (sinon seule la half du slot absent du jour isWeekStart prend la couleur)
-            const leaveHalfCls =
-              ri.weekRunLen > 1 || ri.hasLabel
-                ? ({
-                    repos: ' cal-wg-half-off',
-                    pending: ' cal-wg-half-leave-pending',
-                    conge: ' cal-wg-half-absent',
-                    sick: ' cal-wg-half-sick',
-                  }[ri.leaveType] ?? ' cal-wg-half-absent')
-                : null;
-            const lockCls = locked ? ' cal-wg-half-locked' : noEdit ? ' cal-wg-half-readonly' : '';
-            // Génère les demi-cases pour TOUS les jours du segment (pas seulement le premier)
-            // pour que chaque cellule reste cliquable même dans un bloc fusionné.
-            let halves = '';
-            for (let dj = 0; dj < span; dj++) {
-              const dNum = weekDays[wi + dj];
-              if (dNum === null || dNum === undefined) break;
-              const dIso = fmtISO(new Date(year, month, dNum));
-              halves += SLOTS.map((slot) => {
-                const info = cellRenderInfo(dIso, person.id, slot);
-                const stateCls = leaveHalfCls
-                  ? leaveHalfCls
-                  : info.stateClass
-                    ? ` cal-wg-half-${info.stateClass}`
-                    : '';
-                return `<div class="cal-wg-half${stateCls}${lockCls}" data-date="${dIso}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(dIso, person.id, slot)}"></div>`;
-              }).join('');
-            }
+            const pstripBgCls = ({
+              repos: ' pstrip-bg-repos',
+              sick: ' pstrip-bg-sick',
+              pending: ' pstrip-bg-pending',
+              conge: ' pstrip-bg-absent',
+            }[ri.leaveType] ?? ' pstrip-bg-absent');
             const lbl = ri.label
               ? `<div class="pstrip-leave-label-merged lbl-${ri.leaveType}">${escapeHTML(ri.label)}</div>`
               : '';
-            cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" data-erase-date="${iso}" style="${spanStyle}position:relative">${halves}${lbl}</div>`;
+            cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}${pstripBgCls}" data-person="${person.id}" data-erase-date="${iso}" style="grid-column:span ${span * 2};position:relative">${lbl}</div>`;
             wi += span;
             continue;
           }
