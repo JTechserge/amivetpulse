@@ -414,6 +414,35 @@ function eraseFullRun(personId, iso) {
   }
 }
 
+// Collecte tous les { iso, slot } absents du run contigu autour de iso
+function collectRunSlots(personId, iso) {
+  const startDate = new Date(iso + 'T00:00:00');
+  const dayHasAbsent = (d) => SLOTS.some((s) => getSlotState(fmtISO(d), personId, s) === 'absent');
+  let runStart = new Date(startDate);
+  for (let d = new Date(startDate.getTime() - 86400000); ; d = new Date(d.getTime() - 86400000)) {
+    if (isSunday(d)) continue;
+    if (!dayHasAbsent(d)) break;
+    runStart = new Date(d);
+    if (d.getFullYear() < 2020) break;
+  }
+  let runEnd = new Date(startDate);
+  for (let d = new Date(startDate.getTime() + 86400000); ; d = new Date(d.getTime() + 86400000)) {
+    if (isSunday(d)) continue;
+    if (!dayHasAbsent(d)) break;
+    runEnd = new Date(d);
+    if (d.getFullYear() > 2030) break;
+  }
+  const result = [];
+  for (let d = new Date(runStart); d <= runEnd; d = new Date(d.getTime() + 86400000)) {
+    if (isSunday(d)) continue;
+    const isoD = fmtISO(d);
+    SLOTS.forEach((s) => {
+      if (getSlotState(isoD, personId, s) === 'absent') result.push({ iso: isoD, slot: s });
+    });
+  }
+  return result;
+}
+
 function buildOvertimeRowCells(year, month, days, people) {
   let html = '';
   // Groupe les jours en semaines Mon–Dim. La dernière semaine sans dimanche (fin de mois)
@@ -798,7 +827,13 @@ function buildWeekGrid(year, month, people) {
           const isClosed = isClinicClosed(iso);
           const halves = SLOTS.map((slot) => {
             const info = cellRenderInfo(iso, person.id, slot);
-            const lockCls = isClosed ? ' cal-wg-half-clinic-closed' : locked ? ' cal-wg-half-locked' : noEdit ? ' cal-wg-half-readonly' : '';
+            const lockCls = isClosed
+              ? ' cal-wg-half-clinic-closed'
+              : locked
+                ? ' cal-wg-half-locked'
+                : noEdit
+                  ? ' cal-wg-half-readonly'
+                  : '';
             const stateCls = isClosed ? '' : info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
             const isBlocked = blocked || isClosed;
             const title = isClosed ? 'Clinique fermée' : blocked ? blockTitle : info.title || '';
@@ -1173,6 +1208,7 @@ function cycleCellAndSave(cell) {
 }
 
 let dragCtx = null;
+let mergedLPCtx = null; // long-press sur blocs fusionnés (VET overlay ou ASV pstrip)
 
 function startDrag(cell) {
   _snapshotBeforeChange();
@@ -1699,16 +1735,21 @@ function initCalendarInteractions() {
   document.addEventListener('mousedown', (e) => {
     const cell = e.target.closest('.cal-wg-half');
     if (cell && !cell.dataset.action) {
-      // Overlay VET : toujours effacer au clic (la vue VET n'a pas de barre de peinture)
+      // Overlay VET : clic court = gomme, appui long = popup intitulé
       if (cell.dataset.vetEraseOverlay) {
-        if (_canEditSlot(cell.dataset.person)) {
-          e.preventDefault();
-          _snapshotBeforeChange();
-          eraseFullRun(cell.dataset.person, cell.dataset.date);
-          _saveData();
-          const vk = calViewKeyOfEventTarget(cell);
-          if (vk) renderCalendarView(vk);
-        }
+        if (!_canEditSlot(cell.dataset.person)) return;
+        e.preventDefault();
+        const personId = cell.dataset.person;
+        const iso = cell.dataset.date;
+        const vk = calViewKeyOfEventTarget(cell);
+        mergedLPCtx = {
+          personId, iso, vk, erase: true,
+          timer: setTimeout(() => {
+            mergedLPCtx = null;
+            const runSlots = collectRunSlots(personId, iso);
+            if (runSlots.length > 0) openAbsenceRangePopover(runSlots, personId, vk);
+          }, 480),
+        };
         return;
       }
       if (!_canEditSlot(cell.dataset.person)) return;
@@ -1716,16 +1757,23 @@ function initCalendarInteractions() {
       startDrag(cell);
       return;
     }
-    // Bloc fusionné ASV : pas de .cal-wg-half visible → gomme directement sur le pstrip
-    if (store.calMonthPaintMode === 'erase') {
+    // Bloc fusionné ASV : clic court en mode gomme = effacer, appui long = popup intitulé
+    {
       const pstrip = e.target.closest('.cal-wg-pstrip[data-erase-date]');
       if (pstrip && _canEditSlot(pstrip.dataset.person)) {
         e.preventDefault();
-        _snapshotBeforeChange();
-        eraseFullRun(pstrip.dataset.person, pstrip.dataset.eraseDate);
-        _saveData();
+        const personId = pstrip.dataset.person;
+        const iso = pstrip.dataset.eraseDate;
         const vk = calViewKeyOfEventTarget(pstrip);
-        if (vk) renderCalendarView(vk);
+        const eraseMode = store.calMonthPaintMode === 'erase';
+        mergedLPCtx = {
+          personId, iso, vk, erase: eraseMode,
+          timer: setTimeout(() => {
+            mergedLPCtx = null;
+            const runSlots = collectRunSlots(personId, iso);
+            if (runSlots.length > 0) openAbsenceRangePopover(runSlots, personId, vk);
+          }, 480),
+        };
       }
     }
   });
@@ -1734,35 +1782,61 @@ function initCalendarInteractions() {
     const cell = e.target.closest('.cal-wg-half');
     if (cell && !cell.dataset.action && _canEditSlot(cell.dataset.person)) enterDragCell(cell);
   });
-  document.addEventListener('mouseup', endDrag);
+  document.addEventListener('mouseup', () => {
+    if (mergedLPCtx) {
+      clearTimeout(mergedLPCtx.timer);
+      const { personId, iso, vk, erase } = mergedLPCtx;
+      mergedLPCtx = null;
+      if (erase) {
+        _snapshotBeforeChange();
+        eraseFullRun(personId, iso);
+        _saveData();
+        if (vk) renderCalendarView(vk);
+      }
+    }
+    endDrag();
+  });
   document.addEventListener(
     'touchstart',
     (e) => {
       const cell = e.target.closest('.cal-wg-half');
       if (cell && !cell.dataset.action) {
-        // Overlay VET : toujours effacer au clic (la vue VET n'a pas de barre de peinture)
+        // Overlay VET : appui court = gomme, appui long = popup intitulé
         if (cell.dataset.vetEraseOverlay) {
-          if (_canEditSlot(cell.dataset.person)) {
-            _snapshotBeforeChange();
-            eraseFullRun(cell.dataset.person, cell.dataset.date);
-            _saveData();
-            const vk = calViewKeyOfEventTarget(cell);
-            if (vk) renderCalendarView(vk);
-          }
+          if (!_canEditSlot(cell.dataset.person)) return;
+          const personId = cell.dataset.person;
+          const iso = cell.dataset.date;
+          const vk = calViewKeyOfEventTarget(cell);
+          mergedLPCtx = {
+            personId, iso, vk, erase: true,
+            timer: setTimeout(() => {
+              mergedLPCtx = null;
+              const runSlots = collectRunSlots(personId, iso);
+              if (runSlots.length > 0) openAbsenceRangePopover(runSlots, personId, vk);
+            }, 480),
+          };
           return;
         }
         if (!_canEditSlot(cell.dataset.person)) return;
         startDrag(cell);
         return;
       }
-      if (store.calMonthPaintMode === 'erase') {
+      // Bloc fusionné ASV : appui court en mode gomme = effacer, appui long = popup intitulé
+      {
         const pstrip = e.target.closest('.cal-wg-pstrip[data-erase-date]');
         if (pstrip && _canEditSlot(pstrip.dataset.person)) {
-          _snapshotBeforeChange();
-          eraseFullRun(pstrip.dataset.person, pstrip.dataset.eraseDate);
-          _saveData();
+          const personId = pstrip.dataset.person;
+          const iso = pstrip.dataset.eraseDate;
           const vk = calViewKeyOfEventTarget(pstrip);
-          if (vk) renderCalendarView(vk);
+          const eraseMode = store.calMonthPaintMode === 'erase';
+          mergedLPCtx = {
+            personId, iso, vk, erase: eraseMode,
+            timer: setTimeout(() => {
+              mergedLPCtx = null;
+              const runSlots = collectRunSlots(personId, iso);
+              if (runSlots.length > 0) openAbsenceRangePopover(runSlots, personId, vk);
+            }, 480),
+          };
         }
       }
     },
@@ -1771,6 +1845,7 @@ function initCalendarInteractions() {
   document.addEventListener(
     'touchmove',
     (e) => {
+      if (mergedLPCtx) { clearTimeout(mergedLPCtx.timer); mergedLPCtx = null; return; }
       if (!dragCtx) return;
       const touch = e.touches[0];
       const el = document.elementFromPoint(touch.clientX, touch.clientY);
@@ -1779,7 +1854,21 @@ function initCalendarInteractions() {
     },
     { passive: true }
   );
-  document.addEventListener('touchend', endDrag);
+  document.addEventListener('touchend', () => {
+    if (mergedLPCtx) {
+      clearTimeout(mergedLPCtx.timer);
+      const { personId, iso, vk, erase } = mergedLPCtx;
+      mergedLPCtx = null;
+      if (erase) {
+        _snapshotBeforeChange();
+        eraseFullRun(personId, iso);
+        _saveData();
+        if (vk) renderCalendarView(vk);
+      }
+      return;
+    }
+    endDrag();
+  });
 
   // Double-clic sur une colonne-jour (vue hebdomadaire) ou une cellule mensuelle ASV → vue semaine
   document.addEventListener('dblclick', (e) => {
@@ -1815,6 +1904,23 @@ function initCalendarInteractions() {
   });
 
   document.addEventListener('contextmenu', (e) => {
+    // Bloc fusionné VET (overlay) ou ASV (pstrip)
+    const overlay = e.target.closest('.cal-wg-half[data-vet-erase-overlay]');
+    if (overlay && _canEditSlot(overlay.dataset.person)) {
+      e.preventDefault();
+      const runSlots = collectRunSlots(overlay.dataset.person, overlay.dataset.date);
+      const vk = calViewKeyOfEventTarget(overlay);
+      if (runSlots.length > 0) openAbsenceRangePopover(runSlots, overlay.dataset.person, vk);
+      return;
+    }
+    const pstrip = e.target.closest('.cal-wg-pstrip[data-erase-date]');
+    if (pstrip && _canEditSlot(pstrip.dataset.person)) {
+      e.preventDefault();
+      const runSlots = collectRunSlots(pstrip.dataset.person, pstrip.dataset.eraseDate);
+      const vk = calViewKeyOfEventTarget(pstrip);
+      if (runSlots.length > 0) openAbsenceRangePopover(runSlots, pstrip.dataset.person, vk);
+      return;
+    }
     const cell = e.target.closest('.cal-wg-half');
     if (!cell || cell.dataset.action) return;
     if (!_canEditSlot(cell.dataset.person)) return;
