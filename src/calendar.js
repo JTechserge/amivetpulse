@@ -1676,9 +1676,9 @@ function initCalendarInteractions() {
   document.addEventListener('mousedown', (e) => {
     const cell = e.target.closest('.cal-wg-half');
     if (cell && !cell.dataset.action) {
-      // Overlay VET : ne répond qu'en mode gomme — efface tout le bloc fusionné
+      // Overlay VET : toujours effacer au clic (la vue VET n'a pas de barre de peinture)
       if (cell.dataset.vetEraseOverlay) {
-        if (store.calMonthPaintMode === 'erase' && _canEditSlot(cell.dataset.person)) {
+        if (_canEditSlot(cell.dataset.person)) {
           e.preventDefault();
           _snapshotBeforeChange();
           eraseFullRun(cell.dataset.person, cell.dataset.date);
@@ -1717,9 +1717,9 @@ function initCalendarInteractions() {
     (e) => {
       const cell = e.target.closest('.cal-wg-half');
       if (cell && !cell.dataset.action) {
-        // Overlay VET : ne répond qu'en mode gomme — efface tout le bloc fusionné
+        // Overlay VET : toujours effacer au clic (la vue VET n'a pas de barre de peinture)
         if (cell.dataset.vetEraseOverlay) {
-          if (store.calMonthPaintMode === 'erase' && _canEditSlot(cell.dataset.person)) {
+          if (_canEditSlot(cell.dataset.person)) {
             _snapshotBeforeChange();
             eraseFullRun(cell.dataset.person, cell.dataset.date);
             _saveData();
