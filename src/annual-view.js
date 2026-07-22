@@ -207,8 +207,24 @@ export function buildHeatmap(year, people = PEOPLE) {
           cls += ' hm1-su';
           titleSuffix = ' — Dimanche';
         } else if (wd === 5) {
-          cls += ' hm1-we';
-          titleSuffix = ' — Samedi';
+          // Samedi : coloré selon l'état réel (vert=présent, rouge=congé, gris=vide/fermé)
+          const mState = getSlotState(iso, person.id, 'M');
+          const amState = getSlotState(iso, person.id, 'AM');
+          if (mState === 'absent' || amState === 'absent') {
+            const label = getSlotLabel(iso, person.id, 'M') || getSlotLabel(iso, person.id, 'AM') || '';
+            const tc = absType(iso);
+            const typeCls = tc ? ` hm1-type-${tc}` : '';
+            cls += ' hm1-abs' + typeCls;
+            titleSuffix = label ? ` — Samedi, Congé (${label})` : ' — Samedi, Congé';
+          } else if (mState === 'present' || amState === 'present') {
+            cls += ' hm1-pre';
+            titleSuffix = ' — Samedi, Présent';
+          } else {
+            cls += ' hm1-we';
+            titleSuffix = ' — Samedi';
+          }
+          if (isClinicClosed(iso)) cls += ' hm1-cc';
+          if (isToday) cls += ' hm1-today';
         } else {
           const mState = getSlotState(iso, person.id, 'M');
           const amState = getSlotState(iso, person.id, 'AM');
