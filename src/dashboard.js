@@ -11,7 +11,7 @@ import { fetchSignatureArchive, fetchSignedStorageUrl } from './api.js';
 import { triggerPushNotification } from './pwa.js';
 
 import {
-  buildPersonCard, buildBarChartSVG, buildRecapTable,
+  buildPersonCard, buildBarChartSVG, buildRecapTable, buildVetAnnualDifferential,
   buildPdfArchiveSection,
   buildASVModulationCard, buildASVWeeklyCapCard, buildASVSaturdayEquityCard,
   buildASVMonthlyTable,
@@ -128,6 +128,7 @@ export function renderDashboardStats(){
       <p class="text-muted" style="font-size:11.5px;margin-bottom:10px;">Écart = nombre de jours travaillés en plus, pour le vétérinaire concerné</p>
       ${buildRecapTable(year)}
     </div>
+    ${buildVetAnnualDifferential(year)}
     <div id="dash-vets-cp"></div>
   `;
   container.querySelector('#dash-year-toggle').addEventListener('click', (e)=>{
