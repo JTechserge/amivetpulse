@@ -224,6 +224,18 @@ export function setDayNote(iso, pid, v) {
   else delete store.DATA.slots[dayNoteKey(iso, pid)];
 }
 
+/* ---------- Note de dépassement journalier (par personne) ---------- */
+export function overtimeNoteKey(iso, pid) {
+  return `${iso}_${pid}_ot_note`;
+}
+export function getOvertimeNote(iso, pid) {
+  return store.DATA.slots[overtimeNoteKey(iso, pid)] || '';
+}
+export function setOvertimeNote(iso, pid, text) {
+  if (text && text.trim()) store.DATA.slots[overtimeNoteKey(iso, pid)] = text.trim();
+  else delete store.DATA.slots[overtimeNoteKey(iso, pid)];
+}
+
 /* ---------- Fermeture de la clinique ---------- */
 export function clinicClosedKey(iso) {
   return `${iso}_clinic_closed`;

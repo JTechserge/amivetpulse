@@ -53,6 +53,8 @@ import {
   setWeekOtMins,
   setLunchOtMins,
   setDayNote,
+  getOvertimeNote,
+  setOvertimeNote,
   isClinicClosed,
   setClinicClosed,
 } from './slots.js';
@@ -1556,20 +1558,34 @@ function openOvertimeDayPopover(iso, people, viewKey) {
   const [y, m] = iso.split('-').map(Number);
   // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
-    <h4>⏱️ Ajustement d'heures<br><span class="text-muted" style="font-weight:500;font-size:12px;">${formatFR(iso)} — positif = heures sup, négatif = départ anticipé</span></h4>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+    <h4>⏱️ Dépassement horaire<br><span class="text-muted" style="font-weight:500;font-size:12px;">${formatFR(iso)} — en minutes (ex. +45 ou -60)</span></h4>
+    <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:14px;">
       ${people
         .map((p) => {
           const signed = isMonthSigned(p.id, y, m - 1);
           const noRight = !_canEditSlot(p.id);
           const readonly = signed || noRight;
           const readonlyTitle = signed ? 'Feuille de présence signée — verrouillée' : 'Lecture seule';
+          const existingMins = Math.round(getOvertimeHours(iso, p.id) * 60) || 0;
+          const existingNote = getOvertimeNote(iso, p.id);
+          const noteDisplay = existingMins < 0 || existingNote ? 'flex' : 'none';
           return `
-        <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;font-weight:700;color:var(--color-text);">
-          <span><span class="legend-swatch" style="background:${p.color};width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle;"></span>${p.short}${signed ? ' 🔒' : ''}</span>
-          <input type="number" step="0.5" data-overtime-popover-input data-person="${p.id}" ${readonly ? `disabled title="${readonlyTitle}"` : ''}
-            value="${getOvertimeHours(iso, p.id) || ''}" placeholder="0" style="width:80px;padding:7px 9px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:13px;${readonly ? 'opacity:0.55;' : ''}">
-        </label>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;font-weight:700;color:var(--color-text);">
+            <span><span style="background:${p.color};width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle;"></span>${p.short}${signed ? ' 🔒' : ''}</span>
+            <span style="display:flex;align-items:center;gap:4px;">
+              <input type="number" step="1" data-overtime-popover-input data-person="${p.id}" ${readonly ? `disabled title="${readonlyTitle}"` : ''}
+                value="${existingMins || ''}" placeholder="0 min" style="width:90px;padding:7px 9px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:13px;${readonly ? 'opacity:0.55;' : ''}">
+              <span style="font-size:11px;color:var(--color-text-muted);font-weight:400;">min</span>
+            </span>
+          </label>
+          <div data-note-row="${p.id}" style="display:${noteDisplay};flex-direction:column;gap:4px;padding-left:16px;">
+            <label style="font-size:11px;font-weight:600;color:var(--color-danger,#DC2626);">Note obligatoire pour valeur négative :</label>
+            <input type="text" data-overtime-note-input data-person="${p.id}" ${readonly ? `disabled` : ''}
+              value="${escapeHTML(existingNote)}" placeholder="Ex. départ 18:00 au lieu de 19:00"
+              style="padding:6px 9px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:12px;width:100%;box-sizing:border-box;${readonly ? 'opacity:0.55;' : ''}">
+          </div>
+        </div>
       `;
         })
         .join('')}
@@ -1581,12 +1597,39 @@ function openOvertimeDayPopover(iso, people, viewKey) {
   `;
   backdrop.classList.add('open');
   const close = () => backdrop.classList.remove('open');
+
+  // Afficher/masquer le champ note selon signe de la valeur
+  box.querySelectorAll('[data-overtime-popover-input]').forEach((input) => {
+    input.addEventListener('input', () => {
+      const noteRow = box.querySelector(`[data-note-row="${input.dataset.person}"]`);
+      if (noteRow) noteRow.style.display = parseInt(input.value, 10) < 0 ? 'flex' : 'none';
+    });
+  });
+
   box.querySelector('#popover-cancel').onclick = close;
   box.querySelector('#popover-save').onclick = () => {
+    // Valider les notes obligatoires pour valeurs négatives
+    let valid = true;
+    box.querySelectorAll('[data-overtime-popover-input]').forEach((input) => {
+      if (input.disabled) return;
+      const mins = parseInt(input.value, 10);
+      if (mins < 0) {
+        const noteInput = box.querySelector(`[data-overtime-note-input][data-person="${input.dataset.person}"]`);
+        if (!noteInput?.value?.trim()) {
+          noteInput?.focus();
+          noteInput?.style && (noteInput.style.borderColor = 'var(--color-danger,#DC2626)');
+          valid = false;
+        }
+      }
+    });
+    if (!valid) return;
     _snapshotBeforeChange();
     box.querySelectorAll('[data-overtime-popover-input]').forEach((input) => {
       if (input.disabled) return;
-      setOvertimeHours(iso, input.dataset.person, input.value);
+      const mins = parseInt(input.value, 10) || 0;
+      setOvertimeHours(iso, input.dataset.person, mins / 60);
+      const noteInput = box.querySelector(`[data-overtime-note-input][data-person="${input.dataset.person}"]`);
+      setOvertimeNote(iso, input.dataset.person, noteInput?.value || '');
     });
     _saveData();
     renderCalendarView(viewKey);
@@ -1622,9 +1665,11 @@ function sidebarPersonBlock(iso, person) {
         }).join('')}
         ${(() => {
           const h = getOvertimeHours(iso, person.id);
-          return h !== 0
-            ? `<p class="text-muted" style="font-size:12px;margin:6px 0 0;">Ajustement : ${signedHHMM(h)}</p>`
-            : '';
+          const mins = Math.round(h * 60);
+          const note = getOvertimeNote(iso, person.id);
+          if (mins === 0) return '';
+          const sign = mins > 0 ? '+' : '';
+          return `<p class="text-muted" style="font-size:12px;margin:6px 0 0;">Dépassement : <strong>${sign}${mins} min</strong>${note ? ` — ${escapeHTML(note)}` : ''}</p>`;
         })()}
       </div>
     `;
@@ -1673,18 +1718,23 @@ function sidebarPersonBlock(iso, person) {
       ${
         isASV && _canEditSlot(person.id)
           ? `
-        <p class="text-muted" style="font-size:11.5px;margin:14px 0 5px;font-weight:700;text-transform:uppercase;letter-spacing:0.03em;">Ajustement d'heures (ce jour)</p>
-        <p class="text-muted" style="font-size:11px;margin:0 0 6px;">+ heures supplémentaires &nbsp;/&nbsp; − départ anticipé</p>
-        <input type="number" step="0.5" data-overtime-input data-person="${person.id}"
-          value="${getOvertimeHours(iso, person.id) || ''}" placeholder="Ex. 1.5 ou -1">
+        <p class="text-muted" style="font-size:11.5px;margin:14px 0 5px;font-weight:700;text-transform:uppercase;letter-spacing:0.03em;">Dépassement horaire (minutes)</p>
+        <p class="text-muted" style="font-size:11px;margin:0 0 6px;">+ heures sup &nbsp;/&nbsp; − départ anticipé (note obligatoire si négatif)</p>
+        <input type="number" step="1" data-overtime-input data-person="${person.id}"
+          value="${Math.round(getOvertimeHours(iso, person.id) * 60) || ''}" placeholder="Ex. +45 ou -60 min">
+        <input type="text" data-overtime-note-sidebar data-person="${person.id}"
+          value="${escapeHTML(getOvertimeNote(iso, person.id))}" placeholder="Note (obligatoire si négatif)"
+          style="margin-top:5px;padding:6px 9px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:12px;width:100%;box-sizing:border-box;">
       `
           : isASV
             ? `
         ${(() => {
           const h = getOvertimeHours(iso, person.id);
-          return h !== 0
-            ? `<p class="text-muted" style="font-size:12px;margin:10px 0 0;">Ajustement : ${signedHHMM(h)} (lecture seule)</p>`
-            : '';
+          const mins = Math.round(h * 60);
+          const note = getOvertimeNote(iso, person.id);
+          if (mins === 0) return '';
+          const sign = mins > 0 ? '+' : '';
+          return `<p class="text-muted" style="font-size:12px;margin:10px 0 0;">Dépassement : <strong>${sign}${mins} min</strong>${note ? ` — ${escapeHTML(note)}` : ''} (lecture seule)</p>`;
         })()}
       `
             : ''
@@ -1738,10 +1788,24 @@ function openDaySidebar(iso, viewKey) {
     });
     sidebar.querySelectorAll('[data-overtime-input]').forEach((input) => {
       input.addEventListener('change', () => {
+        const mins = parseInt(input.value, 10) || 0;
+        const noteInput = sidebar.querySelector(`[data-overtime-note-sidebar][data-person="${input.dataset.person}"]`);
+        if (mins < 0 && noteInput && !noteInput.value.trim()) {
+          noteInput.focus();
+          noteInput.style.borderColor = 'var(--color-danger,#DC2626)';
+          return;
+        }
         _snapshotBeforeChange();
-        setOvertimeHours(iso, input.dataset.person, input.value);
+        setOvertimeHours(iso, input.dataset.person, mins / 60);
+        if (noteInput) setOvertimeNote(iso, input.dataset.person, noteInput.value);
         _saveData();
         renderCalendarView(viewKey);
+      });
+    });
+    sidebar.querySelectorAll('[data-overtime-note-sidebar]').forEach((noteInput) => {
+      noteInput.addEventListener('change', () => {
+        setOvertimeNote(iso, noteInput.dataset.person, noteInput.value);
+        _saveData();
       });
     });
     sidebar.querySelector('#sidebar-comment').addEventListener('change', (e) => {
