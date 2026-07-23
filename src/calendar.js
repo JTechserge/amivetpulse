@@ -667,10 +667,10 @@ function buildWeekGrid(year, month, people) {
           if (earlyClose) dayCls += ' cal-wg-day-early-close';
           const toolsHtml = !isSun
             ? `<div class="cal-wg-tools">
-        ${isVetAdmin ? `<button class="cal-wg-tool-btn${clinicClosed ? ' clinic-close-active' : ''}" data-clinic-close="${iso}" title="${clinicClosed ? 'Clinique fermée — cliquer pour rouvrir' : 'Fermer la clinique ce jour'}">${clinicClosed ? '🔒' : '🏥'}</button>` : ''}
-        ${isVetAdmin && !clinicClosed ? `<button class="cal-wg-tool-btn${earlyClose ? ' early-close-active' : ''}" data-early-close="${iso}" title="${earlyClose ? `Fermeture anticipée ${earlyClose} — cliquer pour modifier` : 'Définir une fermeture anticipée'}">⏰${earlyClose ? `<span class="early-close-badge">${earlyClose}</span>` : ''}</button>` : ''}
-        <button class="cal-wg-tool-btn${comment ? ' has-comment' : ''}" data-action="comment" data-date="${iso}" aria-label="Commentaire du ${day}/${month + 1}" title="${comment ? escapeHTML(comment) : 'Ajouter un commentaire'}">💬</button>
-        <button class="cal-wg-tool-btn" data-action="edit-day" data-date="${iso}" aria-label="Édition rapide du ${day}/${month + 1}">✏️</button>
+        ${isVetAdmin ? `<button class="cal-wg-tool-btn${clinicClosed ? ' clinic-close-active' : ''}" data-clinic-close="${iso}" title="${clinicClosed ? 'Clinique fermée — cliquer pour rouvrir' : 'Fermer la clinique ce jour'}">${clinicClosed ? '🔒' : '🏥'}<span class="btn-lbl">${clinicClosed ? 'Fermée' : 'Fermer'}</span></button>` : ''}
+        ${isVetAdmin && !clinicClosed ? `<button class="cal-wg-tool-btn${earlyClose ? ' early-close-active' : ''}" data-early-close="${iso}" title="${earlyClose ? `Fermeture anticipée ${earlyClose} — cliquer pour modifier` : 'Définir une fermeture anticipée'}">⏰<span class="btn-lbl">${earlyClose ? earlyClose : 'Fin anticipée'}</span></button>` : ''}
+        <button class="cal-wg-tool-btn${comment ? ' has-comment' : ''}" data-action="comment" data-date="${iso}" aria-label="Commentaire du ${day}/${month + 1}" title="${comment ? escapeHTML(comment) : 'Ajouter un commentaire'}">💬<span class="btn-lbl">Note</span></button>
+        <button class="cal-wg-tool-btn" data-action="edit-day" data-date="${iso}" aria-label="Édition rapide du ${day}/${month + 1}">✏️<span class="btn-lbl">Modifier</span></button>
       </div>`
             : '<div class="cal-wg-tools"></div>';
           const dayHead = `<div class="cal-wg-day-head">
@@ -937,7 +937,11 @@ function buildWeekGrid(year, month, people) {
           const iso = fmtISO(dt);
           const isPresent = getSlotState(iso, p.id, 'M') === 'present' || getSlotState(iso, p.id, 'AM') === 'present';
           if (!isPresent) continue;
-          h += getDayNominal(iso, p.id) + getDayAllOtH(iso, p.id) - getDayDeficitH(iso, p.id) + getOvertimeHours(iso, p.id);
+          h +=
+            getDayNominal(iso, p.id) +
+            getDayAllOtH(iso, p.id) -
+            getDayDeficitH(iso, p.id) +
+            getOvertimeHours(iso, p.id);
         }
         return { person: p, h: Math.round(h * 100) / 100 };
       })
@@ -953,7 +957,7 @@ function buildWeekGrid(year, month, people) {
     }
   }
 
-  return `<div class="cal-wg">${head}${legendHtml}${weekBlocksHtml}</div>${monthTotalHtml}`;
+  return `<div class="cal-wg${isASV ? '' : ' cal-wg--vet'}">${head}${legendHtml}${weekBlocksHtml}</div>${monthTotalHtml}`;
 }
 
 function buildCalendarGrid(viewKey) {
