@@ -171,12 +171,19 @@ export function setEarlyDep(iso, pid, v) {
   else delete store.DATA.slots[earlyDepKey(iso, pid)];
 }
 
-// Heures déficitaires (départ avant fin standard du poste)
+// Heures déficitaires : départ anticipé personnel ou fermeture anticipée clinique (le plus tôt des deux)
 export function getDayDeficitH(iso, pid) {
-  const early = getEarlyDep(iso, pid);
-  if (!early) return 0;
+  const earlyDep = getEarlyDep(iso, pid);
+  const clinicEarly = getClinicEarlyClose(iso);
+  let effectiveDep = '';
+  if (earlyDep && clinicEarly) {
+    effectiveDep = timeToMins(earlyDep) < timeToMins(clinicEarly) ? earlyDep : clinicEarly;
+  } else {
+    effectiveDep = earlyDep || clinicEarly;
+  }
+  if (!effectiveDep) return 0;
   const stdEndMins = getShiftType(iso, pid) === 'F' ? 19 * 60 + 15 : 19 * 60;
-  return Math.max(0, (stdEndMins - timeToMins(early)) / 60);
+  return Math.max(0, (stdEndMins - timeToMins(effectiveDep)) / 60);
 }
 
 // Heures supplémentaires semaine (zone drag, stockées en minutes entières)

@@ -853,36 +853,8 @@ function buildWeekGrid(year, month, people) {
         personRowsHtml += plabel + cells;
       });
 
-      // Total hebdomadaire VET (présence × heures nominales)
-      let vetWeekHtml = '';
-      if (!isASV) {
-        const vetWeekH = people
-          .map((p) => {
-            let h = 0;
-            weekDays.forEach((dn) => {
-              if (dn === null) return;
-              const dt = new Date(year, month, dn);
-              if (isSunday(dt)) return;
-              const iso = fmtISO(dt);
-              if (SLOTS.some((s) => getSlotState(iso, p.id, s) === 'present'))
-                h += getDayNominal(iso, p.id) + getOvertimeHours(iso, p.id);
-            });
-            return { person: p, h: Math.round(h * 100) / 100 };
-          })
-          .filter((e) => e.h > 0);
-        if (vetWeekH.length > 0) {
-          const parts = vetWeekH
-            .map(
-              (e) =>
-                `<span style="color:${e.person.color};font-weight:700;">${escapeHTML(e.person.short)} ${formatHHMM(e.h)}</span>`
-            )
-            .join('<span class="ot-sep">·</span>');
-          vetWeekHtml = `<div class="cal-wg-week-ot" style="opacity:0.85;font-size:11px;"><span style="color:var(--color-text-muted);font-weight:600;margin-right:6px;">Sem.</span>${parts}</div>`;
-        }
-      }
-
       // Barre heures supplémentaires ASV : uniquement pour les semaines complètes (dimanche dans ce mois)
-      let otBarHtml = vetWeekHtml;
+      let otBarHtml = '';
       if (isASV && weekDays[6] !== null) {
         const weekDayNums = weekDays.filter((d) => d !== null);
         let extraDates = [];
@@ -955,7 +927,7 @@ function buildWeekGrid(year, month, people) {
     .join('');
 
   let monthTotalHtml = '';
-  {
+  if (isASV) {
     const monthTotals = people
       .map((p) => {
         let h = 0;
@@ -965,9 +937,7 @@ function buildWeekGrid(year, month, people) {
           const iso = fmtISO(dt);
           const isPresent = getSlotState(iso, p.id, 'M') === 'present' || getSlotState(iso, p.id, 'AM') === 'present';
           if (!isPresent) continue;
-          h += isASV
-            ? getDayNominal(iso, p.id) + getDayAllOtH(iso, p.id) - getDayDeficitH(iso, p.id) + getOvertimeHours(iso, p.id)
-            : getDayNominal(iso, p.id) + getOvertimeHours(iso, p.id);
+          h += getDayNominal(iso, p.id) + getDayAllOtH(iso, p.id) - getDayDeficitH(iso, p.id) + getOvertimeHours(iso, p.id);
         }
         return { person: p, h: Math.round(h * 100) / 100 };
       })
@@ -1214,8 +1184,16 @@ function openEarlyClosePopover(iso, viewKey) {
     close();
   };
   const removeBtn = box.querySelector('#early-close-remove');
-  if (removeBtn) removeBtn.onclick = () => { setClinicEarlyClose(iso, ''); _saveData(); renderCalendarView(viewKey); close(); };
-  backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
+  if (removeBtn)
+    removeBtn.onclick = () => {
+      setClinicEarlyClose(iso, '');
+      _saveData();
+      renderCalendarView(viewKey);
+      close();
+    };
+  backdrop.onclick = (e) => {
+    if (e.target === backdrop) close();
+  };
 }
 
 function renderCalendarView(viewKey) {
@@ -1253,7 +1231,10 @@ function renderCalendarView(viewKey) {
         const iso = btn.dataset.clinicClose;
         const nowClosed = !isClinicClosed(iso);
         setClinicClosed(iso, nowClosed);
-        if (nowClosed) { clearDayAllPeople(iso); setClinicEarlyClose(iso, ''); }
+        if (nowClosed) {
+          clearDayAllPeople(iso);
+          setClinicEarlyClose(iso, '');
+        }
         _saveData();
         renderCalendarView(viewKey);
       });
