@@ -667,7 +667,7 @@ function buildWeekGrid(year, month, people) {
           if (earlyClose) dayCls += ' cal-wg-day-early-close';
           const toolsHtml = !isSun
             ? `<div class="cal-wg-tools">
-        ${isVetAdmin ? `<button class="cal-wg-tool-btn${clinicClosed ? ' clinic-close-active' : ''}" data-clinic-close="${iso}" title="${clinicClosed ? 'Clinique fermée — cliquer pour rouvrir' : 'Fermer la clinique ce jour'}">${clinicClosed ? '🔒' : '🏥'}<span class="btn-lbl">${clinicClosed ? 'Fermée' : 'Fermer'}</span></button>` : ''}
+        ${isVetAdmin ? `<button class="cal-wg-tool-btn${clinicClosed ? ' clinic-close-active' : ''}" data-clinic-close="${iso}" title="${clinicClosed ? 'Clinique fermée — cliquer pour rouvrir' : 'Fermer la clinique ce jour'}">${clinicClosed ? '🔓' : '🏥'}<span class="btn-lbl">${clinicClosed ? 'Ouvert' : 'Fermer'}</span></button>` : ''}
         ${isVetAdmin && !clinicClosed ? `<button class="cal-wg-tool-btn${earlyClose ? ' early-close-active' : ''}" data-early-close="${iso}" title="${earlyClose ? `Fermeture anticipée ${earlyClose} — cliquer pour modifier` : 'Définir une fermeture anticipée'}">⏰<span class="btn-lbl">${earlyClose ? earlyClose : 'Fin anticipée'}</span></button>` : ''}
         <button class="cal-wg-tool-btn${comment ? ' has-comment' : ''}" data-action="comment" data-date="${iso}" aria-label="Commentaire du ${day}/${month + 1}" title="${comment ? escapeHTML(comment) : 'Ajouter un commentaire'}">💬<span class="btn-lbl">Note</span></button>
         <button class="cal-wg-tool-btn" data-action="edit-day" data-date="${iso}" aria-label="Édition rapide du ${day}/${month + 1}">✏️<span class="btn-lbl">Modifier</span></button>
