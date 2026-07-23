@@ -64,7 +64,7 @@ export const ASV_PEOPLE = [
     color: '#0EA5E9',
     initial: 'Ca',
     present: PRESENT_SHADES[3],
-    timeFraction: 7.25 / 35,
+    timeFraction: (7 + 25 / 60) / 35,
     saturdayOnly: true,
   },
 ];
@@ -137,7 +137,7 @@ export const SUPABASE_ANON_KEY =
 export const ANNUAL_FULLTIME_HOURS = 1607; // référence légale France (loi Aubry 2000)
 export const HALFDAY_HOURS = 3.5; // 35h / 5j / 2 demi-journées
 export const WEEKLY_MAX_HOURS = 42;
-export const ASV_STD_SAT_CARLA = 7.25; // Carla : 8:30-16:45 avec 1h pause
+export const ASV_STD_SAT_CARLA = 7 + 25 / 60; // Carla : 8:30-16:45 avec ~50min pause → 7h25
 export const ASV_STD_SAT_SECOND = 7.0; // 2e ASV samedi : 9:00-16:30
 export const ASV_STD_WEEKDAY_AVG = 8.375;
 export const CLINIC_HOURS = { mStart: '08:30', mEnd: '13:00', amStart: '15:00', amEnd: '20:00' };

@@ -152,8 +152,10 @@ export function getDayNominal(iso, pid) {
   const d = new Date(iso + 'T00:00:00');
   if (d.getDay() === 6) {
     const p = personOf(pid);
+    // Carla (saturdayOnly) : 7h25 (8:30-16:45, ~50min pause) ; autres ASV samedi : 7h00 (9:00-16:30, 1h pause)
     return p?.saturdayOnly ? ASV_STD_SAT_CARLA : 7.0;
   }
+  // Semaine : ouverture 8h30 (8,5h) ou fermeture 9h00 (8h15=8,25h)
   return getShiftType(iso, pid) === 'F' ? 8.25 : 8.5;
 }
 

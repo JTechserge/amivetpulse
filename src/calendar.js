@@ -918,7 +918,35 @@ function buildWeekGrid(year, month, people) {
     })
     .join('');
 
-  return `<div class="cal-wg">${head}${legendHtml}${weekBlocksHtml}</div>`;
+  let monthTotalHtml = '';
+  if (isASV) {
+    const monthTotals = people
+      .map((p) => {
+        let h = 0;
+        for (let d = 1; d <= nbDays; d++) {
+          const dt = new Date(year, month, d);
+          if (isSunday(dt)) continue;
+          const iso = fmtISO(dt);
+          const isPresent =
+            getSlotState(iso, p.id, 'M') === 'present' || getSlotState(iso, p.id, 'AM') === 'present';
+          if (!isPresent) continue;
+          h += getDayNominal(iso, p.id) + getDayAllOtH(iso, p.id) - getDayDeficitH(iso, p.id) + getOvertimeHours(iso, p.id);
+        }
+        return { person: p, h: Math.round(h * 100) / 100 };
+      })
+      .filter((e) => e.h > 0);
+    if (monthTotals.length > 0) {
+      const parts = monthTotals
+        .map(
+          (e) =>
+            `<span style="color:${e.person.color};font-weight:700;">${escapeHTML(e.person.short)} ${formatHHMM(e.h)}</span>`
+        )
+        .join('<span class="ot-sep">·</span>');
+      monthTotalHtml = `<div class="cal-wg-week-ot cal-month-total-bar"><span class="cal-month-total-lbl">Total du mois</span>${parts}</div>`;
+    }
+  }
+
+  return `<div class="cal-wg">${head}${legendHtml}${weekBlocksHtml}</div>${monthTotalHtml}`;
 }
 
 function buildCalendarGrid(viewKey) {
@@ -1743,7 +1771,10 @@ function initCalendarInteractions() {
         const iso = cell.dataset.date;
         const vk = calViewKeyOfEventTarget(cell);
         mergedLPCtx = {
-          personId, iso, vk, erase: true,
+          personId,
+          iso,
+          vk,
+          erase: true,
           timer: setTimeout(() => {
             mergedLPCtx = null;
             const runSlots = collectRunSlots(personId, iso);
@@ -1767,7 +1798,10 @@ function initCalendarInteractions() {
         const vk = calViewKeyOfEventTarget(pstrip);
         const eraseMode = store.calMonthPaintMode === 'erase';
         mergedLPCtx = {
-          personId, iso, vk, erase: eraseMode,
+          personId,
+          iso,
+          vk,
+          erase: eraseMode,
           timer: setTimeout(() => {
             mergedLPCtx = null;
             const runSlots = collectRunSlots(personId, iso);
@@ -1808,7 +1842,10 @@ function initCalendarInteractions() {
           const iso = cell.dataset.date;
           const vk = calViewKeyOfEventTarget(cell);
           mergedLPCtx = {
-            personId, iso, vk, erase: true,
+            personId,
+            iso,
+            vk,
+            erase: true,
             timer: setTimeout(() => {
               mergedLPCtx = null;
               const runSlots = collectRunSlots(personId, iso);
@@ -1830,7 +1867,10 @@ function initCalendarInteractions() {
           const vk = calViewKeyOfEventTarget(pstrip);
           const eraseMode = store.calMonthPaintMode === 'erase';
           mergedLPCtx = {
-            personId, iso, vk, erase: eraseMode,
+            personId,
+            iso,
+            vk,
+            erase: eraseMode,
             timer: setTimeout(() => {
               mergedLPCtx = null;
               const runSlots = collectRunSlots(personId, iso);
@@ -1845,7 +1885,11 @@ function initCalendarInteractions() {
   document.addEventListener(
     'touchmove',
     (e) => {
-      if (mergedLPCtx) { clearTimeout(mergedLPCtx.timer); mergedLPCtx = null; return; }
+      if (mergedLPCtx) {
+        clearTimeout(mergedLPCtx.timer);
+        mergedLPCtx = null;
+        return;
+      }
       if (!dragCtx) return;
       const touch = e.touches[0];
       const el = document.elementFromPoint(touch.clientX, touch.clientY);

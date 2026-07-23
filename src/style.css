@@ -565,6 +565,8 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-wg-week-block+.cal-wg-week-block{border-top:3px solid var(--color-secondary);}
 .cal-wg-week{display:grid;grid-template-columns:40px repeat(12,1fr) 0.5fr;row-gap:2px;}
 .cal-wg-week-ot{display:flex;align-items:center;gap:10px;padding:3px 12px;background:var(--color-secondary);border-top:1px solid var(--color-border);font-size:11px;flex-wrap:wrap;}
+.cal-month-total-bar{margin-top:6px;border-radius:6px;border:1.5px solid var(--color-border);padding:6px 14px;font-size:12px;gap:12px;}
+.cal-month-total-lbl{font-weight:700;color:var(--color-text-muted);margin-right:4px;text-transform:uppercase;font-size:10px;letter-spacing:.04em;}
 .cal-wg-day{border-right:0.5px solid var(--color-border);display:flex;flex-direction:column;}
 .cal-wg-day:last-child{border-right:none;}
 .cal-wg-day-empty{background:var(--color-secondary);}

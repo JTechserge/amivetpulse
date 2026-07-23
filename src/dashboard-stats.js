@@ -102,29 +102,41 @@ export function buildPersonCard(year, personId) {
   const person = personOf(personId);
   const stats = computeYearStats(year)[personId];
   const tf = person?.timeFraction ?? 1.0;
-  // Cible annuelle : 230 jours × 2 demi-journées × quotité de temps
-  const TARGET_HALF_DAYS = Math.round(230 * 2 * tf);
-  const targetDays = TARGET_HALF_DAYS / 2;
-  // Heures sup/déficit → demi-journées équivalentes (÷ 3.5h)
-  const otEquivHalfDays = stats.totalOvertimeHours / HALFDAY_HOURS;
-  const adjustedHalfDays = Math.round((stats.totalHalfDays + otEquivHalfDays) * 10) / 10;
-  const adjustedDays = Math.round((adjustedHalfDays / 2) * 10) / 10;
-  const pct = Math.min(100, TARGET_HALF_DAYS > 0 ? Math.round((adjustedHalfDays / TARGET_HALF_DAYS) * 100) : 0);
+  const isASV = isASVPerson(personId);
   const vacationDays = stats.totalAbsentHalfDays / 2;
+  const workedDays = Math.round((stats.totalHalfDays / 2) * 10) / 10;
+
+  let progressHtml = '';
+  let workedRowHtml = '';
+
+  if (isASV) {
+    const TARGET_HALF_DAYS = Math.round(230 * 2 * tf);
+    const targetDays = TARGET_HALF_DAYS / 2;
+    const otEquivHalfDays = stats.totalOvertimeHours / HALFDAY_HOURS;
+    const adjustedHalfDays = Math.round((stats.totalHalfDays + otEquivHalfDays) * 10) / 10;
+    const adjustedDays = Math.round((adjustedHalfDays / 2) * 10) / 10;
+    const pct = Math.min(100, TARGET_HALF_DAYS > 0 ? Math.round((adjustedHalfDays / TARGET_HALF_DAYS) * 100) : 0);
+    workedRowHtml = `<div class="stat-row"><span class="stat-label">Jours travaillés (ajusté)</span><span class="stat-value">${formatNum(adjustedDays)} / ${formatNum(targetDays)}</span></div>`;
+    progressHtml = `<div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${person.color}"></div></div>`;
+  } else {
+    workedRowHtml = `<div class="stat-row"><span class="stat-label">Jours travaillés</span><span class="stat-value big" style="color:${person.color}">${formatNum(workedDays)}</span></div>`;
+  }
+
   const otColor =
     stats.totalOvertimeHours > 0
       ? 'var(--color-success,#16A34A)'
       : stats.totalOvertimeHours < 0
         ? 'var(--color-danger,#DC2626)'
         : 'var(--color-text-muted)';
+
   return `
     <div class="card person-card" data-person="${personId}" style="border-top-color:${person.color}">
       <div class="person-card-head">
         <div class="person-avatar" style="background:${person.color}">${person.initial}</div>
         <div><h3 style="font-size:16px;">${person.name}</h3><p class="text-muted" style="font-size:12px;">Bilan ${year}${tf < 1 ? ` — ${Math.round(tf * 100)}%` : ''}</p></div>
       </div>
-      <div class="stat-row"><span class="stat-label">Jours travaillés (ajusté)</span><span class="stat-value">${formatNum(adjustedDays)} / ${formatNum(targetDays)}</span></div>
-      <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${person.color}"></div></div>
+      ${workedRowHtml}
+      ${progressHtml}
       <div class="stat-row"><span class="stat-label">Demi-journées de présence</span><span class="stat-value">${stats.totalHalfDays}</span></div>
       ${stats.totalOvertimeHours !== 0 ? `<div class="stat-row"><span class="stat-label">Heures supp. / en déficit</span><span class="stat-value" style="color:${otColor}">${signedHHMM(stats.totalOvertimeHours)}</span></div>` : ''}
       <div class="stat-row"><span class="stat-label">Samedis travaillés</span><span class="stat-value big" style="color:${person.color}">${stats.totalSaturdays}${stats.saturdayPct !== null ? ` <span class="stat-pct">/ ${stats.openSaturdaysYear} (${stats.saturdayPct}%)</span>` : ''}</span></div>
