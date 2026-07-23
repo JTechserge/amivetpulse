@@ -248,6 +248,18 @@ export function setClinicClosed(iso, closed) {
   else delete store.DATA.slots[clinicClosedKey(iso)];
 }
 
+// Fermeture anticipée : heure de fin réduite (ex. "17:00"), ≠ fermeture totale
+export function clinicEarlyCloseKey(iso) {
+  return `${iso}_clinic_early_close`;
+}
+export function getClinicEarlyClose(iso) {
+  return store.DATA.slots[clinicEarlyCloseKey(iso)] || '';
+}
+export function setClinicEarlyClose(iso, time) {
+  if (time && time.trim()) store.DATA.slots[clinicEarlyCloseKey(iso)] = time.trim();
+  else delete store.DATA.slots[clinicEarlyCloseKey(iso)];
+}
+
 // Retourne true si la date est un jour de travail contractuel pour cette personne.
 // saturdayOnly → seulement le samedi (Carla). workingDays → jours spécifiques (1=Lun…6=Sam).
 // Sans contrainte définie, tous les jours ouvrés sont valides.

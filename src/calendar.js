@@ -58,6 +58,8 @@ import {
   setOvertimeNote,
   isClinicClosed,
   setClinicClosed,
+  getClinicEarlyClose,
+  setClinicEarlyClose,
 } from './slots.js';
 import { computeLeaveBlocks } from './leave-blocks.js';
 import {
@@ -661,9 +663,12 @@ function buildWeekGrid(year, month, people) {
           if (iso === todayISO) dayCls += ' cal-wg-day-today';
           const clinicClosed = !isSun && isClinicClosed(iso);
           if (clinicClosed) dayCls += ' cal-wg-day-clinic-closed';
+          const earlyClose = !isSun && !clinicClosed ? getClinicEarlyClose(iso) : '';
+          if (earlyClose) dayCls += ' cal-wg-day-early-close';
           const toolsHtml = !isSun
             ? `<div class="cal-wg-tools">
         ${isVetAdmin ? `<button class="cal-wg-tool-btn${clinicClosed ? ' clinic-close-active' : ''}" data-clinic-close="${iso}" title="${clinicClosed ? 'Clinique fermée — cliquer pour rouvrir' : 'Fermer la clinique ce jour'}">${clinicClosed ? '🔒' : '🏥'}</button>` : ''}
+        ${isVetAdmin && !clinicClosed ? `<button class="cal-wg-tool-btn${earlyClose ? ' early-close-active' : ''}" data-early-close="${iso}" title="${earlyClose ? `Fermeture anticipée ${earlyClose} — cliquer pour modifier` : 'Définir une fermeture anticipée'}">⏰${earlyClose ? `<span class="early-close-badge">${earlyClose}</span>` : ''}</button>` : ''}
         <button class="cal-wg-tool-btn${comment ? ' has-comment' : ''}" data-action="comment" data-date="${iso}" aria-label="Commentaire du ${day}/${month + 1}" title="${comment ? escapeHTML(comment) : 'Ajouter un commentaire'}">💬</button>
         <button class="cal-wg-tool-btn" data-action="edit-day" data-date="${iso}" aria-label="Édition rapide du ${day}/${month + 1}">✏️</button>
       </div>`
@@ -1182,6 +1187,37 @@ async function requestSignatureEmail(viewKey, personId) {
   }
 }
 
+function openEarlyClosePopover(iso, viewKey) {
+  const backdrop = document.getElementById('popover-backdrop');
+  const box = document.getElementById('popover-box');
+  const current = getClinicEarlyClose(iso);
+  // eslint-disable-next-line no-unsanitized/property
+  box.innerHTML = `
+    <h4>⏰ Fermeture anticipée<br><span class="text-muted" style="font-weight:500;font-size:12px;">${formatFR(iso)}</span></h4>
+    <p class="text-muted" style="font-size:12px;margin-bottom:12px;">La clinique ferme plus tôt que d'habitude. Saisissez l'heure de fermeture.</p>
+    <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Heure de fermeture</label>
+    <input type="time" id="early-close-time" value="${escapeHTML(current)}" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:14px;width:140px;">
+    <div class="popover-actions" style="margin-top:16px;">
+      ${current ? `<button class="btn btn-sm btn-danger" id="early-close-remove">Supprimer</button>` : ''}
+      <button class="btn" id="popover-cancel">Annuler</button>
+      <button class="btn btn-primary" id="popover-save">Enregistrer</button>
+    </div>
+  `;
+  backdrop.classList.add('open');
+  const close = () => backdrop.classList.remove('open');
+  box.querySelector('#popover-cancel').onclick = close;
+  box.querySelector('#popover-save').onclick = () => {
+    const t = box.querySelector('#early-close-time').value;
+    setClinicEarlyClose(iso, t);
+    _saveData();
+    renderCalendarView(viewKey);
+    close();
+  };
+  const removeBtn = box.querySelector('#early-close-remove');
+  if (removeBtn) removeBtn.onclick = () => { setClinicEarlyClose(iso, ''); _saveData(); renderCalendarView(viewKey); close(); };
+  backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
+}
+
 function renderCalendarView(viewKey) {
   const cfg = store.CAL_VIEWS[viewKey];
   const container = document.getElementById(cfg.containerId);
@@ -1217,9 +1253,15 @@ function renderCalendarView(viewKey) {
         const iso = btn.dataset.clinicClose;
         const nowClosed = !isClinicClosed(iso);
         setClinicClosed(iso, nowClosed);
-        if (nowClosed) clearDayAllPeople(iso);
+        if (nowClosed) { clearDayAllPeople(iso); setClinicEarlyClose(iso, ''); }
         _saveData();
         renderCalendarView(viewKey);
+      });
+    });
+    container.querySelectorAll('[data-early-close]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const iso = btn.dataset.earlyClose;
+        openEarlyClosePopover(iso, viewKey);
       });
     });
     const { year, navState } = cfg;

@@ -916,6 +916,9 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .cal-wg-day-clinic-closed{background:repeating-linear-gradient(45deg,rgba(0,0,0,0.03) 0px,rgba(0,0,0,0.03) 4px,transparent 4px,transparent 8px);}
 .cal-wg-day-clinic-closed .cal-wg-daynum{opacity:0.5;}
 .cal-wg-tool-btn.clinic-close-active{background:rgba(239,68,68,0.12);border-radius:4px;}
+.cal-wg-tool-btn.early-close-active{background:rgba(234,179,8,0.15);border-radius:4px;position:relative;}
+.early-close-badge{font-size:8px;font-weight:700;background:rgba(234,179,8,0.9);color:#713f12;border-radius:3px;padding:0 3px;margin-left:2px;vertical-align:middle;}
+.cal-wg-day-early-close .cal-wg-daynum::after{content:"⏰";font-size:8px;margin-left:2px;opacity:0.7;}
 .clinic-bulk-actions{display:flex;gap:8px;flex-wrap:wrap;padding:8px 0 4px;margin:0 2px;}
 .clinic-bulk-actions .btn{font-size:12px;padding:5px 10px;}
 
