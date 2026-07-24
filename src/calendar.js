@@ -667,10 +667,10 @@ function buildWeekGrid(year, month, people) {
           if (earlyClose) dayCls += ' cal-wg-day-early-close';
           const toolsHtml = !isSun
             ? `<div class="cal-wg-tools">
-        ${isVetAdmin ? `<button class="cal-wg-tool-btn${clinicClosed ? ' clinic-close-active' : ''}" data-clinic-close="${iso}" title="${clinicClosed ? 'Clinique fermée — cliquer pour rouvrir' : 'Fermer la clinique ce jour'}">${clinicClosed ? '🔓' : '🏥'}<span class="btn-lbl">${clinicClosed ? 'Ouvert' : 'Fermer'}</span></button>` : ''}
-        ${isVetAdmin && !clinicClosed ? `<button class="cal-wg-tool-btn${earlyClose ? ' early-close-active' : ''}" data-early-close="${iso}" title="${earlyClose ? `Fermeture anticipée ${earlyClose} — cliquer pour modifier` : 'Définir une fermeture anticipée'}">⏰<span class="btn-lbl">${earlyClose ? earlyClose : 'Fin anticipée'}</span></button>` : ''}
-        ${isVetAdmin ? `<button class="cal-wg-tool-btn${comment ? ' has-comment' : ''}" data-action="comment" data-date="${iso}" aria-label="Commentaire du ${day}/${month + 1}" title="${comment ? escapeHTML(comment) : 'Ajouter un commentaire'}">💬<span class="btn-lbl">Note</span></button>` : ''}
-        ${isVetAdmin ? `<button class="cal-wg-tool-btn" data-action="edit-day" data-date="${iso}" aria-label="Édition rapide du ${day}/${month + 1}">✏️<span class="btn-lbl">Modifier</span></button>` : ''}
+        ${isVetAdmin ? `<button class="cal-wg-tool-btn${clinicClosed ? ' clinic-close-active' : ''}" data-clinic-close="${iso}" title="${clinicClosed ? 'Clinique fermée — cliquer pour rouvrir' : 'Fermer la clinique ce jour'}">${clinicClosed ? '🔓' : '🏥'}</button>` : ''}
+        ${isVetAdmin && !clinicClosed ? `<button class="cal-wg-tool-btn${earlyClose ? ' early-close-active' : ''}" data-early-close="${iso}" title="${earlyClose ? `Fermeture anticipée ${earlyClose} — cliquer pour modifier` : 'Définir une fermeture anticipée'}">⏰${earlyClose ? `<span class="early-close-badge">${earlyClose}</span>` : ''}</button>` : ''}
+        ${isVetAdmin ? `<button class="cal-wg-tool-btn${comment ? ' has-comment' : ''}" data-action="comment" data-date="${iso}" aria-label="Commentaire du ${day}/${month + 1}" title="${comment ? escapeHTML(comment) : 'Ajouter un commentaire'}">💬</button>` : ''}
+        ${isVetAdmin ? `<button class="cal-wg-tool-btn" data-action="edit-day" data-date="${iso}" aria-label="Édition rapide du ${day}/${month + 1}">✏️</button>` : ''}
       </div>`
             : '<div class="cal-wg-tools"></div>';
           const dayHead = `<div class="cal-wg-day-head">
@@ -1017,6 +1017,10 @@ function buildLegend(people = PEOPLE) {
           <span class="legend-help-item">🖱️ <strong>Clic</strong> sur une case : fait défiler Vide → Présent → Absent</span>
           <span class="legend-help-item">↔️ <strong>Glisser</strong> le clic sur plusieurs cases : les remplit toutes d'un coup</span>
           <span class="legend-help-item">👆 <strong>Clic droit</strong> (ou appui long) sur une case : ouvre la saisie d'un motif d'absence</span>
+          <span class="legend-help-item">🏥 <strong>Fermer</strong> / 🔓 <strong>Ouvert</strong> : marque la clinique fermée ce jour (grise tous les créneaux)</span>
+          <span class="legend-help-item">⏰ <strong>Fin anticipée</strong> : définit une heure de fermeture anticipée (réduit les heures ASV)</span>
+          <span class="legend-help-item">💬 <strong>Note</strong> : ajoute un commentaire sur le jour</span>
+          <span class="legend-help-item">✏️ <strong>Modifier</strong> : édition rapide des absences du jour</span>
         `
         }
       </div>
