@@ -1441,10 +1441,10 @@ function openAbsenceLabelPopover(cell, forceAbsent) {
   box.innerHTML = `
     <h4>${isASV ? 'Demande de congé' : "Motif d'absence"} — ${person.short}, ${SLOT_LABELS[slot]}<br><span class="text-muted" style="font-weight:500;font-size:12px;">${formatFR(iso)}</span></h4>
     ${isASV ? `<p class="text-muted" style="font-size:12px;margin:-4px 0 12px;">Sera soumise aux vétérinaires pour validation.</p>` : ''}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">
+    ${isASV ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">
       <button type="button" id="popover-sick" style="padding:7px 4px;border:2px solid var(--color-sick-border);background:var(--color-sick);color:var(--color-sick-text);border-radius:var(--radius-btn);font-size:12px;font-weight:700;cursor:pointer;">🤒 Arrêt maladie</button>
       <button type="button" id="popover-off" style="padding:7px 4px;border:2px solid var(--color-off-border);background:var(--color-off);color:var(--color-off-text);border-radius:var(--radius-btn);font-size:12px;font-weight:700;cursor:pointer;">🗓️ Repos planifié</button>
-    </div>
+    </div>` : ''}
     <div class="popover-quicktags">
       ${quickTags.map((t) => `<button type="button" class="quicktag" data-tag="${escapeHTML(t)}">${t}</button>`).join('')}
     </div>
