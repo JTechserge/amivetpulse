@@ -18,6 +18,8 @@ import {
   setMinusMins,
   getOvertimeHours,
   isMonthClosed,
+  getSlotNominalH,
+  getSlotShiftType,
 } from './slots.js';
 import { isMonthSigned } from './signatures.js';
 
@@ -73,7 +75,6 @@ function openMonthPrintWindow(pids, year, month) {
   }
   const logoSrc = getLogoDataUrl();
   const DOW_FR = ['Di', 'Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa'];
-  const printDate = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
   const monthLabel = `${MONTH_NAMES[month]} ${year}`;
   const nb = daysInMonth(year, month);
 
@@ -127,9 +128,10 @@ function openMonthPrintWindow(pids, year, month) {
       tr.sat td  { background: #EBEBEB !important; font-style: italic; }
       tr.hol td  { background: #F2F2F2 !important; font-style: italic; color: #444; }
       tr.abs td  { color: #555; }
-      .day-col   { font-weight: 700; white-space: nowrap; width: 46px; }
+      .day-col   { font-weight: 700; white-space: nowrap; width: 40px; }
+      .slot-col  { font-size: 8.5px; color: #555; width: 32px; white-space: nowrap; }
       .num       { text-align: center; font-variant-numeric: tabular-nums;
-                   width: 58px; white-space: nowrap; }
+                   width: 52px; white-space: nowrap; }
       .ot-val    { font-weight: 700; }
       .def-val   { font-weight: 700; }
       .dash      { color: #BBB; }
@@ -141,6 +143,8 @@ function openMonthPrintWindow(pids, year, month) {
         padding: 6px 8px;
       }
       tr.tot td:last-child { border-right: none; }
+      /* Note de bas de tableau */
+      .footnote  { font-size: 7.5px; color: #666; margin: -8px 0 8px; }
       /* ── Bloc signature ── */
       .sig {
         border: 1px solid #999; border-radius: 3px;
@@ -162,6 +166,10 @@ function openMonthPrintWindow(pids, year, month) {
       }
     </style>`;
 
+  // Lot 9 : label de créneau pour la fiche imprimée
+  const SLOT_PRINT_LBL = { M: 'Mat.', AM: 'A-m.' };
+  const SHIFT_LABEL = { O: 'Ouverture', F: 'Fermeture', D: 'Demi-j.' };
+
   let allSheets = '';
   pids.forEach((pid) => {
     const p = personOf(pid);
@@ -180,46 +188,78 @@ function openMonthPrintWindow(pids, year, month) {
         amS = getSlotState(iso, pid, 'AM');
       const present = mS === 'present' || amS === 'present';
       const absent = mS === 'absent' && amS === 'absent';
-      const shType = getShiftType(iso, pid);
       const otH = present ? getDayAllOtH(iso, pid) : 0;
       const defH = present ? getDayDeficitH(iso, pid) : 0;
-      const nom = present ? getDayNominal(iso, pid) : 0;
-      const total = present ? Math.round((nom + otH - defH) * 100) / 100 : 0;
-      if (present) {
+
+      let rowCls = isSat ? 'sat' : '';
+      if (hName) {
+        // Jour férié : ligne unique sur 6 colonnes
+        rows += `<tr class="${rowCls || 'hol'}">
+          <td class="day-col">${DOW_FR[dow]}&nbsp;${day}</td>
+          <td class="slot-col dash">—</td>
+          <td><em>${escapeHTML(hName)}</em></td>
+          <td class="num dash">—</td>
+          <td class="num dash">—</td>
+          <td class="num dash">—</td>
+        </tr>`;
+      } else if (absent) {
+        const lbl = (getSlotLabel(iso, pid, 'M') || getSlotLabel(iso, pid, 'AM') || '').toLowerCase();
+        const stateCell = lbl.includes('congé') || lbl.includes('conge')
+          ? '<em>Congé</em>'
+          : lbl.includes('maladie')
+            ? '<em>Maladie</em>'
+            : lbl.includes('accident')
+              ? '<em>Accident du travail</em>'
+              : '<em>Absence</em>';
+        rows += `<tr class="${rowCls || 'abs'}">
+          <td class="day-col">${DOW_FR[dow]}&nbsp;${day}</td>
+          <td class="slot-col dash">—</td>
+          <td>${stateCell}</td>
+          <td class="num dash">—</td>
+          <td class="num dash">—</td>
+          <td class="num dash">—</td>
+        </tr>`;
+      } else if (present) {
+        // Lot 9 : détail par demi-journée
+        const activeSlots = ['M', 'AM'].filter((s) => getSlotState(iso, pid, s) === 'present');
+        const nom = getDayNominal(iso, pid);
+        const total = Math.round((nom + otH - defH) * 100) / 100;
         mTotalH += total;
         mTotalOt += otH;
         mTotalDef += defH;
-      }
-      let stateCell,
-        rowCls = '';
-      if (hName) {
-        stateCell = `<em>${escapeHTML(hName)}</em>`;
-        rowCls = 'hol';
-      } else if (absent) {
-        const lbl = (getSlotLabel(iso, pid, 'M') || getSlotLabel(iso, pid, 'AM') || '').toLowerCase();
-        stateCell =
-          lbl.includes('congé') || lbl.includes('conge')
-            ? '<em>Congé</em>'
-            : lbl.includes('maladie')
-              ? '<em>Maladie</em>'
-              : '<em>Repos / Congé</em>';
-        rowCls = 'abs';
-      } else if (present) {
-        stateCell = `Poste ${shType === 'F' ? 'Fermeture' : 'Ouverture'}`;
+        activeSlots.forEach((slot, si) => {
+          const sType = getSlotShiftType(iso, pid, slot);
+          const sH = getSlotNominalH(iso, pid, slot);
+          const isFirst = si === 0;
+          const rowspan = activeSlots.length > 1 && isFirst ? ` rowspan="${activeSlots.length}"` : '';
+          const dayCell = isFirst
+            ? `<td class="day-col"${rowspan}>${DOW_FR[dow]}&nbsp;${day}</td>`
+            : '';
+          const otCell = isFirst
+            ? `<td class="num"${rowspan}>${otH > 0 ? `<span class="ot-val">+${formatHHMM(otH)}</span>` : '<span class="dash">—</span>'}</td>`
+            : '';
+          const dfCell = isFirst
+            ? `<td class="num"${rowspan}>${defH > 0 ? `<span class="def-val">−${formatHHMM(defH)}</span>` : '<span class="dash">—</span>'}</td>`
+            : '';
+          rows += `<tr class="${rowCls}">
+            ${dayCell}
+            <td class="slot-col">${SLOT_PRINT_LBL[slot]}</td>
+            <td>Poste ${SHIFT_LABEL[sType] || sType}</td>
+            <td class="num">${formatHHMM(sH)}</td>
+            ${otCell}
+            ${dfCell}
+          </tr>`;
+        });
       } else {
-        stateCell = '<span class="dash">—</span>';
+        rows += `<tr class="${rowCls}">
+          <td class="day-col">${DOW_FR[dow]}&nbsp;${day}</td>
+          <td class="slot-col dash">—</td>
+          <td><span class="dash">—</span></td>
+          <td class="num dash">—</td>
+          <td class="num dash">—</td>
+          <td class="num dash">—</td>
+        </tr>`;
       }
-      if (isSat) rowCls = 'sat';
-      const hCell = present ? formatHHMM(total) : '<span class="dash">—</span>';
-      const otCell = otH > 0 ? `<span class="ot-val">+${formatHHMM(otH)}</span>` : '<span class="dash">—</span>';
-      const dfCell = defH > 0 ? `<span class="def-val">−${formatHHMM(defH)}</span>` : '<span class="dash">—</span>';
-      rows += `<tr${rowCls ? ` class="${rowCls}"` : ''}>
-        <td class="day-col">${DOW_FR[dow]}&nbsp;${day}</td>
-        <td>${stateCell}</td>
-        <td class="num">${hCell}</td>
-        <td class="num">${otCell}</td>
-        <td class="num">${dfCell}</td>
-      </tr>`;
     }
     const fTH = Math.round(mTotalH * 100) / 100;
     const fTOt = Math.round(mTotalOt * 100) / 100;
@@ -238,22 +278,24 @@ function openMonthPrintWindow(pids, year, month) {
       </div>
       <table>
         <thead><tr>
-          <th style="width:46px;">Jour</th>
+          <th style="width:40px;">Jour</th>
+          <th style="width:32px;">Cr&eacute;neau</th>
           <th>Statut / Poste</th>
-          <th style="text-align:center;width:58px;">Heures</th>
-          <th style="text-align:center;width:58px;">H.supp.</th>
-          <th style="text-align:center;width:58px;">H.d&eacute;f.</th>
+          <th style="text-align:center;width:58px;">Heures totales*</th>
+          <th style="text-align:center;width:52px;">H.supp.</th>
+          <th style="text-align:center;width:52px;">H.d&eacute;f.</th>
         </tr></thead>
         <tbody>
           ${rows}
           <tr class="tot">
-            <td colspan="2">Total mensuel</td>
+            <td colspan="3">Total mensuel</td>
             <td class="num">${formatHHMM(fTH)}</td>
             <td class="num">${fTOt > 0 ? '+' + formatHHMM(fTOt) : '—'}</td>
             <td class="num">${fTDef > 0 ? '−' + formatHHMM(fTDef) : '—'}</td>
           </tr>
         </tbody>
       </table>
+      <p class="footnote">* dont heures suppl&eacute;mentaires et heures d&eacute;ficitaires</p>
       <div class="sig">
         <div class="sig-ttl">Lu et approuv&eacute;</div>
         <div class="sig-cols">
@@ -266,9 +308,7 @@ function openMonthPrintWindow(pids, year, month) {
             <div class="sig-line"></div>
           </div>
         </div>
-        <div class="sig-date">Date de remise : ________________________________</div>
       </div>
-      <div class="footer">Imprim&eacute; le ${printDate} &mdash; Amivet PULSE</div>
     </div>`;
   });
 
