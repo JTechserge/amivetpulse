@@ -6,12 +6,7 @@
 import { ASV_PEOPLE, MONTH_NAMES, MONTH_SHORT, ANNUAL_FULLTIME_HOURS } from './config.js';
 import { escapeHTML, asvFullName } from './utils.js';
 import { store } from './store.js';
-import {
-  getForecastWeek,
-  setForecastWeek,
-  getForecastSig,
-  setForecastSig,
-} from './slots.js';
+import { getForecastWeek, setForecastWeek, getForecastSig, setForecastSig } from './slots.js';
 import { showToast } from './ui.js';
 
 const MAX_CP_WEEKS = 5;
@@ -119,7 +114,10 @@ export function computeBreakdown(pid, weeks) {
   for (const wk of weeks) {
     const v = getForecastWeek(pid, wk.mondayISO);
     if (!v) continue;
-    if (v === 'CP') { cpCount++; continue; }
+    if (v === 'CP') {
+      cpCount++;
+      continue;
+    }
     counts[v] = (counts[v] || 0) + 1;
   }
   const rows = Object.entries(counts)
@@ -177,28 +175,33 @@ export function renderForecastPage(container, year) {
   if (!container) return;
   _initPageState(year);
   const st = store.forecastPageState;
+  const canPrintAll = store.currentUser?.role === 'vet' || store.currentUser?.role === 'admin';
+  const printAllBtnHtml = canPrintAll
+    ? `<button class="forecast-print-all-btn" id="forecast-print-all-btn" title="Imprimer tous les pr\xe9visionnels">Imprimer tout</button>`
+    : '';
 
   // eslint-disable-next-line no-unsanitized/property
   container.innerHTML = `
     <div class="forecast-page">
       <div class="forecast-page-head">
-        <h1 class="forecast-page-title">Prévisionnel annuel</h1>
+        <h1 class="forecast-page-title">Pr\xe9visionnel annuel</h1>
         <div class="forecast-mode-toggle" id="forecast-mode-toggle">
           <button data-fmode="asv" class="${st.mode === 'asv' ? 'active' : ''}">Par ASV</button>
-          <button data-fmode="cons" class="${st.mode === 'cons' ? 'active' : ''}">Vue consolidée</button>
+          <button data-fmode="cons" class="${st.mode === 'cons' ? 'active' : ''}">Vue consolid\xe9e</button>
         </div>
         <div class="forecast-year-pill">
-          <button class="forecast-year-btn" id="forecast-year-prev" aria-label="Année précédente">‹</button>
+          <button class="forecast-year-btn" id="forecast-year-prev" aria-label="Ann\xe9e pr\xe9c\xe9dente">‹</button>
           <span id="forecast-year-display">${st.year}</span>
-          <button class="forecast-year-btn" id="forecast-year-next" aria-label="Année suivante">›</button>
+          <button class="forecast-year-btn" id="forecast-year-next" aria-label="Ann\xe9e suivante">›</button>
         </div>
+        ${printAllBtnHtml}
       </div>
       <div id="forecast-view-asv" class="${st.mode !== 'asv' ? 'hidden' : ''}"></div>
       <div id="forecast-view-cons" class="${st.mode !== 'cons' ? 'hidden' : ''}"></div>
     </div>
   `;
 
-  // Sélecteur de mode
+  // S\xe9lecteur de mode
   container.querySelector('#forecast-mode-toggle').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-fmode]');
     if (!btn) return;
@@ -206,7 +209,7 @@ export function renderForecastPage(container, year) {
     renderForecastPage(container, st.year);
   });
 
-  // Sélecteur d'année
+  // S\xe9lecteur d'ann\xe9e
   container.querySelector('#forecast-year-prev').addEventListener('click', () => {
     st.year--;
     renderForecastPage(container, st.year);
@@ -214,6 +217,11 @@ export function renderForecastPage(container, year) {
   container.querySelector('#forecast-year-next').addEventListener('click', () => {
     st.year++;
     renderForecastPage(container, st.year);
+  });
+
+  // Impression par lot (v\xe9t/admin)
+  container.querySelector('#forecast-print-all-btn')?.addEventListener('click', () => {
+    openForecastPrintWindowAll(st.year);
   });
 
   if (st.mode === 'asv') {
@@ -231,14 +239,18 @@ function _renderASVMode(view, year) {
   const st = store.forecastPageState;
   const activeASV = ASV_PEOPLE.filter((p) => !p.archived);
 
-  const tabsHtml = activeASV.map((p) => `
+  const tabsHtml = activeASV
+    .map(
+      (p) => `
     <button class="forecast-asv-tab${p.id === st.currentPid ? ' active' : ''}"
       data-fasv-pid="${escapeHTML(p.id)}"
       style="--asv-tab-color:${escapeHTML(p.color)};">
       <span class="forecast-asv-dot" style="background:${escapeHTML(p.color)};"></span>
       ${escapeHTML(p.name || p.short)}
     </button>
-  `).join('');
+  `
+    )
+    .join('');
 
   // eslint-disable-next-line no-unsanitized/property
   view.innerHTML = `
@@ -263,8 +275,7 @@ function _renderASVContent(layout, year) {
   const sig = getForecastSig(pid, year);
   const weeks = buildYearWeeks(year);
   const isReadOnly = !!sig;
-  const canUnsign =
-    store.currentUser?.role === 'vet' || store.currentUser?.role === 'admin';
+  const canUnsign = store.currentUser?.role === 'vet' || store.currentUser?.role === 'admin';
 
   // Grouper les semaines par mois (mois du jeudi = .month)
   const byMonth = Array.from({ length: 12 }, () => []);
@@ -275,12 +286,16 @@ function _renderASVContent(layout, year) {
   const quickChipsHtml = `
     <div class="forecast-quickbar">
       <span class="forecast-quickbar-lbl">Saisie rapide :</span>
-      ${quickValues.map((v) => `
+      ${quickValues
+        .map(
+          (v) => `
         <button class="forecast-chip${st.quickValue === v ? ' active' : ''}"
           data-qv="${v}" ${isReadOnly ? 'disabled' : ''}>
           ${v}h
         </button>
-      `).join('')}
+      `
+        )
+        .join('')}
       <button class="forecast-chip forecast-chip-cp${st.quickValue === 'CP' ? ' active' : ''}"
         data-qv="CP" ${isReadOnly ? 'disabled' : ''}>
         CP
@@ -290,11 +305,12 @@ function _renderASVContent(layout, year) {
   `;
 
   // Cartes mois
-  const monthCardsHtml = byMonth.map((mWeeks, mo) => {
-    if (!mWeeks.length) return '';
-    const monthTotal = computeMonthTotal(pid, mWeeks);
-    const weeksHtml = mWeeks.map((wk) => _renderWeekRow(wk, pid, isReadOnly, year)).join('');
-    return `
+  const monthCardsHtml = byMonth
+    .map((mWeeks, mo) => {
+      if (!mWeeks.length) return '';
+      const monthTotal = computeMonthTotal(pid, mWeeks);
+      const weeksHtml = mWeeks.map((wk) => _renderWeekRow(wk, pid, isReadOnly, year)).join('');
+      return `
       <div class="forecast-mcard">
         <div class="forecast-month-head">
           <span>${MONTH_NAMES[mo]} ${year}</span>
@@ -303,7 +319,8 @@ function _renderASVContent(layout, year) {
         ${weeksHtml}
       </div>
     `;
-  }).join('');
+    })
+    .join('');
 
   // eslint-disable-next-line no-unsanitized/property
   layout.innerHTML = `
@@ -370,10 +387,7 @@ function _renderASVContent(layout, year) {
   layout.querySelector('#forecast-sign-btn')?.addEventListener('click', () => {
     openForecastPrintWindow(pid, year);
     const userName =
-      store.currentUser?.display_name ||
-      store.currentUser?.email ||
-      store.currentUser?.person_id ||
-      'Inconnu';
+      store.currentUser?.display_name || store.currentUser?.email || store.currentUser?.person_id || 'Inconnu';
     _snapshotBeforeChange();
     setForecastSig(pid, year, { signedAt: new Date().toISOString(), signedBy: userName });
     _saveData();
@@ -381,7 +395,12 @@ function _renderASVContent(layout, year) {
     showToast('Document généré — prévisionnel signé', '✍️');
   });
 
-  // Bouton Réinitialiser (vet/admin uniquement)
+  // Bouton Imprimer (sans signer)
+  layout.querySelector('#forecast-print-btn')?.addEventListener('click', () => {
+    openForecastPrintWindow(pid, year);
+  });
+
+  // Bouton R\xe9initialiser (vet/admin uniquement)
   layout.querySelector('#forecast-unsign-btn')?.addEventListener('click', () => {
     _snapshotBeforeChange();
     setForecastSig(pid, year, null);
@@ -391,195 +410,243 @@ function _renderASVContent(layout, year) {
 }
 
 /**
- * Ouvre une fenêtre d'impression A4 pour le prévisionnel (une seule page).
- * Appelé lors du clic sur "Signer le prévisionnel".
+ * Lit les variables CSS de la charte en forçant le thème clair.
+ * Restaure le thème précédent immédiatement après.
  */
-function openForecastPrintWindow(pid, year) {
-  const weeks = buildYearWeeks(year);
-  const fullName = asvFullName(pid) || pid;
-  const printDate = new Date().toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  });
+function _getLightThemeColors() {
+  const root = document.documentElement;
+  const savedTheme = root.getAttribute('data-theme');
+  root.setAttribute('data-theme', 'light');
+  const cs = getComputedStyle(root);
+  const g = (v) => cs.getPropertyValue(v).trim();
+  const colors = {
+    primary:   g('--color-primary')    || '#EA580C',
+    cpBg:      g('--color-cp')         || '#D1FAE5',
+    cpText:    g('--color-cp-text')    || '#065F46',
+    text:      g('--color-text')       || '#1E293B',
+    textMuted: g('--color-text-muted') || '#8A8577',
+    border:    g('--color-border')     || '#ECE7DE',
+    surface:   g('--color-surface')    || '#FFFFFF',
+  };
+  if (savedTheme) root.setAttribute('data-theme', savedTheme);
+  else root.removeAttribute('data-theme');
+  return colors;
+}
 
-  // Logo depuis le DOM (même technique que openMonthPrintWindow)
-  function getLogoDataUrl() {
-    const img = document.querySelector('img.brand-logo') || document.querySelector('img.login-logo');
-    if (!img || !img.complete || !img.naturalWidth) return '';
-    try {
-      const c = document.createElement('canvas');
-      c.width = img.naturalWidth;
-      c.height = img.naturalHeight;
-      c.getContext('2d').drawImage(img, 0, 0);
-      return c.toDataURL('image/png');
-    } catch {
-      return img.src;
-    }
+/** Logo depuis le DOM en dataURL (même technique que openMonthPrintWindow). */
+function _getLogoDataUrl() {
+  const img = document.querySelector('img.brand-logo') || document.querySelector('img.login-logo');
+  if (!img || !img.complete || !img.naturalWidth) return '';
+  try {
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    c.getContext('2d').drawImage(img, 0, 0);
+    return c.toDataURL('image/png');
+  } catch {
+    return img.src;
   }
-  const logoSrc = getLogoDataUrl();
-  const logoHtml = logoSrc
-    ? `<img src="${logoSrc}" alt="Amivet" style="height:32px;width:auto;display:block;">`
-    : '';
+}
 
-  // Totaux pour la bande de synthèse
-  const annualTotal = computeAnnualTotal(pid, weeks);
-  const cpCount = computeCPCount(pid, weeks);
-  const diff = Math.round((annualTotal - ANNUAL_FULLTIME_HOURS) * 10) / 10;
-  const diffStr = (diff >= 0 ? '+' : '') + diff + ' h';
-  const diffColor = Math.abs(diff) <= 10 ? '#166534' : '#991B1B';
-
-  // Répartition par mois (grille 3 colonnes : Jan–Avr / Mai–Août / Sep–Déc)
+/**
+ * Construit le HTML d'une page imprimable pour un ASV et une année.
+ * Partagé entre impression individuelle et par lot.
+ */
+function _buildForecastPrintPage(pid, year, colors, logoSrc) {
+  const fullName = asvFullName(pid) || pid;
+  const weeks = buildYearWeeks(year);
   const byMonth = Array.from({ length: 12 }, () => []);
   weeks.forEach((wk) => byMonth[wk.month].push(wk));
+
+  const annualTotal = computeAnnualTotal(pid, weeks);
+  const cpCount = computeCPCount(pid, weeks);
+  const breakdown = computeBreakdown(pid, weeks);
+  const diff = Math.round((annualTotal - ANNUAL_FULLTIME_HOURS) * 10) / 10;
+  const diffStr = (diff >= 0 ? '+' : '') + diff + ' h';
+
+  const { primary, cpBg, cpText, text, textMuted, border } = colors;
+
+  const logoHtml = logoSrc
+    ? `<img src="${logoSrc}" alt="Amivet" style="height:36px;width:auto;display:block;border-radius:7px;">`
+    : `<div style="width:36px;height:36px;border-radius:9px;background:${primary};display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;">\u{1F43E}</div>`;
+
 
   function fmtRange(wk) {
     const sd = wk.ds.getUTCDate(), ed = wk.de.getUTCDate();
     const sm = wk.ds.getUTCMonth(), em = wk.de.getUTCMonth();
+    const M3p = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
     if (sm === em) return `${sd}–${ed}`;
-    return `${sd} ${MONTH_SHORT[sm]} – ${ed} ${MONTH_SHORT[em]}`;
+    return `${sd} ${M3p[sm]}–${ed} ${M3p[em]}`;
   }
 
-  const monthCards = byMonth
-    .map((mWeeks, mo) => {
-      if (!mWeeks.length) return '';
-      let monthH = 0;
-      const rows = mWeeks
-        .map((wk) => {
-          const v = getForecastWeek(pid, wk.mondayISO);
-          const isCP = v === 'CP';
-          const h = isCP ? 0 : parseFloat(v) || 0;
-          monthH += h;
-          return `<div class="wrow${isCP ? ' is-cp' : ''}">
-            <span class="wnum">S${String(wk.w).padStart(2, '0')}</span>
-            <span class="wdate">${fmtRange(wk)}</span>
-            <span class="wval" style="color:${isCP ? '#166534' : '#111'}">${isCP ? 'CP' : (h ? h + ' h' : '—')}</span>
-          </div>`;
-        })
-        .join('');
-      return `<div class="mcard">
-        <div class="mcard-head">${MONTH_NAMES[mo]}</div>
-        ${rows}
-        <div class="mcard-foot">${monthH ? Math.round(monthH * 10) / 10 + ' h' : ''}</div>
-      </div>`;
-    })
-    .join('');
+  const QTITLES = ['1er trimestre','2e trimestre','3e trimestre','4e trimestre'];
+  const MNAMES = ['Janvier','F\xe9vrier','Mars','Avril','Mai','Juin','Juillet',
+                  'Ao\xfbt','Septembre','Octobre','Novembre','D\xe9cembre'];
 
-  const html = `<!DOCTYPE html>
-<html lang="fr"><head><meta charset="UTF-8">
-<style>
-  @page { size: A4 portrait; margin: 0; }
-  * { box-sizing: border-box; margin: 0; padding: 0;
-      font-family: Arial, Helvetica, sans-serif;
-      -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { background: #fff; }
-  .sheet { width: 210mm; min-height: 297mm; padding: 10mm 14mm 8mm;
-           display: flex; flex-direction: column; }
-  .hdr { display: flex; align-items: flex-start; justify-content: space-between;
-         padding-bottom: 6px; margin-bottom: 8px; border-bottom: 2.5px solid #111; }
-  .hdr-left { display: flex; align-items: center; gap: 8px; }
-  .hdr-clinic { font-size: 8px; color: #555; text-transform: uppercase;
-                letter-spacing: .06em; line-height: 1.5; }
-  .hdr-clinic strong { display: block; font-size: 10px; color: #111; font-weight: 700; }
-  .hdr-right { text-align: right; }
-  .hdr-name { font-size: 14px; font-weight: 700; color: #111; }
-  .hdr-period { font-size: 9px; color: #555; margin-top: 1px; }
-  .months-grid { display: grid; grid-template-columns: repeat(3, 1fr);
-                 gap: 3mm 4mm; flex: 1; margin-bottom: 5mm; }
-  .mcard-head { font-size: 7.5px; font-weight: 700; text-transform: uppercase;
-                letter-spacing: .06em; color: #333; margin-bottom: 2px;
-                padding-bottom: 2px; border-bottom: 1px solid #CCC; }
-  .wrow { display: flex; align-items: center; padding: 1.5px 0;
-          border-bottom: 1px solid #F0F0F0; gap: 3px; }
-  .wrow.is-cp { background: #F0FDF4; }
-  .wnum { width: 20px; font-size: 6.5px; color: #AAA; flex-shrink: 0; }
-  .wdate { flex: 1; font-size: 7px; color: #555; white-space: nowrap; overflow: hidden; }
-  .wval { font-size: 7.5px; font-weight: 700; white-space: nowrap; }
-  .mcard-foot { font-size: 7px; font-weight: 700; text-align: right;
-                padding-top: 2px; color: #444; border-top: 1px solid #EEE; margin-top: 1px; }
-  .summary-bar { display: flex; gap: 0; border: 1.5px solid #111; border-radius: 3px;
-                 margin-bottom: 5mm; overflow: hidden; }
-  .sb-item { flex: 1; padding: 5px 8px; border-right: 1px solid #DDD; }
-  .sb-item:last-child { border-right: none; }
-  .sb-lbl { font-size: 7px; color: #666; }
-  .sb-val { font-size: 11px; font-weight: 700; color: #111; margin-top: 1px; }
-  .sig-title { font-size: 7.5px; font-weight: 700; text-transform: uppercase;
-               letter-spacing: .06em; color: #333; margin-bottom: 4px; }
-  .sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .sig-box { border: 1px solid #999; border-radius: 2px; padding: 7px 10px; }
-  .sig-role { font-size: 8.5px; font-weight: 700; color: #111; margin-bottom: 2px; }
-  .sig-mention { font-size: 7.5px; color: #555; font-style: italic; margin-bottom: 6px; }
-  .sig-line { height: 35px; border-bottom: 1px solid #888; margin-bottom: 4px; }
-  .sig-name { font-size: 7.5px; color: #555; }
-  .sig-place { font-size: 7px; color: #AAA; margin-top: 5px; }
-  .footer { margin-top: auto; padding-top: 4px; border-top: 1px solid #EEE;
-            font-size: 6.5px; color: #BBB; text-align: right; }
-</style>
-</head><body>
-<div class="sheet">
-  <div class="hdr">
-    <div class="hdr-left">
-      ${logoHtml}
-      <div class="hdr-clinic">
-        <strong>Clinique Amivet</strong>
-        Planning pr&eacute;visionnel &middot; ASV
-      </div>
-    </div>
-    <div class="hdr-right">
-      <div class="hdr-name">${escapeHTML(fullName)}</div>
-      <div class="hdr-period">Pr&eacute;visionnel ${year}</div>
-    </div>
-  </div>
+  const quartersHtml = [0, 1, 2, 3].map((q) => {
+    const monthsHtml = [q * 3, q * 3 + 1, q * 3 + 2].map((mo) => {
+      const mWeeks = byMonth[mo];
+      if (!mWeeks.length) return '<div class="mo"></div>';
+      const moTotal = computeMonthTotal(pid, mWeeks);
+      const wkRows = mWeeks.map((wk) => {
+        const v = getForecastWeek(pid, wk.mondayISO);
+        const isCP = v === 'CP';
+        const h = isCP ? 0 : parseFloat(v) || 0;
+        return `<div class="wk${isCP ? ' cp' : ''}">` +
+          `<span class="s">S${String(wk.w).padStart(2, '0')}</span>` +
+          `<span class="dt">${fmtRange(wk)}</span>` +
+          `<span class="h">${isCP ? 'CP' : h ? h + '&thinsp;h' : '—'}</span>` +
+          `</div>`;
+      }).join('');
+      return `<div class="mo">` +
+        `<div class="mo-h"><span class="nm">${MNAMES[mo]}</span>` +
+        `<span class="tot">${moTotal > 0 ? Math.round(moTotal) + '&thinsp;h' : '—'}</span></div>` +
+        wkRows +
+        `</div>`;
+    }).join('');
+    return `<div class="qtr"><div class="qtr-label">${QTITLES[q]}</div>` +
+      `<div class="months">${monthsHtml}</div></div>`;
+  }).join('');
 
-  <div class="months-grid">${monthCards}</div>
+  const diffClass = diff >= 0 ? 'kpi pos' : 'kpi neg';
+  const kpisHtml =
+    `<div class="kpi"><div class="k">Total pr&eacute;visionnel</div>` +
+    `<div class="v">${Math.round(annualTotal)}&thinsp;<small>h</small></div></div>` +
+    `<div class="kpi"><div class="k">Objectif l&eacute;gal</div>` +
+    `<div class="v">${ANNUAL_FULLTIME_HOURS}&thinsp;<small>h</small></div></div>` +
+    `<div class="${diffClass}"><div class="k">Diff&eacute;rence</div>` +
+    `<div class="v">${escapeHTML(diffStr)}</div></div>` +
+    `<div class="kpi"><div class="k">Cong&eacute;s pay&eacute;s</div>` +
+    `<div class="v">${cpCount}&thinsp;<small>/ 5 sem.</small></div></div>`;
 
-  <div class="summary-bar">
-    <div class="sb-item">
-      <div class="sb-lbl">Total pr&eacute;visionnel</div>
-      <div class="sb-val">${Math.round(annualTotal * 10) / 10}&thinsp;h</div>
-    </div>
-    <div class="sb-item">
-      <div class="sb-lbl">Objectif l&eacute;gal</div>
-      <div class="sb-val">${ANNUAL_FULLTIME_HOURS}&thinsp;h</div>
-    </div>
-    <div class="sb-item">
-      <div class="sb-lbl">Diff&eacute;rence</div>
-      <div class="sb-val" style="color:${diffColor}">${escapeHTML(diffStr)}</div>
-    </div>
-    <div class="sb-item">
-      <div class="sb-lbl">Cong&eacute;s pay&eacute;s</div>
-      <div class="sb-val">${cpCount}&thinsp;/&thinsp;5 sem.</div>
-    </div>
-  </div>
+  const brkRows = breakdown.map((r) =>
+    `<div class="brk-row${r.isCP ? ' cp' : ''}">` +
+    `<span class="lab">${r.isCP ? 'Cong&eacute;s pay&eacute;s (CP)' : escapeHTML(r.label) + '&thinsp;/ sem.'}</span>` +
+    `<span class="n">${r.count}&thinsp;sem.</span></div>`
+  ).join('');
 
-  <div class="sig-title">Signatures</div>
-  <div class="sig-grid">
-    <div class="sig-box">
-      <div class="sig-role">L&rsquo;employ&eacute;(e) &mdash; ASV</div>
-      <div class="sig-mention">Lu et approuv&eacute;</div>
-      <div class="sig-line"></div>
-      <div class="sig-name">${escapeHTML(fullName)}</div>
-      <div class="sig-place">Fait &agrave; _____________, le _____________</div>
-    </div>
-    <div class="sig-box">
-      <div class="sig-role">L&rsquo;employeur &mdash; v&eacute;t&eacute;rinaire(s)</div>
-      <div class="sig-mention">Lu et approuv&eacute;</div>
-      <div class="sig-line"></div>
-      <div class="sig-name">Dr David Pelois &amp; Dr St&eacute;phane Maquinay</div>
-      <div class="sig-place">Fait &agrave; _____________, le _____________</div>
-    </div>
-  </div>
+  return `<div class="sheet">` +
+    `<div class="hdr"><div class="hdr-l">${logoHtml}` +
+    `<div class="clinic">Clinique Amivet<small>Planning pr&eacute;visionnel &middot; ASV</small></div></div>` +
+    `<div class="hdr-r"><div class="who">${escapeHTML(fullName)}</div>` +
+    `<div class="per">Pr&eacute;visionnel ${year}</div></div></div>` +
+    `<div class="subline">P&eacute;riode du 1er janvier au 31 d&eacute;cembre ${year} &middot; heures pr&eacute;vues par semaine</div>` +
+    quartersHtml +
+    `<div class="foot"><div class="kpis">${kpisHtml}</div>` +
+    `<div class="brk"><div class="brk-h">Nombre de semaines par volume</div>` +
+    `<div class="brk-body">${brkRows}</div></div></div>` +
+    `<div class="sig-title">Signatures &mdash; lu et approuv&eacute;</div>` +
+    `<div class="sigs">` +
+    `<div class="sig"><div class="role">L&rsquo;employ&eacute;(e) &mdash; ASV</div>` +
+    `<div class="lu">Bon pour accord sur le pr&eacute;visionnel annuel</div>` +
+    `<div class="line"></div><div class="who2">${escapeHTML(fullName)}</div></div>` +
+    `<div class="sig"><div class="role">L&rsquo;employeur &mdash; V&eacute;t&eacute;rinaire(s)</div>` +
+    `<div class="lu">Bon pour accord sur le pr&eacute;visionnel annuel</div>` +
+    `<div class="line"></div><div class="who2">Dr David Pelois &amp; Dr St&eacute;phane Maquinay</div></div>` +
+    `</div><div class="genline">Amivet PULSE &mdash; pr&eacute;visionnel ${year}</div></div>`;
+}
 
-  <div class="footer">G&eacute;n&eacute;r&eacute; le ${escapeHTML(printDate)} &mdash; Amivet PULSE</div>
-</div>
-</body></html>`;
+function _buildPrintWindowCss(colors) {
+  const { primary, cpBg, cpText, text, textMuted, border } = colors;
+  const pos = '#15803D', neg = '#B91C1C';
+  return `@page{size:A4 portrait;margin:12mm;}` +
+    `*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;` +
+    `-webkit-print-color-adjust:exact;print-color-adjust:exact;}` +
+    `body{background:#fff;color:${text};}` +
+    `.sheet{background:#fff;page-break-after:always;}` +
+    `.sheet:last-child{page-break-after:auto;}` +
+    `.hdr{display:flex;justify-content:space-between;align-items:flex-start;` +
+    `border-bottom:2.5px solid ${text};padding-bottom:9px;margin-bottom:4px;}` +
+    `.hdr-l{display:flex;align-items:center;gap:12px;}` +
+    `.clinic{font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1.15;color:${text};}` +
+    `.clinic small{display:block;font-size:9.5px;font-weight:600;color:${textMuted};` +
+    `letter-spacing:.06em;margin-top:2px;}` +
+    `.hdr-r{text-align:right;}` +
+    `.hdr-r .who{font-size:19px;font-weight:800;color:${text};}` +
+    `.hdr-r .per{font-size:11px;color:${primary};font-weight:600;margin-top:1px;}` +
+    `.subline{font-size:10px;color:${textMuted};margin:6px 0 10px;}` +
+    `.qtr{margin-bottom:9px;break-inside:avoid;}` +
+    `.qtr-label{font-size:10px;font-weight:700;color:${primary};letter-spacing:.08em;` +
+    `text-transform:uppercase;margin:0 0 4px 1px;}` +
+    `.months{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}` +
+    `.mo{border:1px solid ${border};border-radius:7px;overflow:hidden;break-inside:avoid;}` +
+    `.mo-h{display:flex;justify-content:space-between;align-items:baseline;` +
+    `background:#F8FAFC;padding:4px 8px;border-bottom:1px solid ${border};}` +
+    `.mo-h .nm{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:${text};}` +
+    `.mo-h .tot{font-size:10.5px;font-weight:800;color:${text};}` +
+    `.wk{display:flex;align-items:center;gap:6px;padding:3px 8px;font-size:9.5px;` +
+    `border-top:1px solid #EEF2F6;}` +
+    `.wk:first-of-type{border-top:none;}` +
+    `.wk .s{width:22px;color:${textMuted};font-size:8px;font-weight:600;}` +
+    `.wk .dt{flex:1;color:${textMuted};font-size:9px;white-space:nowrap;}` +
+    `.wk .h{font-weight:700;font-size:10px;color:${text};}` +
+    `.wk.cp{background:${cpBg};}` +
+    `.wk.cp .h{color:${cpText};}` +
+    `.wk.cp .s{color:${cpText};}` +
+    `.foot{margin-top:7px;border-top:2px solid ${text};padding-top:10px;` +
+    `display:grid;grid-template-columns:1.55fr 1fr;gap:14px;break-inside:avoid;}` +
+    `.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;align-content:start;}` +
+    `.kpi{border:1px solid ${border};border-radius:7px;padding:7px 9px;}` +
+    `.kpi .k{font-size:8.5px;color:${textMuted};font-weight:600;text-transform:uppercase;letter-spacing:.04em;}` +
+    `.kpi .v{font-size:16px;font-weight:800;margin-top:3px;line-height:1;color:${text};}` +
+    `.kpi .v small{font-size:9.5px;font-weight:600;color:${textMuted};}` +
+    `.kpi.pos .v{color:${pos};}` +
+    `.kpi.neg .v{color:${neg};}` +
+    `.brk{border:1px solid ${border};border-radius:7px;overflow:hidden;}` +
+    `.brk-h{background:#F8FAFC;padding:4px 9px;font-size:8.5px;font-weight:700;` +
+    `color:${textMuted};text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid ${border};}` +
+    `.brk-row{display:flex;justify-content:space-between;align-items:center;` +
+    `padding:3px 9px;font-size:9.5px;border-top:1px solid #EEF2F6;}` +
+    `.brk-row:first-of-type{border-top:none;}` +
+    `.brk-row .n{font-weight:700;color:${text};}` +
+    `.brk-row .lab{color:${textMuted};}` +
+    `.brk-row.cp .lab,.brk-row.cp .n{color:${cpText};}` +
+    `.sig-title{font-size:9px;font-weight:700;color:${textMuted};text-transform:uppercase;` +
+    `letter-spacing:.06em;margin:13px 0 7px;}` +
+    `.sigs{display:grid;grid-template-columns:1fr 1fr;gap:18px;}` +
+    `.sig{border:1px solid ${border};border-radius:7px;padding:9px 11px 11px;}` +
+    `.sig .role{font-size:10.5px;font-weight:700;color:${text};}` +
+    `.sig .lu{font-size:9px;color:${textMuted};font-style:italic;margin-top:1px;}` +
+    `.sig .line{border-bottom:1px solid ${text};height:33px;margin:8px 0 4px;}` +
+    `.sig .who2{font-size:9.5px;color:${textMuted};}` +
+    `.genline{margin-top:12px;text-align:right;font-size:8px;color:${textMuted};}`;
+}
 
-  const win = window.open('', '_blank', 'width=820,height=1160');
+/**
+ * Ouvre une fenêtre d'impression A4 pour le prévisionnel d'un ASV.
+ * Conforme à la maquette apercu-previsionnel-impression.html.
+ */
+function openForecastPrintWindow(pid, year) {
+  const colors = _getLightThemeColors();
+  const logoSrc = _getLogoDataUrl();
+  const body = _buildForecastPrintPage(pid, year, colors, logoSrc);
+  const css = _buildPrintWindowCss(colors);
+  const html = `<!DOCTYPE html>\n<html lang="fr"><head><meta charset="UTF-8">\n<style>${css}</style>\n</head><body>${body}</body></html>`;
+  const win = window.open('', '_blank', 'width=840,height=1200');
   if (!win) { showToast('Autorisez les pop-ups pour imprimer', '⚠️'); return; }
   win.document.write(html);
   win.document.close();
   win.focus();
-  setTimeout(() => win.print(), 450);
+  setTimeout(() => win.print(), 400);
+}
+
+/**
+ * Impression par lot : une page A4 par ASV active (vét/admin uniquement).
+ */
+export function openForecastPrintWindowAll(year) {
+  const colors = _getLightThemeColors();
+  const logoSrc = _getLogoDataUrl();
+  const activeASV = ASV_PEOPLE.filter((p) => !p.archived);
+  if (!activeASV.length) { showToast('Aucune ASV active à imprimer', '⚠️'); return; }
+  const pages = activeASV.map((p) => _buildForecastPrintPage(p.id, year, colors, logoSrc)).join('\n');
+  const css = _buildPrintWindowCss(colors);
+  const html = `<!DOCTYPE html>\n<html lang="fr"><head><meta charset="UTF-8">\n<style>${css}</style>\n</head><body>${pages}</body></html>`;
+  const win = window.open('', '_blank', 'width=840,height=1200');
+  if (!win) { showToast('Autorisez les pop-ups pour imprimer', '⚠️'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 500);
 }
 
 /**
@@ -659,12 +726,14 @@ function _renderSummaryPanel(panel, pid, year, weeks, sig, canUnsign, isReadOnly
     : '';
 
   const signBtnHtml = !isReadOnly
-    ? `<button class="forecast-sign-btn" id="forecast-sign-btn">Signer le prévisionnel</button>`
+    ? `<button class="forecast-sign-btn" id="forecast-sign-btn">Signer le pr\xe9visionnel</button>`
     : '';
+  const printBtnHtml = `<button class="forecast-print-btn" id="forecast-print-btn">Imprimer le pr\xe9visionnel</button>`;
 
-  const breakdownRows = breakdown.map((r) => {
-    const pct = Math.round((r.count / maxCount) * 100);
-    return `
+  const breakdownRows = breakdown
+    .map((r) => {
+      const pct = Math.round((r.count / maxCount) * 100);
+      return `
       <tr class="${r.isCP ? 'forecast-brk-cp-row' : ''}">
         <td>${escapeHTML(r.label)}</td>
         <td>${r.count} sem.</td>
@@ -676,7 +745,8 @@ function _renderSummaryPanel(panel, pid, year, weeks, sig, canUnsign, isReadOnly
           </div>
         </td>
       </tr>`;
-  }).join('');
+    })
+    .join('');
 
   // eslint-disable-next-line no-unsanitized/property
   panel.innerHTML = `
@@ -689,10 +759,14 @@ function _renderSummaryPanel(panel, pid, year, weeks, sig, canUnsign, isReadOnly
         <span>Objectif légal</span>
         <span>${ANNUAL_FULLTIME_HOURS}h</span>
       </div>
-      ${reliquat !== 0 ? `<div class="forecast-sum-row">
+      ${
+        reliquat !== 0
+          ? `<div class="forecast-sum-row">
         <span>Reliquat N-1</span>
         <span>${reliquat >= 0 ? '+' : ''}${reliquat.toLocaleString('fr-FR', { maximumFractionDigits: 1 })}h</span>
-      </div>` : ''}
+      </div>`
+          : ''
+      }
       <div class="forecast-sum-row">
         <span>Différence</span>
         <span class="${diffCls}">${diffSign}${Math.abs(diff).toLocaleString('fr-FR', { maximumFractionDigits: 1 })}h</span>
@@ -710,8 +784,9 @@ function _renderSummaryPanel(panel, pid, year, weeks, sig, canUnsign, isReadOnly
         <tbody>${breakdownRows}</tbody>
       </table>
       <div class="forecast-sum-divider"></div>
+      ${printBtnHtml}
       ${signBtnHtml}
-      <p class="forecast-sum-hint">CP : mai–oct. min 2 sem. consécutives, nov.–avr. max 3 sem.</p>
+      <p class="forecast-sum-hint">CP : mai–oct. min 2 sem. cons\xe9cutives, nov.–avr. max 3 sem.</p>
     </div>
   `;
 }
@@ -726,43 +801,56 @@ function _renderConsMode(view, year) {
 
   // Totaux annuels par ASV (pour tfoot)
   const totals = {};
-  activeASV.forEach((p) => { totals[p.id] = computeAnnualTotal(p.id, weeks); });
+  activeASV.forEach((p) => {
+    totals[p.id] = computeAnnualTotal(p.id, weeks);
+  });
 
   // En-têtes ASV
-  const thASV = activeASV.map((p) => `
+  const thASV = activeASV
+    .map(
+      (p) => `
     <th class="forecast-cons-asv-th" data-cons-pid="${escapeHTML(p.id)}"
       style="cursor:pointer;" title="Voir le prévisionnel de ${escapeHTML(p.name || p.short)}">
       <span class="forecast-asv-dot-sm" style="background:${escapeHTML(p.color)};"></span>
       ${escapeHTML(p.short)}
     </th>
-  `).join('');
+  `
+    )
+    .join('');
 
   // Corps du tableau
-  const tbodyRows = weeks.map((wk) => {
-    // Détection chevauchement CP : >= 2 ASV en CP cette semaine
-    const cpCount = activeASV.filter((p) => getForecastWeek(p.id, wk.mondayISO) === 'CP').length;
-    const rowCoverWarn = cpCount >= 2;
+  const tbodyRows = weeks
+    .map((wk) => {
+      // Détection chevauchement CP : >= 2 ASV en CP cette semaine
+      const cpCount = activeASV.filter((p) => getForecastWeek(p.id, wk.mondayISO) === 'CP').length;
+      const rowCoverWarn = cpCount >= 2;
 
-    const dayLabel = `${wk.ds.getUTCDate()} ${MONTH_SHORT[wk.ds.getUTCMonth()]}`;
-    const cells = activeASV.map((p) => {
-      const v = getForecastWeek(p.id, wk.mondayISO);
-      const isCP = v === 'CP';
-      let cellCls = 'forecast-cons-cell';
-      if (isCP && rowCoverWarn) cellCls += ' forecast-cons-cell-cp-warn';
-      else if (isCP) cellCls += ' forecast-cons-cell-cp';
-      return `<td class="${cellCls}">${v ? escapeHTML(v) : '—'}</td>`;
-    }).join('');
+      const dayLabel = `${wk.ds.getUTCDate()} ${MONTH_SHORT[wk.ds.getUTCMonth()]}`;
+      const cells = activeASV
+        .map((p) => {
+          const v = getForecastWeek(p.id, wk.mondayISO);
+          const isCP = v === 'CP';
+          let cellCls = 'forecast-cons-cell';
+          if (isCP && rowCoverWarn) cellCls += ' forecast-cons-cell-cp-warn';
+          else if (isCP) cellCls += ' forecast-cons-cell-cp';
+          return `<td class="${cellCls}">${v ? escapeHTML(v) : '—'}</td>`;
+        })
+        .join('');
 
-    return `<tr class="${rowCoverWarn ? 'forecast-cons-row-warn' : ''}">
+      return `<tr class="${rowCoverWarn ? 'forecast-cons-row-warn' : ''}">
       <td class="forecast-cons-wkcol">S${String(wk.w).padStart(2, '0')} · ${dayLabel}</td>
       ${cells}
     </tr>`;
-  }).join('');
+    })
+    .join('');
 
   // Ligne totaux
-  const tfootCells = activeASV.map((p) =>
-    `<td class="forecast-cons-total">${totals[p.id].toLocaleString('fr-FR', { maximumFractionDigits: 1 })}h</td>`
-  ).join('');
+  const tfootCells = activeASV
+    .map(
+      (p) =>
+        `<td class="forecast-cons-total">${totals[p.id].toLocaleString('fr-FR', { maximumFractionDigits: 1 })}h</td>`
+    )
+    .join('');
 
   // eslint-disable-next-line no-unsanitized/property
   view.innerHTML = `
