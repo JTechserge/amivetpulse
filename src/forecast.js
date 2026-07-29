@@ -4,7 +4,7 @@
    ================================================================ */
 
 import { ASV_PEOPLE, MONTH_NAMES, MONTH_SHORT, ANNUAL_FULLTIME_HOURS } from './config.js';
-import { escapeHTML } from './utils.js';
+import { escapeHTML, asvFullName } from './utils.js';
 import { store } from './store.js';
 import {
   getForecastWeek,
@@ -366,8 +366,9 @@ function _renderASVContent(layout, year) {
     });
   });
 
-  // Bouton Signer
+  // Bouton Signer — ouvre le document A4 puis enregistre la signature
   layout.querySelector('#forecast-sign-btn')?.addEventListener('click', () => {
+    openForecastPrintWindow(pid, year);
     const userName =
       store.currentUser?.display_name ||
       store.currentUser?.email ||
@@ -377,7 +378,7 @@ function _renderASVContent(layout, year) {
     setForecastSig(pid, year, { signedAt: new Date().toISOString(), signedBy: userName });
     _saveData();
     _renderASVContent(layout, year);
-    showToast('Prévisionnel signé', '');
+    showToast('Document généré — prévisionnel signé', '✍️');
   });
 
   // Bouton Réinitialiser (vet/admin uniquement)
@@ -387,6 +388,198 @@ function _renderASVContent(layout, year) {
     _saveData(false);
     _renderASVContent(layout, year);
   });
+}
+
+/**
+ * Ouvre une fenêtre d'impression A4 pour le prévisionnel (une seule page).
+ * Appelé lors du clic sur "Signer le prévisionnel".
+ */
+function openForecastPrintWindow(pid, year) {
+  const weeks = buildYearWeeks(year);
+  const fullName = asvFullName(pid) || pid;
+  const printDate = new Date().toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+
+  // Logo depuis le DOM (même technique que openMonthPrintWindow)
+  function getLogoDataUrl() {
+    const img = document.querySelector('img.brand-logo') || document.querySelector('img.login-logo');
+    if (!img || !img.complete || !img.naturalWidth) return '';
+    try {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      c.getContext('2d').drawImage(img, 0, 0);
+      return c.toDataURL('image/png');
+    } catch {
+      return img.src;
+    }
+  }
+  const logoSrc = getLogoDataUrl();
+  const logoHtml = logoSrc
+    ? `<img src="${logoSrc}" alt="Amivet" style="height:32px;width:auto;display:block;">`
+    : '';
+
+  // Totaux pour la bande de synthèse
+  const annualTotal = computeAnnualTotal(pid, weeks);
+  const cpCount = computeCPCount(pid, weeks);
+  const diff = Math.round((annualTotal - ANNUAL_FULLTIME_HOURS) * 10) / 10;
+  const diffStr = (diff >= 0 ? '+' : '') + diff + ' h';
+  const diffColor = Math.abs(diff) <= 10 ? '#166534' : '#991B1B';
+
+  // Répartition par mois (grille 3 colonnes : Jan–Avr / Mai–Août / Sep–Déc)
+  const byMonth = Array.from({ length: 12 }, () => []);
+  weeks.forEach((wk) => byMonth[wk.month].push(wk));
+
+  function fmtRange(wk) {
+    const sd = wk.ds.getUTCDate(), ed = wk.de.getUTCDate();
+    const sm = wk.ds.getUTCMonth(), em = wk.de.getUTCMonth();
+    if (sm === em) return `${sd}–${ed}`;
+    return `${sd} ${MONTH_SHORT[sm]} – ${ed} ${MONTH_SHORT[em]}`;
+  }
+
+  const monthCards = byMonth
+    .map((mWeeks, mo) => {
+      if (!mWeeks.length) return '';
+      let monthH = 0;
+      const rows = mWeeks
+        .map((wk) => {
+          const v = getForecastWeek(pid, wk.mondayISO);
+          const isCP = v === 'CP';
+          const h = isCP ? 0 : parseFloat(v) || 0;
+          monthH += h;
+          return `<div class="wrow${isCP ? ' is-cp' : ''}">
+            <span class="wnum">S${String(wk.w).padStart(2, '0')}</span>
+            <span class="wdate">${fmtRange(wk)}</span>
+            <span class="wval" style="color:${isCP ? '#166534' : '#111'}">${isCP ? 'CP' : (h ? h + ' h' : '—')}</span>
+          </div>`;
+        })
+        .join('');
+      return `<div class="mcard">
+        <div class="mcard-head">${MONTH_NAMES[mo]}</div>
+        ${rows}
+        <div class="mcard-foot">${monthH ? Math.round(monthH * 10) / 10 + ' h' : ''}</div>
+      </div>`;
+    })
+    .join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { background: #fff; }
+  .sheet { width: 210mm; min-height: 297mm; padding: 10mm 14mm 8mm;
+           display: flex; flex-direction: column; }
+  .hdr { display: flex; align-items: flex-start; justify-content: space-between;
+         padding-bottom: 6px; margin-bottom: 8px; border-bottom: 2.5px solid #111; }
+  .hdr-left { display: flex; align-items: center; gap: 8px; }
+  .hdr-clinic { font-size: 8px; color: #555; text-transform: uppercase;
+                letter-spacing: .06em; line-height: 1.5; }
+  .hdr-clinic strong { display: block; font-size: 10px; color: #111; font-weight: 700; }
+  .hdr-right { text-align: right; }
+  .hdr-name { font-size: 14px; font-weight: 700; color: #111; }
+  .hdr-period { font-size: 9px; color: #555; margin-top: 1px; }
+  .months-grid { display: grid; grid-template-columns: repeat(3, 1fr);
+                 gap: 3mm 4mm; flex: 1; margin-bottom: 5mm; }
+  .mcard-head { font-size: 7.5px; font-weight: 700; text-transform: uppercase;
+                letter-spacing: .06em; color: #333; margin-bottom: 2px;
+                padding-bottom: 2px; border-bottom: 1px solid #CCC; }
+  .wrow { display: flex; align-items: center; padding: 1.5px 0;
+          border-bottom: 1px solid #F0F0F0; gap: 3px; }
+  .wrow.is-cp { background: #F0FDF4; }
+  .wnum { width: 20px; font-size: 6.5px; color: #AAA; flex-shrink: 0; }
+  .wdate { flex: 1; font-size: 7px; color: #555; white-space: nowrap; overflow: hidden; }
+  .wval { font-size: 7.5px; font-weight: 700; white-space: nowrap; }
+  .mcard-foot { font-size: 7px; font-weight: 700; text-align: right;
+                padding-top: 2px; color: #444; border-top: 1px solid #EEE; margin-top: 1px; }
+  .summary-bar { display: flex; gap: 0; border: 1.5px solid #111; border-radius: 3px;
+                 margin-bottom: 5mm; overflow: hidden; }
+  .sb-item { flex: 1; padding: 5px 8px; border-right: 1px solid #DDD; }
+  .sb-item:last-child { border-right: none; }
+  .sb-lbl { font-size: 7px; color: #666; }
+  .sb-val { font-size: 11px; font-weight: 700; color: #111; margin-top: 1px; }
+  .sig-title { font-size: 7.5px; font-weight: 700; text-transform: uppercase;
+               letter-spacing: .06em; color: #333; margin-bottom: 4px; }
+  .sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .sig-box { border: 1px solid #999; border-radius: 2px; padding: 7px 10px; }
+  .sig-role { font-size: 8.5px; font-weight: 700; color: #111; margin-bottom: 2px; }
+  .sig-mention { font-size: 7.5px; color: #555; font-style: italic; margin-bottom: 6px; }
+  .sig-line { height: 35px; border-bottom: 1px solid #888; margin-bottom: 4px; }
+  .sig-name { font-size: 7.5px; color: #555; }
+  .sig-place { font-size: 7px; color: #AAA; margin-top: 5px; }
+  .footer { margin-top: auto; padding-top: 4px; border-top: 1px solid #EEE;
+            font-size: 6.5px; color: #BBB; text-align: right; }
+</style>
+</head><body>
+<div class="sheet">
+  <div class="hdr">
+    <div class="hdr-left">
+      ${logoHtml}
+      <div class="hdr-clinic">
+        <strong>Clinique Amivet</strong>
+        Planning pr&eacute;visionnel &middot; ASV
+      </div>
+    </div>
+    <div class="hdr-right">
+      <div class="hdr-name">${escapeHTML(fullName)}</div>
+      <div class="hdr-period">Pr&eacute;visionnel ${year}</div>
+    </div>
+  </div>
+
+  <div class="months-grid">${monthCards}</div>
+
+  <div class="summary-bar">
+    <div class="sb-item">
+      <div class="sb-lbl">Total pr&eacute;visionnel</div>
+      <div class="sb-val">${Math.round(annualTotal * 10) / 10}&thinsp;h</div>
+    </div>
+    <div class="sb-item">
+      <div class="sb-lbl">Objectif l&eacute;gal</div>
+      <div class="sb-val">${ANNUAL_FULLTIME_HOURS}&thinsp;h</div>
+    </div>
+    <div class="sb-item">
+      <div class="sb-lbl">Diff&eacute;rence</div>
+      <div class="sb-val" style="color:${diffColor}">${escapeHTML(diffStr)}</div>
+    </div>
+    <div class="sb-item">
+      <div class="sb-lbl">Cong&eacute;s pay&eacute;s</div>
+      <div class="sb-val">${cpCount}&thinsp;/&thinsp;5 sem.</div>
+    </div>
+  </div>
+
+  <div class="sig-title">Signatures</div>
+  <div class="sig-grid">
+    <div class="sig-box">
+      <div class="sig-role">L&rsquo;employ&eacute;(e) &mdash; ASV</div>
+      <div class="sig-mention">Lu et approuv&eacute;</div>
+      <div class="sig-line"></div>
+      <div class="sig-name">${escapeHTML(fullName)}</div>
+      <div class="sig-place">Fait &agrave; _____________, le _____________</div>
+    </div>
+    <div class="sig-box">
+      <div class="sig-role">L&rsquo;employeur &mdash; v&eacute;t&eacute;rinaire(s)</div>
+      <div class="sig-mention">Lu et approuv&eacute;</div>
+      <div class="sig-line"></div>
+      <div class="sig-name">Dr David Pelois &amp; Dr St&eacute;phane Maquinay</div>
+      <div class="sig-place">Fait &agrave; _____________, le _____________</div>
+    </div>
+  </div>
+
+  <div class="footer">G&eacute;n&eacute;r&eacute; le ${escapeHTML(printDate)} &mdash; Amivet PULSE</div>
+</div>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=820,height=1160');
+  if (!win) { showToast('Autorisez les pop-ups pour imprimer', '⚠️'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 450);
 }
 
 /**
