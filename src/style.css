@@ -87,6 +87,12 @@
   --color-off:#FED7AA;
   --color-off-text:#7C2D12;
   --color-off-border:#FB923C;
+  --color-accident:#CCFBF1;
+  --color-accident-text:#134E4A;
+  --color-accident-border:#2DD4BF;
+  --color-demi:#FCE7F3;
+  --color-demi-text:#831843;
+  --color-demi-border:#EC4899;
   --color-opening:#DCFCE7;
   --color-opening-border:#16A34A;
   --color-opening-text:#14532D;
@@ -135,6 +141,12 @@
     --color-off:#2D1500;
     --color-off-text:#FED7AA;
     --color-off-border:#C2410C;
+    --color-accident:#0D2B28;
+    --color-accident-text:#CCFBF1;
+    --color-accident-border:#14B8A6;
+    --color-demi:#1F0A13;
+    --color-demi-text:#FCE7F3;
+    --color-demi-border:#BE185D;
     --color-opening:#052E16;
     --color-opening-border:#166534;
     --color-opening-text:#DCFCE7;
@@ -174,6 +186,12 @@
   --color-off:#2D1500;
   --color-off-text:#FED7AA;
   --color-off-border:#C2410C;
+  --color-accident:#0D2B28;
+  --color-accident-text:#CCFBF1;
+  --color-accident-border:#14B8A6;
+  --color-demi:#1F0A13;
+  --color-demi-text:#FCE7F3;
+  --color-demi-border:#BE185D;
   --color-opening:#052E16;
   --color-opening-border:#166534;
   --color-opening-text:#DCFCE7;
@@ -212,6 +230,12 @@
   --color-off:#FED7AA;
   --color-off-text:#7C2D12;
   --color-off-border:#FB923C;
+  --color-accident:#CCFBF1;
+  --color-accident-text:#134E4A;
+  --color-accident-border:#2DD4BF;
+  --color-demi:#FCE7F3;
+  --color-demi-text:#831843;
+  --color-demi-border:#EC4899;
   --color-opening:#DCFCE7;
   --color-opening-border:#16A34A;
   --color-opening-text:#14532D;
@@ -514,6 +538,8 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-cell.state-change-rejected:hover{filter:brightness(0.96);}
 .cal-cell.state-sick{background:var(--color-sick);color:var(--color-sick-text);border-color:var(--color-sick-border);}
 .cal-cell.state-sick:hover{filter:brightness(0.96);}
+.cal-cell.state-accident{background:var(--color-accident);color:var(--color-accident-text);border-color:var(--color-accident-border);}
+.cal-cell.state-accident:hover{filter:brightness(0.96);}
 .cal-cell.state-off{background:var(--color-off);color:var(--color-off-text);border-color:var(--color-off-border);}
 .cal-cell.state-off:hover{filter:brightness(0.96);}
 .cal-cell.sunday-cell{background:var(--color-sunday);cursor:default;}
@@ -596,6 +622,8 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-wg-half-medical{background:var(--color-medical);color:var(--color-medical-text);}
 .cal-wg-half-sick{background:var(--color-sick);color:var(--color-sick-text);}
 .cal-wg-half-off{background:var(--color-off);color:var(--color-off-text);}
+.cal-wg-half-accident{background:var(--color-accident);color:var(--color-accident-text);}
+.cal-wg-half-demi{background:var(--color-demi);color:var(--color-demi-text);}
 .cal-wg-half-opening{background:var(--color-opening);border-color:var(--color-opening-border);color:var(--color-opening-text);}
 .cal-wg-half-closing{background:var(--color-closing);border-color:var(--color-closing-border);color:var(--color-closing-text);}
 .cal-wg-label-spacer{background:var(--color-secondary);border-right:1px solid var(--color-border);}
@@ -965,6 +993,7 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
    Gap entre jours = padding(3px) + border(0.5px) + padding(3px) = ~7px
    → vraie fusion via grid-column:span N, pas de rustine CSS */
 .pstrip-bg-sick{background:var(--color-sick);}
+.pstrip-bg-accident{background:var(--color-accident);}
 .pstrip-bg-repos{background:var(--color-off);}
 .pstrip-bg-pending{background:var(--color-leave-pending);}
 .pstrip-bg-approved,.pstrip-bg-absent{background:var(--color-absent);}
@@ -972,6 +1001,7 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .pstrip-leave-label-merged.lbl-repos{color:#7C2D12;text-shadow:none;}
 .pstrip-leave-label-merged.lbl-conge{color:#7F1D1D;text-shadow:none;}
 .pstrip-leave-label-merged.lbl-sick{color:var(--color-sick-text);text-shadow:none;}
+.pstrip-leave-label-merged.lbl-accident{color:var(--color-accident-text);text-shadow:none;}
 /* ===== Feature 3 : % Samedis dashboard ===== */
 .stat-pct{font-size:12px;color:var(--color-text-muted);font-weight:400;}
 .week-th.is-holiday{background:#FEF3C7;color:#92400E;}

@@ -89,6 +89,7 @@ export function setSlotState(isoDate, personId, slot, state) {
   if (state === 'empty') {
     delete store.DATA.slots[key];
     delete store.DATA.slots[labelKey(isoDate, personId, slot)];
+    delete store.DATA.slots[`${isoDate}_${personId}_${slot}_shift`];
   } else {
     store.DATA.slots[key] = state;
     if (state !== 'absent') delete store.DATA.slots[labelKey(isoDate, personId, slot)];
@@ -141,6 +142,18 @@ export function getShiftType(iso, pid) {
   return store.DATA.slots[shiftTypeKey(iso, pid)] || 'O';
 }
 
+// Poste par demi-journée : 'O' (Ouverture), 'F' (Fermeture), 'D' (Demi-journée)
+export function slotShiftTypeKey(iso, pid, slot) {
+  return `${iso}_${pid}_${slot}_shift`;
+}
+export function getSlotShiftType(iso, pid, slot) {
+  return store.DATA.slots[slotShiftTypeKey(iso, pid, slot)] || getShiftType(iso, pid);
+}
+export function setSlotShiftType(iso, pid, slot, type) {
+  if (type) store.DATA.slots[slotShiftTypeKey(iso, pid, slot)] = type;
+  else delete store.DATA.slots[slotShiftTypeKey(iso, pid, slot)];
+}
+
 export function timeToMins(t) {
   if (!t) return 0;
   const [h, m] = t.split(':').map(Number);
@@ -175,12 +188,9 @@ export function setEarlyDep(iso, pid, v) {
 export function getDayDeficitH(iso, pid) {
   const earlyDep = getEarlyDep(iso, pid);
   const clinicEarly = getClinicEarlyClose(iso);
-  let effectiveDep = '';
-  if (earlyDep && clinicEarly) {
-    effectiveDep = timeToMins(earlyDep) < timeToMins(clinicEarly) ? earlyDep : clinicEarly;
-  } else {
-    effectiveDep = earlyDep || clinicEarly;
-  }
+  const effectiveDep = earlyDep && clinicEarly
+    ? (timeToMins(earlyDep) < timeToMins(clinicEarly) ? earlyDep : clinicEarly)
+    : (earlyDep || clinicEarly);
   if (!effectiveDep) return 0;
   const stdEndMins = getShiftType(iso, pid) === 'F' ? 19 * 60 + 15 : 19 * 60;
   return Math.max(0, (stdEndMins - timeToMins(effectiveDep)) / 60);

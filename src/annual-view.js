@@ -1,13 +1,12 @@
 import { PEOPLE, WEEKDAY_NAMES, MONTH_SHORT } from './config.js';
 import { computeLeaveBlocks } from './leave-blocks.js';
-import { escapeHTML, formatNum, daysInMonth, isSunday, fmtISO, isoWeekday, holidayName, formatFR } from './utils.js';
+import { escapeHTML, daysInMonth, fmtISO, isoWeekday, holidayName, formatFR } from './utils.js';
 import { store } from './store.js';
 import {
   isASVPerson,
   getSlotState,
   getSlotLabel,
   getLeaveDecision,
-  getOvertimeHours,
   getDayComment,
   isClinicClosed,
 } from './slots.js';
@@ -146,20 +145,34 @@ export function buildHeatmap(year, people = PEOPLE) {
         {
           let sp = 1;
           while (sp <= nbDays) {
-            if (isoWeekday(new Date(year, month, sp)) === 6) { sp++; continue; }
-            if (!isAbsDayOrSat(sp)) { sp++; continue; }
+            if (isoWeekday(new Date(year, month, sp)) === 6) {
+              sp++;
+              continue;
+            }
+            if (!isAbsDayOrSat(sp)) {
+              sp++;
+              continue;
+            }
             let prevD = sp - 1;
             while (prevD >= 1 && isoWeekday(new Date(year, month, prevD)) === 6) prevD--;
-            if (prevD >= 1 && isAbsDayOrSat(prevD)) { sp++; continue; }
+            if (prevD >= 1 && isAbsDayOrSat(prevD)) {
+              sp++;
+              continue;
+            }
             const isoSp = fmtISO(new Date(year, month, sp));
             const lbl = getSlotLabel(isoSp, person.id, 'M') || getSlotLabel(isoSp, person.id, 'AM') || '';
             if (lbl) {
               const typeSp = absType(isoSp);
-              let end = sp, ptr = sp + 1;
+              let end = sp,
+                ptr = sp + 1;
               while (ptr <= nbDays) {
-                if (isoWeekday(new Date(year, month, ptr)) === 6) { ptr++; continue; }
+                if (isoWeekday(new Date(year, month, ptr)) === 6) {
+                  ptr++;
+                  continue;
+                }
                 if (!isAbsDayOrSat(ptr)) break;
-                end = ptr; ptr++;
+                end = ptr;
+                ptr++;
               }
               for (let d2 = sp; d2 <= end; d2++) {
                 if (!isAbsDay(d2)) continue;
@@ -167,7 +180,9 @@ export function buildHeatmap(year, people = PEOPLE) {
                 superRunLabel.set(d2, { label: lbl, type: typeSp });
               }
               sp = end + 1;
-            } else { sp++; }
+            } else {
+              sp++;
+            }
           }
         }
 
@@ -176,11 +191,16 @@ export function buildHeatmap(year, people = PEOPLE) {
           if (isAbsDay(dd - 1)) continue;
           const iso0 = fmtISO(new Date(year, month, dd));
           const srEntry = superRunLabel.get(dd);
-          const lbl0 = getSlotLabel(iso0, person.id, 'M') || getSlotLabel(iso0, person.id, 'AM') || (srEntry?.label ?? '');
+          const lbl0 =
+            getSlotLabel(iso0, person.id, 'M') || getSlotLabel(iso0, person.id, 'AM') || (srEntry?.label ?? '');
           if (!lbl0) continue;
           const type0 = srEntry ? srEntry.type : absType(iso0);
-          let runLen = 1, nd = dd + 1;
-          while (nd <= nbDays && isAbsDay(nd)) { runLen++; nd++; }
+          let runLen = 1,
+            nd = dd + 1;
+          while (nd <= nbDays && isAbsDay(nd)) {
+            runLen++;
+            nd++;
+          }
           if (runLen > 1) {
             runColspans.set(dd, { runLen, label: lbl0, type: type0 });
             for (let i = dd + 1; i < dd + runLen; i++) absorbedDays.add(i);

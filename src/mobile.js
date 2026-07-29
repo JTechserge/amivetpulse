@@ -4,7 +4,7 @@
    Appelé via setupMobileUI({ switchView, switchSubPage }) depuis app.js.
    ================================================================ */
 
-export function setupMobileUI({ switchView, switchSubPage }) {
+export function setupMobileUI({ switchView, switchSubPage: _switchSubPage }) {
   function debounce(fn, ms){ let t; return function(){ clearTimeout(t); t=setTimeout(()=>fn.apply(this,arguments),ms); }; }
 
   /* ── Bottom Tab Bar ── */

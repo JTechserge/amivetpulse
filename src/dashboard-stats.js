@@ -107,7 +107,7 @@ export function buildPersonCard(year, personId) {
   const workedDays = Math.round((stats.totalHalfDays / 2) * 10) / 10;
 
   let progressHtml = '';
-  let workedRowHtml = '';
+  let workedRowHtml;
 
   if (isASV) {
     const TARGET_HALF_DAYS = Math.round(230 * 2 * tf);
@@ -208,7 +208,6 @@ export function buildRecapTable(year) {
     </div>
   `;
 }
-
 
 // --- Variantes ASV (3 personnes) du graphique et du récapitulatif mensuel ---
 export function buildBarChartSVGASV(year) {
