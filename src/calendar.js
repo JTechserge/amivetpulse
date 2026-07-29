@@ -61,6 +61,8 @@ import {
   setClinicClosed,
   getClinicEarlyClose,
   setClinicEarlyClose,
+  isMonthClosed,
+  setMonthClosed,
 } from './slots.js';
 import { computeLeaveBlocks } from './leave-blocks.js';
 import { getWeekAlerts, computeWeekTotalHours, renderWeekViewASV, openMonthPrintPopup } from './week-view.js';
@@ -231,9 +233,12 @@ function buildCalendarToolbar(viewKey) {
     ? `<button class="btn btn-sm" id="cal-today-${viewKey}" aria-label="Revenir au mois actuel">📍 Aujourd'hui</button>`
     : '';
   const hasASV = cfg.people && cfg.people.some((p) => isASVPerson(p.id));
+  const isCurrentUserASV = store.currentUser?.role === 'asv';
+  const isCurrentUserVetAdmin = store.currentUser?.role === 'admin' || store.currentUser?.role === 'vet';
+  const monthClosed = hasASV && isMonthClosed(cfg.year, cfg.navState.month);
   const paintBar = hasASV
     ? `
-    <div class="cal-paint-bar" id="cal-paint-bar-${viewKey}">
+    <div class="cal-paint-bar" id="cal-paint-bar-${viewKey}"${monthClosed && isCurrentUserASV ? ' style="opacity:0.4;pointer-events:none;" title="Mois clôturé"' : ''}>
       <span style="font-size:11px;font-weight:600;color:var(--color-text-muted);">Outil :</span>
       <button class="paint-tool${store.calMonthPaintMode === 'opening' ? ' active' : ''}" data-paint="opening" title="Ouverture — Mat. 8h30→13h | A-m. 15h→19h">🟢 Ouverture</button>
       <button class="paint-tool${store.calMonthPaintMode === 'closing' ? ' active' : ''}" data-paint="closing" title="Fermeture — Mat. 9h→13h | A-m. 15h→19h15">🌿 Fermeture</button>
@@ -248,13 +253,14 @@ function buildCalendarToolbar(viewKey) {
     <div class="cal-toolbar">
       <div class="cal-month-nav">
         <button class="btn-icon" id="cal-prev-${viewKey}" aria-label="Mois précédent">←</button>
-        <div class="cal-month-label">${monthLabel}</div>
+        <div class="cal-month-label">${monthLabel}${monthClosed ? ' <span class="badge-month-closed" title="Mois clôturé pour les ASV">🔒</span>' : ''}</div>
         <button class="btn-icon" id="cal-next-${viewKey}" aria-label="Mois suivant">→</button>
         ${todayBtn}
       </div>
       <div class="cal-toolbar-actions">
         <button class="btn-icon undo-btn" id="cal-undo-${viewKey}" aria-label="Annuler la dernière action" title="Annuler la dernière action (Cmd/Ctrl+Z)" ${store.UNDO_STACK.length === 0 ? 'disabled' : ''}>↩️</button>
-        <button class="btn btn-sm btn-danger" id="cal-clear-month-${viewKey}" aria-label="Vider le mois affiché">🗑️ Vider le mois</button>
+        ${!isCurrentUserASV ? `<button class="btn btn-sm btn-danger" id="cal-clear-month-${viewKey}" aria-label="Vider le mois affiché">🗑️ Vider le mois</button>` : ''}
+        ${hasASV && isCurrentUserVetAdmin ? `<button class="btn btn-sm${monthClosed ? ' btn-success' : ''}" id="cal-lock-month-${viewKey}" title="${monthClosed ? 'Réouvrir le mois pour les ASV' : 'Clôturer le mois — bloque les modifications ASV'}">${monthClosed ? '🔓 Réouvrir' : '🔒 Clôturer'}</button>` : ''}
         ${cfg.printable ? `<button class="btn btn-sm" id="cal-print-${viewKey}" title="Imprimer les fiches mensuelles ASV">🖨️ Imprimer</button>` : ''}
       </div>
     </div>
@@ -1310,9 +1316,17 @@ let dragCtx = null;
 let mergedLPCtx = null; // long-press sur blocs fusionnés (VET overlay ou ASV pstrip)
 
 function startDrag(cell) {
-  _snapshotBeforeChange();
   const { date: iso, person: personId, slot } = cell.dataset;
   const isASVDrag = _getCurrentView() === 'asv' && isASVPerson(personId);
+  // Lot 6 : bloquer les modifications ASV sur un mois clôturé
+  if (isASVDrag) {
+    const [isoYear, isoMo] = iso.split('-').map(Number);
+    if (isMonthClosed(isoYear, isoMo - 1)) {
+      showToast('Ce mois est clôturé — modifications ASV bloquées', '🔒');
+      return;
+    }
+  }
+  _snapshotBeforeChange();
   let paintValue;
   if (
     isASVDrag &&
@@ -2192,6 +2206,15 @@ function initCalendarInteractions() {
     if (e.target.id === `cal-today-${viewKey}`) return goToToday(viewKey);
     if (e.target.id === `cal-clear-month-${viewKey}`) {
       openClearMonthModal(viewKey, store.CAL_VIEWS[viewKey].navState.month);
+      return;
+    }
+    if (e.target.id === `cal-lock-month-${viewKey}`) {
+      const cfg2 = store.CAL_VIEWS[viewKey];
+      const wasClosed = isMonthClosed(cfg2.year, cfg2.navState.month);
+      setMonthClosed(cfg2.year, cfg2.navState.month, !wasClosed);
+      _saveData();
+      renderCalendarView(viewKey);
+      showToast(wasClosed ? 'Mois réouvert' : 'Mois clôturé — modifications ASV bloquées', wasClosed ? '🔓' : '🔒');
       return;
     }
     if (e.target.id === `cal-undo-${viewKey}`) return _undoLastAction();

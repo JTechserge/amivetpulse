@@ -17,6 +17,7 @@ import {
   getMinusMins,
   setMinusMins,
   getOvertimeHours,
+  isMonthClosed,
 } from './slots.js';
 import { isMonthSigned } from './signatures.js';
 
@@ -576,6 +577,14 @@ function renderWeekViewASV() {
   container.querySelectorAll('.week-counter-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const { ciso, cpid, ctype, cdelta } = btn.dataset;
+      // Lot 6 : bloquer les modifications ASV sur un mois clôturé
+      if (_effectiveRole() === 'asv') {
+        const [yr, mo] = ciso.split('-').map(Number);
+        if (isMonthClosed(yr, mo - 1)) {
+          showToast('Ce mois est clôturé — modifications ASV bloquées', '🔒');
+          return;
+        }
+      }
       const delta = parseInt(cdelta, 10);
       _snapshotBeforeChange();
       if (ctype === 'plus') setPlusMins(ciso, cpid, getPlusMins(ciso, cpid) + delta);

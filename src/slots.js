@@ -281,3 +281,17 @@ export function isPersonWorkingDay(personId, date) {
   if (p.workingDays && p.workingDays.length > 0) return p.workingDays.includes(dow);
   return true;
 }
+
+// ── Clôture de mois (Lot 6) ──────────────────────────────────────
+// month : 0-indexé (0=Jan … 11=Déc), cohérent avec cfg.navState.month et Date.getMonth().
+export function closedMonthKey(year, month) {
+  return `closed_month_${year}_${month}`;
+}
+export function isMonthClosed(year, month) {
+  return store.DATA.slots[closedMonthKey(year, month)] === 'true';
+}
+export function setMonthClosed(year, month, closed) {
+  const key = closedMonthKey(year, month);
+  if (closed) store.DATA.slots[key] = 'true';
+  else delete store.DATA.slots[key];
+}
