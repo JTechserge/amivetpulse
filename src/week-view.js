@@ -691,21 +691,16 @@ function getWeekAlerts(personId, sundayISO) {
     if (!present.length) continue;
     const iAmPresent = present.some((q) => q.id === personId);
     if (!iAmPresent) continue;
-    const shifts = present.map((q) => store.DATA.slots[shiftTypeKey(iso2, q.id)] || null);
-    // Même poste en double
-    if (present.length === 2) {
-      const [s0, s1] = shifts;
-      if (s0 && s1 && s0 === s1) {
-        const poste = s0 === 'O' ? 'ouverture' : 'fermeture';
-        const colleague = present.find((q) => q.id !== personId);
-        alerts.push(`${DAY_FULL[d]} : même poste que ${colleague?.short || 'ta collègue'} — toutes deux en ${poste}`);
-      }
-    }
-    // Couverture manquante
-    const hasO = shifts.some((s) => s === 'O');
-    const hasF = shifts.some((s) => s === 'F');
-    if (!hasO) alerts.push(`${DAY_FULL[d]} : poste Ouverture non couvert`);
-    if (!hasF) alerts.push(`${DAY_FULL[d]} : poste Fermeture non couvert`);
+    // Ouverture = au moins une ASV présente le matin (M) en poste O
+    const hasOMatin = present.some(
+      (q) => getSlotState(iso2, q.id, 'M') === 'present' && getSlotShiftType(iso2, q.id, 'M') === 'O'
+    );
+    // Fermeture = au moins une ASV présente l'après-midi (AM) en poste F
+    const hasFApresMidi = present.some(
+      (q) => getSlotState(iso2, q.id, 'AM') === 'present' && getSlotShiftType(iso2, q.id, 'AM') === 'F'
+    );
+    if (!hasOMatin) alerts.push(`${DAY_FULL[d]} : pas d'ASV en Ouverture le matin`);
+    if (!hasFApresMidi) alerts.push(`${DAY_FULL[d]} : pas d'ASV en Fermeture l'après-midi`);
   }
   return alerts;
 }
