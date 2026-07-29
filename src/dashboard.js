@@ -11,7 +11,6 @@ import {
   buildPersonCard,
   buildBarChartSVG,
   buildRecapTable,
-
   buildPdfArchiveSection,
   buildASVModulationCard,
   buildASVWeeklyCapCard,
@@ -158,7 +157,6 @@ export function renderDashboardStats() {
       <p class="text-muted" style="font-size:11.5px;margin-bottom:10px;">Écart = nombre de jours travaillés en plus, pour le vétérinaire concerné</p>
       ${buildRecapTable(year)}
     </div>
-    <div id="dash-vets-cp"></div>
   `;
   container.querySelector('#dash-year-toggle').addEventListener('click', (e) => {
     const btn = e.target.closest('button');
@@ -168,7 +166,6 @@ export function renderDashboardStats() {
   });
   container.querySelector('#dash-reset-current').onclick = () => _openResetYearModal(cy, false);
   container.querySelector('#dash-reset-forecast').onclick = () => _openResetYearModal(cy + 1, true);
-  renderGroupConges('vets', 'dash-vets-cp');
 }
 
 export async function renderDashboardSignatures() {
