@@ -1,4 +1,4 @@
-import { ASV_PEOPLE, ASV_STD_SAT_CARLA, personOf } from './config.js';
+import { ASV_PEOPLE, ASV_STD_SAT_CARLA, SLOTS, personOf } from './config.js';
 import { store } from './store.js';
 
 /* ---------- Clés de stockage ---------- */
@@ -89,6 +89,7 @@ export function setSlotState(isoDate, personId, slot, state) {
   if (state === 'empty') {
     delete store.DATA.slots[key];
     delete store.DATA.slots[labelKey(isoDate, personId, slot)];
+    delete store.DATA.slots[`${isoDate}_${personId}_${slot}_shift`];
   } else {
     store.DATA.slots[key] = state;
     if (state !== 'absent') delete store.DATA.slots[labelKey(isoDate, personId, slot)];
@@ -141,82 +142,84 @@ export function getShiftType(iso, pid) {
   return store.DATA.slots[shiftTypeKey(iso, pid)] || 'O';
 }
 
+// Poste par demi-journée : 'O' (Ouverture), 'F' (Fermeture), 'D' (Demi-journée)
+export function slotShiftTypeKey(iso, pid, slot) {
+  return `${iso}_${pid}_${slot}_shift`;
+}
+export function getSlotShiftType(iso, pid, slot) {
+  return store.DATA.slots[slotShiftTypeKey(iso, pid, slot)] || getShiftType(iso, pid);
+}
+export function setSlotShiftType(iso, pid, slot, type) {
+  if (type) store.DATA.slots[slotShiftTypeKey(iso, pid, slot)] = type;
+  else delete store.DATA.slots[slotShiftTypeKey(iso, pid, slot)];
+}
+
 export function timeToMins(t) {
   if (!t) return 0;
   const [h, m] = t.split(':').map(Number);
   return h * 60 + (m || 0);
 }
 
-// Heures nominales par jour selon poste et jour de semaine
+// Heures par demi-journée selon type de poste (Lot 2)
+const SLOT_NOMINAL_H = {
+  O: { M: 4.5, AM: 4.0 },
+  F: { M: 4.0, AM: 4.25 },
+  D: { M: 4.0, AM: 4.0 },
+};
+
+// Heures nominales d'un créneau selon poste et jour de semaine
+export function getSlotNominalH(iso, pid, slot) {
+  const wd = new Date(iso + 'T00:00:00').getDay();
+  if (wd === 6) return slot === 'M' ? (personOf(pid)?.saturdayOnly ? ASV_STD_SAT_CARLA : 7.0) : 0;
+  return (SLOT_NOMINAL_H[getSlotShiftType(iso, pid, slot)] ?? SLOT_NOMINAL_H.O)[slot] ?? 4.0;
+}
+
+// Heures nominales du jour = somme des créneaux présents (Lot 2)
 export function getDayNominal(iso, pid) {
-  const d = new Date(iso + 'T00:00:00');
-  if (d.getDay() === 6) {
-    const p = personOf(pid);
-    // Carla (saturdayOnly) : 7h25 (8:30-16:45, ~50min pause) ; autres ASV samedi : 7h00 (9:00-16:30, 1h pause)
-    return p?.saturdayOnly ? ASV_STD_SAT_CARLA : 7.0;
-  }
-  // Semaine : ouverture 8h30 (8,5h) ou fermeture 9h00 (8h15=8,25h)
-  return getShiftType(iso, pid) === 'F' ? 8.25 : 8.5;
+  return SLOTS.reduce((sum, slot) => {
+    if (getSlotState(iso, pid, slot) !== 'present') return sum;
+    return sum + getSlotNominalH(iso, pid, slot);
+  }, 0);
 }
 
-// Départ anticipé (vue semaine)
-export function earlyDepKey(iso, pid) {
-  return `${iso}_${pid}_early_dep`;
+// Compteur heures supplémentaires (+15 min par incrément, Lot 3)
+export function plusMinsKey(iso, pid) {
+  return `${iso}_${pid}_plus_mins`;
 }
-export function getEarlyDep(iso, pid) {
-  return store.DATA.slots[earlyDepKey(iso, pid)] || '';
+export function getPlusMins(iso, pid) {
+  return parseInt(store.DATA.slots[plusMinsKey(iso, pid)]) || 0;
 }
-export function setEarlyDep(iso, pid, v) {
-  if (v) store.DATA.slots[earlyDepKey(iso, pid)] = v;
-  else delete store.DATA.slots[earlyDepKey(iso, pid)];
+export function setPlusMins(iso, pid, v) {
+  const n = Math.max(0, v);
+  if (n > 0) store.DATA.slots[plusMinsKey(iso, pid)] = n;
+  else delete store.DATA.slots[plusMinsKey(iso, pid)];
 }
-
-// Heures déficitaires : départ anticipé personnel ou fermeture anticipée clinique (le plus tôt des deux)
-export function getDayDeficitH(iso, pid) {
-  const earlyDep = getEarlyDep(iso, pid);
-  const clinicEarly = getClinicEarlyClose(iso);
-  let effectiveDep = '';
-  if (earlyDep && clinicEarly) {
-    effectiveDep = timeToMins(earlyDep) < timeToMins(clinicEarly) ? earlyDep : clinicEarly;
-  } else {
-    effectiveDep = earlyDep || clinicEarly;
-  }
-  if (!effectiveDep) return 0;
-  const stdEndMins = getShiftType(iso, pid) === 'F' ? 19 * 60 + 15 : 19 * 60;
-  return Math.max(0, (stdEndMins - timeToMins(effectiveDep)) / 60);
+export function getPlusH(iso, pid) {
+  return getPlusMins(iso, pid) / 60;
 }
 
-// Heures supplémentaires semaine (zone drag, stockées en minutes entières)
-export function weekOtKey(iso, pid) {
-  return `${iso}_${pid}_ot_mins`;
+// Compteur heures manquantes (−15 min par incrément, Lot 3)
+export function minusMinsKey(iso, pid) {
+  return `${iso}_${pid}_minus_mins`;
 }
-export function getWeekOtMins(iso, pid) {
-  return parseInt(store.DATA.slots[weekOtKey(iso, pid)], 10) || 0;
+export function getMinusMins(iso, pid) {
+  return parseInt(store.DATA.slots[minusMinsKey(iso, pid)]) || 0;
 }
-export function setWeekOtMins(iso, pid, v) {
-  if (v > 0) store.DATA.slots[weekOtKey(iso, pid)] = v;
-  else delete store.DATA.slots[weekOtKey(iso, pid)];
+export function setMinusMins(iso, pid, v) {
+  const n = Math.max(0, v);
+  if (n > 0) store.DATA.slots[minusMinsKey(iso, pid)] = n;
+  else delete store.DATA.slots[minusMinsKey(iso, pid)];
 }
-export function getDayOtH(iso, pid) {
-  return getWeekOtMins(iso, pid) / 60;
+export function getMinusH(iso, pid) {
+  return getMinusMins(iso, pid) / 60;
 }
 
-// Heures supplémentaires pause repas
-export function lunchOtKey(iso, pid) {
-  return `${iso}_${pid}_lunch_ot_mins`;
-}
-export function getLunchOtMins(iso, pid) {
-  return parseInt(store.DATA.slots[lunchOtKey(iso, pid)], 10) || 0;
-}
-export function setLunchOtMins(iso, pid, v) {
-  if (v > 0) store.DATA.slots[lunchOtKey(iso, pid)] = v;
-  else delete store.DATA.slots[lunchOtKey(iso, pid)];
-}
-export function getDayLunchOtH(iso, pid) {
-  return getLunchOtMins(iso, pid) / 60;
-}
+// Délégation pour compatibilité avec les appelants existants (dashboard, vue semaine)
 export function getDayAllOtH(iso, pid) {
-  return getDayOtH(iso, pid) + getDayLunchOtH(iso, pid);
+  return getPlusH(iso, pid);
+}
+export function getDayDeficitH(iso, pid) {
+  return getMinusH(iso, pid);
 }
 
 // Note de jour (texte libre par ASV)

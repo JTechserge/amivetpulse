@@ -1085,6 +1085,7 @@ function wireCaldavSection(sectionEl, person, initialStatus) {
         showError('Aucun calendrier trouvé sur ce compte iCloud.');
         return;
       }
+      // eslint-disable-next-line no-unsanitized/property
       selectEl.innerHTML = calendars
         .map((c) => `<option value="${escapeHTML(c.url)}">${escapeHTML(c.name)}</option>`)
         .join('');
@@ -1112,7 +1113,7 @@ function wireCaldavSection(sectionEl, person, initialStatus) {
       await saveCaldavCredentials(person.id, appleId, appPassword, calendarUrl);
       refresh({ is_configured: true, apple_id: appleId, calendar_url: calendarUrl });
       showToast(`Push iCloud configuré pour ${person.short}`, '📲');
-    } catch (e) {
+    } catch {
       showError('Erreur lors de la sauvegarde. Réessayez.');
       saveBtn.disabled = false;
     }
@@ -1924,8 +1925,8 @@ function openHelpModal() {
     content.scrollTop = 0;
     if (item.id === 'faq') {
       const list = content.querySelector('#ho-faq-list');
-      // eslint-disable-next-line no-unsanitized/property
-      if (list)
+      if (list) {
+        // eslint-disable-next-line no-unsanitized/property
         list.innerHTML = faqData
           .map(
             (f, i) => `
@@ -1935,6 +1936,7 @@ function openHelpModal() {
         </div>`
           )
           .join('');
+      }
       list?.querySelectorAll('.ho-faq-item').forEach((item) => {
         item.querySelector('.help-faq-q').onclick = function () {
           const open = this.getAttribute('aria-expanded') === 'true';

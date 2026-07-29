@@ -47,12 +47,13 @@ import {
   setOvertimeHours,
   shiftTypeKey,
   getShiftType,
+  getSlotShiftType,
+  setSlotShiftType,
   getDayNominal,
   getDayAllOtH,
   getDayDeficitH,
-  setEarlyDep,
-  setWeekOtMins,
-  setLunchOtMins,
+  setPlusMins,
+  setMinusMins,
   setDayNote,
   getOvertimeNote,
   setOvertimeNote,
@@ -62,13 +63,7 @@ import {
   setClinicEarlyClose,
 } from './slots.js';
 import { computeLeaveBlocks } from './leave-blocks.js';
-import {
-  getWeekAlerts,
-  computeWeekTotalHours,
-  renderWeekViewASV,
-  openEarlyDepPicker,
-  openMonthPrintPopup,
-} from './week-view.js';
+import { getWeekAlerts, computeWeekTotalHours, renderWeekViewASV, openMonthPrintPopup } from './week-view.js';
 
 // État "aujourd'hui" local au module (équivalent au const today d'app.js — même jour au chargement).
 const today = new Date();
@@ -111,15 +106,19 @@ function cellRenderInfo(iso, personId, slot) {
   let stateClass = state;
   if (state === 'present') {
     if (isASVPerson(personId)) {
-      const shType = getShiftType(iso, personId);
+      const shType = getSlotShiftType(iso, personId, slot);
       if (shType === 'F') {
         stateClass = 'closing';
         html = `<span style="font-size:7.5px;font-weight:800;">F</span>`;
-        title = 'Fermeture (9h→19h15)';
+        title = slot === 'M' ? 'Fermeture — Mat. (9h→13h)' : 'Fermeture — A-m. (15h→19h15)';
+      } else if (shType === 'D') {
+        stateClass = 'demi';
+        html = `<span style="font-size:7.5px;font-weight:800;">D</span>`;
+        title = slot === 'M' ? 'Demi-j. — Mat. (9h→13h)' : 'Demi-j. — A-m. (15h→19h)';
       } else {
         stateClass = 'opening';
         html = `<span style="font-size:7.5px;font-weight:800;">O</span>`;
-        title = 'Ouverture (8h30→19h)';
+        title = slot === 'M' ? 'Ouverture — Mat. (8h30→13h)' : 'Ouverture — A-m. (15h→19h)';
       }
     } else {
       style = `background:${person.present.bg};border-color:${person.present.border};color:${person.present.text};`;
@@ -131,10 +130,14 @@ function cellRenderInfo(iso, personId, slot) {
       stateClass = 'sick';
       html = `<span class="cell-mark">🤒</span>${label ? ' ' + escapeHTML(label) : ''}`;
       title = `Arrêt maladie${label ? ' — ' + label : ''}`;
+    } else if (lc === 'accident du travail' || lc === 'accident') {
+      stateClass = 'accident';
+      html = `<span class="cell-mark">🤕</span>`;
+      title = 'Accident du travail';
     } else if (lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé') {
       stateClass = 'off';
       html = label ? escapeHTML(label) : '<span class="cell-mark">—</span>';
-      title = 'Repos planifié (hors congé)';
+      title = 'Repos planifié';
     } else if (decision === 'pending') {
       stateClass = 'leave-pending';
       html = `${label ? escapeHTML(label) + ' ' : ''}<span class="cell-mark">⏳</span>`;
@@ -183,6 +186,7 @@ function cellAriaLabel(iso, personId, slot) {
   if (state === 'present') stateTxt = 'présent';
   else if (state === 'absent') {
     if (stateClass === 'sick') stateTxt = `arrêt maladie${label ? ' — ' + label : ''}`;
+    else if (stateClass === 'accident') stateTxt = 'accident du travail';
     else if (stateClass === 'off') stateTxt = 'repos planifié';
     else if (decision === 'pending') stateTxt = `demande de congé en attente${label ? ' — ' + label : ''}`;
     else if (decision === 'rejected') stateTxt = 'demande de congé refusée — voir un vétérinaire';
@@ -215,7 +219,7 @@ function updateHalfDOM(halfEl) {
   halfEl.className = `cal-wg-half${stateCls}${lockCls}`;
   halfEl.style.cssText = info.style || '';
   // eslint-disable-next-line no-unsanitized/property
-  halfEl.innerHTML = info.html || (slot === 'M' ? 'M' : 'A');
+  halfEl.innerHTML = info.html || (slot === 'M' ? 'Mat.' : 'A-m.');
   halfEl.title = info.title || '';
   halfEl.setAttribute('aria-label', cellAriaLabel(iso, personId, slot));
 }
@@ -231,11 +235,12 @@ function buildCalendarToolbar(viewKey) {
     ? `
     <div class="cal-paint-bar" id="cal-paint-bar-${viewKey}">
       <span style="font-size:11px;font-weight:600;color:var(--color-text-muted);">Outil :</span>
-      <button class="paint-tool${store.calMonthPaintMode === 'opening' ? ' active' : ''}" data-paint="opening" title="Ouverture — 8h30→19h00">🟢 Ouverture</button>
-      <button class="paint-tool${store.calMonthPaintMode === 'closing' ? ' active' : ''}" data-paint="closing" title="Fermeture — 9h00→19h15">🌿 Fermeture</button>
-      <button class="paint-tool${store.calMonthPaintMode === 'repos' ? ' active' : ''}" data-paint="repos" title="Repos planifié (sans validation)">🟠 Repos</button>
+      <button class="paint-tool${store.calMonthPaintMode === 'opening' ? ' active' : ''}" data-paint="opening" title="Ouverture — Mat. 8h30→13h | A-m. 15h→19h">🟢 Ouverture</button>
+      <button class="paint-tool${store.calMonthPaintMode === 'closing' ? ' active' : ''}" data-paint="closing" title="Fermeture — Mat. 9h→13h | A-m. 15h→19h15">🌿 Fermeture</button>
+      <button class="paint-tool${store.calMonthPaintMode === 'demi' ? ' active' : ''}" data-paint="demi" title="Demi-journée — Mat. 9h→13h | A-m. 15h→19h">🩷 Demi-j.</button>
       <button class="paint-tool${store.calMonthPaintMode === 'conge' ? ' active' : ''}" data-paint="conge" title="Demande de congé (validation vétérinaires)">🔵 Congé</button>
-      <button class="paint-tool${store.calMonthPaintMode === 'maladie' ? ' active' : ''}" data-paint="maladie" title="Arrêt maladie (direct, hors règle 15j)">🤒 Maladie</button>
+      <button class="paint-tool${store.calMonthPaintMode === 'maladie' ? ' active' : ''}" data-paint="maladie" title="Arrêt maladie (direct, sans approbation)">🤒 Maladie</button>
+      <button class="paint-tool${store.calMonthPaintMode === 'accident' ? ' active' : ''}" data-paint="accident" title="Accident du travail (direct, sans approbation)">🤕 Accident</button>
       <button class="paint-tool paint-tool-erase${store.calMonthPaintMode === 'erase' ? ' active' : ''}" data-paint="erase" title="Gomme — efface la case">🧹 Gomme</button>
     </div>`
     : '';
@@ -269,10 +274,10 @@ function clearMonth(viewKey, month, personId) {
       SLOTS.forEach((slot) => setSlotState(iso, p.id, slot, 'empty'));
       setOvertimeHours(iso, p.id, 0);
     });
-    // ASV : efface aussi les ajustements semaine et notes
+    // ASV : efface aussi les compteurs HS/manquants et notes
     asvTargets.forEach((p) => {
-      setEarlyDep(iso, p.id, '');
-      setWeekOtMins(iso, p.id, 0);
+      setPlusMins(iso, p.id, 0);
+      setMinusMins(iso, p.id, 0);
       setDayNote(iso, p.id, '');
     });
     if (!personId) setDayComment(iso, '');
@@ -734,6 +739,7 @@ function buildWeekGrid(year, month, people) {
                 {
                   repos: ' pstrip-bg-repos',
                   sick: ' pstrip-bg-sick',
+                  accident: ' pstrip-bg-accident',
                   pending: ' pstrip-bg-pending',
                   approved: ' pstrip-bg-approved',
                   rejected: ' pstrip-bg-absent',
@@ -747,11 +753,12 @@ function buildWeekGrid(year, month, people) {
                 const slot = SLOTS[0];
                 const info = cellRenderInfo(iso, person.id, slot);
                 const stateCls = info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
-                cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="grid-column:span 1;position:relative"><div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(iso, person.id, slot)}">${info.html || 'M'}</div></div>`;
+                cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="grid-column:span 1;position:relative"><div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(iso, person.id, slot)}">${info.html || 'Mat.'}</div></div>`;
               }
 
               // Bloc fusionné couvrant exactement spanHalves demi-colonnes
-              const lblTypeCls = { repos: ' lbl-repos', sick: ' lbl-sick' }[bi.visualType] ?? '';
+              const lblTypeCls =
+                { repos: ' lbl-repos', sick: ' lbl-sick', accident: ' lbl-accident' }[bi.visualType] ?? '';
               const lbl = bi.label
                 ? `<div class="pstrip-leave-label-merged${lblTypeCls}">${escapeHTML(bi.label)}</div>`
                 : bi.visualType === 'pending'
@@ -767,7 +774,7 @@ function buildWeekGrid(year, month, people) {
                   const slot = SLOTS[SLOTS.length - 1];
                   const info = cellRenderInfo(endISO, person.id, slot);
                   const stateCls = info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
-                  cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="grid-column:span 1;position:relative"><div class="cal-wg-half${stateCls}${lockCls}" data-date="${endISO}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(endISO, person.id, slot)}">${info.html || 'A'}</div></div>`;
+                  cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="grid-column:span 1;position:relative"><div class="cal-wg-half${stateCls}${lockCls}" data-date="${endISO}" data-person="${person.id}" data-slot="${slot}" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(endISO, person.id, slot)}">${info.html || 'A-m.'}</div></div>`;
                 }
               }
 
@@ -801,7 +808,7 @@ function buildWeekGrid(year, month, people) {
             if (getSlotState(iso, person.id, 'M') !== 'absent') {
               const info = cellRenderInfo(iso, person.id, 'M');
               const stateCls = info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
-              cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="grid-column:span 1;position:relative"><div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="M" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(iso, person.id, 'M')}">${info.html || 'M'}</div></div>`;
+              cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="grid-column:span 1;position:relative"><div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="M" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(iso, person.id, 'M')}">${info.html || 'Mat.'}</div></div>`;
               spanOffset = 1;
             }
 
@@ -815,7 +822,7 @@ function buildWeekGrid(year, month, people) {
             if (lastIso && lastIso !== iso && getSlotState(lastIso, person.id, 'AM') !== 'absent') {
               const info = cellRenderInfo(lastIso, person.id, 'AM');
               const stateCls = info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
-              suffixCell = `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="grid-column:span 1;position:relative"><div class="cal-wg-half${stateCls}${lockCls}" data-date="${lastIso}" data-person="${person.id}" data-slot="AM" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(lastIso, person.id, 'AM')}">${info.html || 'A'}</div></div>`;
+              suffixCell = `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="grid-column:span 1;position:relative"><div class="cal-wg-half${stateCls}${lockCls}" data-date="${lastIso}" data-person="${person.id}" data-slot="AM" ${blocked ? 'data-action="locked"' : ''} style="${info.style || ''}" tabindex="${blocked ? '-1' : '0'}" role="button" title="${escapeHTML(blocked ? blockTitle : info.title || '')}" aria-label="${cellAriaLabel(lastIso, person.id, 'AM')}">${info.html || 'A-m.'}</div></div>`;
               spanTrim = 1;
             }
 
@@ -845,7 +852,7 @@ function buildWeekGrid(year, month, people) {
             const stateCls = isClosed ? '' : info.stateClass ? ` cal-wg-half-${info.stateClass}` : '';
             const isBlocked = blocked || isClosed;
             const title = isClosed ? 'Clinique fermée' : blocked ? blockTitle : info.title || '';
-            return `<div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="${slot}" ${isBlocked ? 'data-action="locked"' : ''} style="${isClosed ? '' : info.style || ''}" tabindex="${isBlocked ? '-1' : '0'}" role="button" title="${escapeHTML(title)}" aria-label="${cellAriaLabel(iso, person.id, slot)}">${isClosed ? '' : info.html || (slot === 'M' ? 'M' : 'A')}</div>`;
+            return `<div class="cal-wg-half${stateCls}${lockCls}" data-date="${iso}" data-person="${person.id}" data-slot="${slot}" ${isBlocked ? 'data-action="locked"' : ''} style="${isClosed ? '' : info.style || ''}" tabindex="${isBlocked ? '-1' : '0'}" role="button" title="${escapeHTML(title)}" aria-label="${cellAriaLabel(iso, person.id, slot)}">${isClosed ? '' : info.html || (slot === 'M' ? 'Mat.' : 'A-m.')}</div>`;
           }).join('');
           cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}" data-person="${person.id}" style="grid-column:span 2">${halves}</div>`;
           wi++;
@@ -973,10 +980,11 @@ function buildLegendColors(people = PEOPLE) {
       ${
         hasASV
           ? `
-        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-opening);border:1.5px solid var(--color-opening-border)"></span><strong>O</strong> — Ouverture (8h30→19h)</div>
-        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-closing);border:1.5px solid var(--color-closing-border)"></span><strong>F</strong> — Fermeture (9h→19h15)</div>
-        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-off);border:1.5px solid var(--color-off-border)"></span>Repos planifié 🟠</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-opening);border:1.5px solid var(--color-opening-border)"></span><strong>O</strong> — Ouverture (Mat. 8h30→13h | A-m. 15h→19h)</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-closing);border:1.5px solid var(--color-closing-border)"></span><strong>F</strong> — Fermeture (Mat. 9h→13h | A-m. 15h→19h15)</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-demi);border:1.5px solid var(--color-demi-border)"></span><strong>D</strong> — Demi-journée (Mat. 9h→13h | A-m. 15h→19h)</div>
         <div class="legend-item"><span class="legend-swatch" style="background:var(--color-sick);border:1.5px solid var(--color-sick-border)"></span>Arrêt maladie 🤒</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-accident);border:1.5px solid var(--color-accident-border)"></span>Accident du travail 🤕</div>
         <div class="legend-item"><span class="legend-swatch" style="background:var(--color-absent);border:1.5px solid var(--color-absent-border)"></span>Congé validé ✅</div>
         <div class="legend-item"><span class="legend-swatch" style="background:var(--color-leave-pending);border:1.5px solid var(--color-leave-pending-border)"></span>Congé en attente ⏳</div>
         <div class="legend-item"><span class="legend-swatch" style="background:var(--color-leave-rejected);border:1.5px solid var(--color-leave-rejected-border)"></span>Congé refusé ⚠️</div>
@@ -1306,13 +1314,18 @@ function startDrag(cell) {
   const { date: iso, person: personId, slot } = cell.dataset;
   const isASVDrag = _getCurrentView() === 'asv' && isASVPerson(personId);
   let paintValue;
-  if (isASVDrag && (store.calMonthPaintMode === 'opening' || store.calMonthPaintMode === 'closing')) {
+  if (
+    isASVDrag &&
+    (store.calMonthPaintMode === 'opening' ||
+      store.calMonthPaintMode === 'closing' ||
+      store.calMonthPaintMode === 'demi')
+  ) {
     paintValue = 'present';
   } else if (
     isASVDrag &&
-    (store.calMonthPaintMode === 'repos' ||
-      store.calMonthPaintMode === 'conge' ||
-      store.calMonthPaintMode === 'maladie')
+    (store.calMonthPaintMode === 'conge' ||
+      store.calMonthPaintMode === 'maladie' ||
+      store.calMonthPaintMode === 'accident')
   ) {
     paintValue = 'absent';
   } else if (isASVDrag && store.calMonthPaintMode === 'erase') {
@@ -1341,33 +1354,38 @@ function startDrag(cell) {
 
 function applyPaint(cell, value) {
   const { date: iso, person: personId, slot } = cell.dataset;
-  // Outil congé : ne jamais écraser un arrêt maladie ou repos planifié déjà posé
+  // Outil congé : ne jamais écraser un arrêt maladie ou un accident du travail déjà posé
   if (dragCtx.paintMode === 'conge') {
     const lc = getSlotLabel(iso, personId, slot).toLowerCase().trim();
     if (
       lc === 'maladie' ||
       lc === 'arrêt maladie' ||
       lc === 'arrêt' ||
-      lc === 'repos' ||
-      lc === 'repos planifié' ||
-      lc === 'non travaillé'
+      lc === 'accident du travail' ||
+      lc === 'accident'
     )
       return;
   }
   dragCtx.touched.add(`${iso}|${personId}|${slot}`);
   if (dragCtx.paintMode === 'opening') {
     setSlotState(iso, personId, slot, 'present');
-    store.DATA.slots[shiftTypeKey(iso, personId)] = 'O';
+    setSlotShiftType(iso, personId, slot, 'O');
+    store.DATA.slots[shiftTypeKey(iso, personId)] = 'O'; // compat getDayNominal (Lot 2)
   } else if (dragCtx.paintMode === 'closing') {
     setSlotState(iso, personId, slot, 'present');
-    store.DATA.slots[shiftTypeKey(iso, personId)] = 'F';
-  } else if (dragCtx.paintMode === 'repos') {
-    setSlotState(iso, personId, slot, 'absent');
-    setSlotLabel(iso, personId, slot, 'Repos planifié');
-    setLeaveDecision(iso, personId, slot, null); // repos ne requiert pas d'approbation
+    setSlotShiftType(iso, personId, slot, 'F');
+    store.DATA.slots[shiftTypeKey(iso, personId)] = 'F'; // compat getDayNominal (Lot 2)
+  } else if (dragCtx.paintMode === 'demi') {
+    setSlotState(iso, personId, slot, 'present');
+    setSlotShiftType(iso, personId, slot, 'D');
   } else if (dragCtx.paintMode === 'maladie') {
     setSlotState(iso, personId, slot, 'absent');
     setSlotLabel(iso, personId, slot, 'Arrêt maladie');
+    setLeaveDecision(iso, personId, slot, null); // pas d'approbation requise
+  } else if (dragCtx.paintMode === 'accident') {
+    setSlotState(iso, personId, slot, 'absent');
+    setSlotLabel(iso, personId, slot, 'Accident du travail');
+    setLeaveDecision(iso, personId, slot, null); // pas d'approbation requise
   } else if (dragCtx.paintMode === 'erase') {
     eraseFullRun(personId, iso);
     dragCtx.touched.add(`${iso}|${personId}|erase`);
@@ -1445,7 +1463,7 @@ function openAbsenceLabelPopover(cell, forceAbsent) {
       isASV
         ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">
       <button type="button" id="popover-sick" style="padding:7px 4px;border:2px solid var(--color-sick-border);background:var(--color-sick);color:var(--color-sick-text);border-radius:var(--radius-btn);font-size:12px;font-weight:700;cursor:pointer;">🤒 Arrêt maladie</button>
-      <button type="button" id="popover-off" style="padding:7px 4px;border:2px solid var(--color-off-border);background:var(--color-off);color:var(--color-off-text);border-radius:var(--radius-btn);font-size:12px;font-weight:700;cursor:pointer;">🗓️ Repos planifié</button>
+      <button type="button" id="popover-accident" style="padding:7px 4px;border:2px solid var(--color-accident-border);background:var(--color-accident);color:var(--color-accident-text);border-radius:var(--radius-btn);font-size:12px;font-weight:700;cursor:pointer;">🤕 Accident du travail</button>
     </div>`
         : ''
     }
@@ -1477,9 +1495,10 @@ function openAbsenceLabelPopover(cell, forceAbsent) {
       if (viewKey) renderCalendarView(viewKey);
       close();
     };
-    box.querySelector('#popover-off').onclick = () => {
-      setSlotLabel(iso, personId, slot, 'Repos planifié');
-      propagateLabelAcrossSunday(personId, [{ iso, slot }], 'Repos planifié');
+    box.querySelector('#popover-accident').onclick = () => {
+      setSlotLabel(iso, personId, slot, 'Accident du travail');
+      setLeaveDecision(iso, personId, slot, null);
+      propagateLabelAcrossSunday(personId, [{ iso, slot }], 'Accident du travail');
       _saveData();
       if (viewKey) renderCalendarView(viewKey);
       close();
@@ -2161,56 +2180,6 @@ function initCalendarInteractions() {
     const btn = e.target.closest('.week-tool-btn');
     if (!btn || !btn.dataset.weekTool) return;
     store.weekNavState.weekTool = btn.dataset.weekTool;
-    renderWeekViewASV();
-  });
-
-  // Clic sur cellule après-midi → départ anticipé
-  document.addEventListener('click', (e) => {
-    const cell = e.target.closest('.week-am-cell[data-am-iso]');
-    if (!cell) return;
-    openEarlyDepPicker(cell.dataset.amIso, cell.dataset.amPid);
-  });
-
-  // Drag sur les slots H.supp.
-  const otDragCtx = { active: false, iso: null, pid: null, zone: 'evening', startSlot: 0, curSlot: 0, _preview: 0 };
-  function otApplyDrag(slot) {
-    if (!otDragCtx.active) return;
-    otDragCtx.curSlot = slot;
-    const maxSlot = Math.max(otDragCtx.startSlot, slot);
-    document
-      .querySelectorAll(`.week-ot-slot[data-ot-iso="${otDragCtx.iso}"][data-ot-zone="${otDragCtx.zone}"]`)
-      .forEach((el) => {
-        el.classList.toggle('drag-preview', parseInt(el.dataset.otSlot, 10) <= maxSlot);
-      });
-    otDragCtx._preview = maxSlot + 1;
-  }
-  document.addEventListener('mousedown', (e) => {
-    const slot = e.target.closest('.week-ot-slot.interactive');
-    if (!slot) return;
-    e.preventDefault();
-    otDragCtx.active = true;
-    otDragCtx.iso = slot.dataset.otIso;
-    otDragCtx.pid = slot.dataset.otPid;
-    otDragCtx.zone = slot.dataset.otZone || 'evening';
-    otDragCtx.startSlot = parseInt(slot.dataset.otSlot, 10);
-    otDragCtx.curSlot = otDragCtx.startSlot;
-    otDragCtx._preview = otDragCtx.startSlot + 1;
-    otApplyDrag(otDragCtx.startSlot);
-  });
-  document.addEventListener('mousemove', (e) => {
-    if (!otDragCtx.active) return;
-    const slot = e.target.closest('.week-ot-slot.interactive');
-    if (slot && slot.dataset.otIso === otDragCtx.iso && slot.dataset.otZone === otDragCtx.zone)
-      otApplyDrag(parseInt(slot.dataset.otSlot, 10));
-  });
-  document.addEventListener('mouseup', () => {
-    if (!otDragCtx.active) return;
-    otDragCtx.active = false;
-    const newMins = (otDragCtx._preview || 0) * 15;
-    _snapshotBeforeChange();
-    if (otDragCtx.zone === 'lunch') setLunchOtMins(otDragCtx.iso, otDragCtx.pid, newMins);
-    else setWeekOtMins(otDragCtx.iso, otDragCtx.pid, newMins);
-    _saveData();
     renderWeekViewASV();
   });
 

@@ -8,6 +8,7 @@ function halfTypeKey(iso, pid, slot) {
   const lc = lbl.toLowerCase().trim();
   if (lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé') return 'repos';
   if (lc === 'maladie' || lc === 'arrêt maladie' || lc === 'arrêt') return 'sick';
+  if (lc === 'accident du travail' || lc === 'accident') return 'accident';
   const dec = isASVPerson(pid) ? getLeaveDecision(iso, pid, slot) || 'pending' : 'conge';
   return dec + (lbl ? ':' + lc : '');
 }
@@ -18,6 +19,7 @@ function halfVisualType(iso, pid, slot) {
   const lc = lbl.toLowerCase().trim();
   if (lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé') return 'repos';
   if (lc === 'maladie' || lc === 'arrêt maladie' || lc === 'arrêt') return 'sick';
+  if (lc === 'accident du travail' || lc === 'accident') return 'accident';
   if (!isASVPerson(pid)) return 'conge';
   return getLeaveDecision(iso, pid, slot) || 'pending';
 }
