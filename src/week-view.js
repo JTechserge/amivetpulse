@@ -204,13 +204,14 @@ function openMonthPrintWindow(pids, year, month) {
         </tr>`;
       } else if (absent) {
         const lbl = (getSlotLabel(iso, pid, 'M') || getSlotLabel(iso, pid, 'AM') || '').toLowerCase();
-        const stateCell = lbl.includes('congé') || lbl.includes('conge')
-          ? '<em>Congé</em>'
-          : lbl.includes('maladie')
-            ? '<em>Maladie</em>'
-            : lbl.includes('accident')
-              ? '<em>Accident du travail</em>'
-              : '<em>Absence</em>';
+        const stateCell =
+          lbl.includes('congé') || lbl.includes('conge')
+            ? '<em>Congé</em>'
+            : lbl.includes('maladie')
+              ? '<em>Maladie</em>'
+              : lbl.includes('accident')
+                ? '<em>Accident du travail</em>'
+                : '<em>Absence</em>';
         rows += `<tr class="${rowCls || 'abs'}">
           <td class="day-col">${DOW_FR[dow]}&nbsp;${day}</td>
           <td class="slot-col dash">—</td>
@@ -232,9 +233,7 @@ function openMonthPrintWindow(pids, year, month) {
           const sH = getSlotNominalH(iso, pid, slot);
           const isFirst = si === 0;
           const rowspan = activeSlots.length > 1 && isFirst ? ` rowspan="${activeSlots.length}"` : '';
-          const dayCell = isFirst
-            ? `<td class="day-col"${rowspan}>${DOW_FR[dow]}&nbsp;${day}</td>`
-            : '';
+          const dayCell = isFirst ? `<td class="day-col"${rowspan}>${DOW_FR[dow]}&nbsp;${day}</td>` : '';
           const otCell = isFirst
             ? `<td class="num"${rowspan}>${otH > 0 ? `<span class="ot-val">+${formatHHMM(otH)}</span>` : '<span class="dash">—</span>'}</td>`
             : '';
@@ -678,7 +677,7 @@ function getWeekAlerts(personId, sundayISO) {
   if (!p.saturdayOnly && weekH >= WEEKLY_MAX_HOURS)
     alerts.push(`Durée de la semaine : ${formatHHMM(weekH)} — dépasse le maximum de 42h`);
 
-  // Alerte couverture O/F : deux ASV présentes sur le même poste (lundi–vendredi)
+  // Alerte couverture O/F : même poste en double OU ouverture/fermeture non couverte (lundi–vendredi)
   const poolNC = ASV_PEOPLE.filter((q) => !q.archived && !q.saturdayOnly);
   const DAY_FULL = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
   for (let d = 0; d < 5; d++) {
@@ -689,16 +688,24 @@ function getWeekAlerts(personId, sundayISO) {
     const present = poolNC.filter(
       (q) => getSlotState(iso2, q.id, 'M') === 'present' || getSlotState(iso2, q.id, 'AM') === 'present'
     );
+    if (!present.length) continue;
     const iAmPresent = present.some((q) => q.id === personId);
-    if (present.length === 2 && iAmPresent) {
-      const s0 = store.DATA.slots[shiftTypeKey(iso2, present[0].id)] || null;
-      const s1 = store.DATA.slots[shiftTypeKey(iso2, present[1].id)] || null;
+    if (!iAmPresent) continue;
+    const shifts = present.map((q) => store.DATA.slots[shiftTypeKey(iso2, q.id)] || null);
+    // Même poste en double
+    if (present.length === 2) {
+      const [s0, s1] = shifts;
       if (s0 && s1 && s0 === s1) {
         const poste = s0 === 'O' ? 'ouverture' : 'fermeture';
         const colleague = present.find((q) => q.id !== personId);
         alerts.push(`${DAY_FULL[d]} : même poste que ${colleague?.short || 'ta collègue'} — toutes deux en ${poste}`);
       }
     }
+    // Couverture manquante
+    const hasO = shifts.some((s) => s === 'O');
+    const hasF = shifts.some((s) => s === 'F');
+    if (!hasO) alerts.push(`${DAY_FULL[d]} : poste Ouverture non couvert`);
+    if (!hasF) alerts.push(`${DAY_FULL[d]} : poste Fermeture non couvert`);
   }
   return alerts;
 }

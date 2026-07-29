@@ -239,14 +239,16 @@ function buildCalendarToolbar(viewKey) {
   const paintBar = hasASV
     ? `
     <div class="cal-paint-bar" id="cal-paint-bar-${viewKey}"${monthClosed && isCurrentUserASV ? ' style="opacity:0.4;pointer-events:none;" title="Mois clôturé"' : ''}>
-      <span style="font-size:11px;font-weight:600;color:var(--color-text-muted);">Outil :</span>
-      <button class="paint-tool${store.calMonthPaintMode === 'opening' ? ' active' : ''}" data-paint="opening" title="Ouverture — Mat. 8h30→13h | A-m. 15h→19h">🟢 Ouverture</button>
-      <button class="paint-tool${store.calMonthPaintMode === 'closing' ? ' active' : ''}" data-paint="closing" title="Fermeture — Mat. 9h→13h | A-m. 15h→19h15">🌿 Fermeture</button>
-      <button class="paint-tool${store.calMonthPaintMode === 'demi' ? ' active' : ''}" data-paint="demi" title="Demi-journée — Mat. 9h→13h | A-m. 15h→19h">🩷 Demi-j.</button>
-      <button class="paint-tool${store.calMonthPaintMode === 'conge' ? ' active' : ''}" data-paint="conge" title="Demande de congé (validation vétérinaires)">🔵 Congé</button>
-      <button class="paint-tool${store.calMonthPaintMode === 'maladie' ? ' active' : ''}" data-paint="maladie" title="Arrêt maladie (direct, sans approbation)">🤒 Maladie</button>
-      <button class="paint-tool${store.calMonthPaintMode === 'accident' ? ' active' : ''}" data-paint="accident" title="Accident du travail (direct, sans approbation)">🤕 Accident</button>
-      <button class="paint-tool paint-tool-erase${store.calMonthPaintMode === 'erase' ? ' active' : ''}" data-paint="erase" title="Gomme — efface la case">🧹 Gomme</button>
+      <label for="cal-paint-select-${viewKey}" style="font-size:11px;font-weight:600;color:var(--color-text-muted);">Outil :</label>
+      <select class="paint-tool-select" id="cal-paint-select-${viewKey}">
+        <option value="opening" ${store.calMonthPaintMode === 'opening' ? 'selected' : ''}>🟢 Ouverture</option>
+        <option value="closing" ${store.calMonthPaintMode === 'closing' ? 'selected' : ''}>🌿 Fermeture</option>
+        <option value="demi" ${store.calMonthPaintMode === 'demi' ? 'selected' : ''}>🩷 Demi-journée</option>
+        <option value="conge" ${store.calMonthPaintMode === 'conge' ? 'selected' : ''}>🔵 Congé</option>
+        <option value="maladie" ${store.calMonthPaintMode === 'maladie' ? 'selected' : ''}>🤒 Arrêt maladie</option>
+        <option value="accident" ${store.calMonthPaintMode === 'accident' ? 'selected' : ''}>🤕 Accident travail</option>
+        <option value="erase" ${store.calMonthPaintMode === 'erase' ? 'selected' : ''}>🧹 Gomme</option>
+      </select>
     </div>`
     : '';
   return `
@@ -427,6 +429,16 @@ function eraseFullRun(personId, iso) {
       }
     });
     delete store.DATA.slots[shiftTypeKey(isoD, personId)];
+  }
+}
+
+// Efface un seul créneau (O/F/D ou maladie/accident) sans toucher les cases contiguës
+function eraseSingleSlot(personId, iso, slot) {
+  setSlotState(iso, personId, slot, 'empty');
+  setChangeDecision(iso, personId, slot, null);
+  const otherSlot = slot === 'M' ? 'AM' : 'M';
+  if (getSlotState(iso, personId, otherSlot) === 'empty') {
+    delete store.DATA.slots[shiftTypeKey(iso, personId)];
   }
 }
 
@@ -769,7 +781,9 @@ function buildWeekGrid(year, month, people) {
                 ? `<div class="pstrip-leave-label-merged${lblTypeCls}">${escapeHTML(bi.label)}</div>`
                 : bi.visualType === 'pending'
                   ? `<div class="pstrip-leave-label-merged"><span class="cell-mark">⏳</span></div>`
-                  : '';
+                  : bi.visualType === 'approved'
+                    ? `<div class="pstrip-leave-label-merged"><span class="cell-mark">✅</span></div>`
+                    : '';
               cells += `<div class="cal-wg-pstrip${archived ? ' pstrip-archived' : ''}${pstripBgCls}" data-person="${person.id}" data-erase-date="${iso}" style="grid-column:span ${spanHalves};position:relative">${lbl}</div>`;
 
               // Jour partiel en fin (M absent, AM travaillé) : rendre AM séparément (1 demi-col)
@@ -866,9 +880,9 @@ function buildWeekGrid(year, month, people) {
         personRowsHtml += plabel + cells;
       });
 
-      // Barre heures supplémentaires ASV : uniquement pour les semaines complètes (dimanche dans ce mois)
+      // Barre heures ASV : toutes les semaines (y compris la dernière sans dimanche dans ce mois)
       let otBarHtml = '';
-      if (isASV && weekDays[6] !== null) {
+      if (isASV) {
         const weekDayNums = weekDays.filter((d) => d !== null);
         let extraDates = [];
         if (weekIdx === 0) {
@@ -1401,13 +1415,26 @@ function applyPaint(cell, value) {
     setSlotLabel(iso, personId, slot, 'Accident du travail');
     setLeaveDecision(iso, personId, slot, null); // pas d'approbation requise
   } else if (dragCtx.paintMode === 'erase') {
-    eraseFullRun(personId, iso);
+    const cellState = getSlotState(iso, personId, slot);
+    if (cellState === 'present') {
+      // O/F/D → effacer uniquement cette demi-journée
+      eraseSingleSlot(personId, iso, slot);
+    } else if (cellState === 'absent') {
+      const lbl = getSlotLabel(iso, personId, slot).toLowerCase();
+      if (lbl.includes('maladie') || lbl.includes('arrêt') || lbl.includes('accident')) {
+        // Maladie/accident → pas de fusion, case par case
+        eraseSingleSlot(personId, iso, slot);
+      } else {
+        // Congé → peut être fusionné → effacer tout le run contigu
+        eraseFullRun(personId, iso);
+      }
+    }
     dragCtx.touched.add(`${iso}|${personId}|erase`);
   } else {
     setSlotState(iso, personId, slot, value);
   }
   // Vue mensuelle ASV : toute modification dans les 14 prochains jours → approbation vétérinaire
-  if (dragCtx.paintMode && dragCtx.paintMode !== 'erase' && isASVPerson(personId) && isWithinNextTwoWeeks(iso)) {
+  if (dragCtx.paintMode && dragCtx.paintMode !== 'erase' && dragCtx.paintMode !== 'maladie' && dragCtx.paintMode !== 'accident' && isASVPerson(personId) && isWithinNextTwoWeeks(iso)) {
     setChangeDecision(iso, personId, slot, 'pending');
   }
   updateHalfDOM(cell);
@@ -2156,15 +2183,15 @@ function initCalendarInteractions() {
     }
   });
 
-  // Boutons paint-tool (sélection de l'outil de peinture mensuelle)
-  document.addEventListener('click', (e) => {
-    const paintBtn = e.target.closest('.paint-tool');
-    if (paintBtn && paintBtn.dataset.paint) {
-      store.calMonthPaintMode = paintBtn.dataset.paint;
-      document
-        .querySelectorAll('.paint-tool')
-        .forEach((b) => b.classList.toggle('active', b.dataset.paint === store.calMonthPaintMode));
-      return;
+  // Select paint-tool (sélection de l'outil de peinture mensuelle)
+  document.addEventListener('change', (e) => {
+    const sel = e.target.closest('.paint-tool-select');
+    if (sel && sel.value) {
+      store.calMonthPaintMode = sel.value;
+      // Synchroniser tous les selects (multi-vues)
+      document.querySelectorAll('.paint-tool-select').forEach((s) => {
+        s.value = store.calMonthPaintMode;
+      });
     }
   });
 
@@ -2205,7 +2232,12 @@ function initCalendarInteractions() {
     if (e.target.id === `cal-next-${viewKey}`) return changeMonth(viewKey, 1);
     if (e.target.id === `cal-today-${viewKey}`) return goToToday(viewKey);
     if (e.target.id === `cal-clear-month-${viewKey}`) {
-      openClearMonthModal(viewKey, store.CAL_VIEWS[viewKey].navState.month);
+      const cfg2 = store.CAL_VIEWS[viewKey];
+      if (isMonthClosed(cfg2.year, cfg2.navState.month)) {
+        showToast('Ce mois est clôturé — impossible de vider', '🔒');
+        return;
+      }
+      openClearMonthModal(viewKey, cfg2.navState.month);
       return;
     }
     if (e.target.id === `cal-lock-month-${viewKey}`) {

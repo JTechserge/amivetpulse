@@ -485,10 +485,10 @@ export function renderDashboardHours() {
       <button data-year="${cy + 1}" class="${year === cy + 1 ? 'active' : ''}">${cy + 1}</button>
     </div>
     ${buildASVModulationCard(year)}
-    ${year === cy ? buildASVWeeklyCapCard() : ''}
     ${buildASVSaturdayEquityCard(year)}
     ${buildASVMonthlyTable(year)}
     <div id="dash-asv-cp"></div>
+    ${year === cy ? buildASVWeeklyCapCard() : ''}
   `;
   container.querySelector('#dash-hours-year-toggle').addEventListener('click', (e) => {
     const btn = e.target.closest('button');
