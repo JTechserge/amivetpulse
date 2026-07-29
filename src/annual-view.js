@@ -1,6 +1,6 @@
-import { PEOPLE, WEEKDAY_NAMES, MONTH_SHORT, MONTH_NAMES, ASV_PEOPLE } from './config.js';
+import { PEOPLE, WEEKDAY_NAMES, MONTH_SHORT } from './config.js';
 import { computeLeaveBlocks } from './leave-blocks.js';
-import { escapeHTML, daysInMonth, fmtISO, isoWeekday, holidayName, formatFR, formatHHMM, getWeekMondayDate } from './utils.js';
+import { escapeHTML, daysInMonth, fmtISO, isoWeekday, holidayName, formatFR } from './utils.js';
 import { store } from './store.js';
 import {
   isASVPerson,
@@ -9,15 +9,7 @@ import {
   getLeaveDecision,
   getDayComment,
   isClinicClosed,
-  getForecastWeek,
-  setForecastWeek,
-  getForecastSig,
-  setForecastSig,
 } from './slots.js';
-import { showToast } from './ui.js';
-
-const ANNUAL_FULLTIME_HOURS = 1607;
-const MAX_CP_WEEKS = 5;
 
 let _switchSubPage, _switchView, _openDaySidebar, _saveViewState, _buildLegendColors, _GROUP_VIEWS;
 let _saveData, _snapshotBeforeChange;
@@ -357,215 +349,38 @@ export function openAnnualDayDetail(iso, people, viewKey) {
   };
 }
 
-// ── Lot 7 : Prévisionnel ASV ─────────────────────────────────────
-
-// Retourne la liste des lundis ISO de l'année (toutes les semaines qui croisent l'année civile).
-function _getYearWeekMondays(year) {
-  const result = [];
-  // Commencer au lundi de la semaine contenant le 1er janvier
-  let d = getWeekMondayDate(new Date(year, 0, 1));
-  const limit = new Date(year, 11, 31);
-  while (d <= limit) {
-    result.push(fmtISO(d));
-    d = new Date(d);
-    d.setDate(d.getDate() + 7);
-  }
-  return result;
-}
-
-// Construit la grille prévisionnel pour une ASV.
-function buildASVForecastSection(pid, year) {
-  const p = ASV_PEOPLE.find((a) => a.id === pid);
-  const sig = getForecastSig(pid, year);
-  const mondays = _getYearWeekMondays(year);
-
-  // Calcul des CP et du total prévu
-  let cpUsed = 0,
-    totalPlannedH = 0;
-  mondays.forEach((m) => {
-    const v = getForecastWeek(pid, m);
-    if (v === 'CP') cpUsed++;
-    else if (v && !isNaN(parseFloat(v))) totalPlannedH += parseFloat(v);
-  });
-  const cpLeft = MAX_CP_WEEKS - cpUsed;
-  const diff = totalPlannedH - ANNUAL_FULLTIME_HOURS;
-  const diffSign = diff >= 0 ? '+' : '';
-  const diffColor = Math.abs(diff) <= 10 ? '#16A34A' : diff < 0 ? '#DC2626' : '#D97706';
-
-  // Regroupement par mois
-  const byMonth = Array.from({ length: 12 }, () => []);
-  mondays.forEach((m) => {
-    const dt = new Date(m + 'T00:00:00');
-    // Associer la semaine au mois où tombe son vendredi (fin de semaine de travail)
-    const friday = new Date(dt);
-    friday.setDate(friday.getDate() + 4);
-    const mo = friday.getFullYear() === year ? friday.getMonth() : (dt.getFullYear() === year ? dt.getMonth() : -1);
-    if (mo >= 0 && mo <= 11) byMonth[mo].push(m);
-  });
-
-  let monthSections = '';
-  byMonth.forEach((weeks, mo) => {
-    if (!weeks.length) return;
-    let monthTotal = 0;
-    let weekRows = '';
-    weeks.forEach((m) => {
-      const v = getForecastWeek(pid, m) || '';
-      const isCP = v === 'CP';
-      if (isCP) monthTotal += 0;
-      else if (v) monthTotal += parseFloat(v) || 0;
-      const endDt = new Date(m + 'T00:00:00');
-      endDt.setDate(endDt.getDate() + 4); // vendredi
-      const range = `${new Date(m + 'T00:00:00').getDate()} – ${endDt.getDate()} ${MONTH_SHORT[endDt.getMonth()]}`;
-      weekRows += `<tr>
-        <td style="font-size:11px;color:#666;white-space:nowrap;padding:3px 6px;">${range}</td>
-        <td style="padding:3px 6px;">
-          <input class="forecast-h-input" type="number" min="0" max="60" step="0.5"
-            data-fpid="${pid}" data-fmonday="${m}"
-            value="${isCP ? '' : escapeHTML(v)}"
-            placeholder="h"
-            style="width:56px;text-align:center;font-size:13px;border:1px solid var(--color-border);border-radius:4px;padding:2px 4px;background:${isCP ? '#FEF3C7' : 'var(--color-input-bg, #fff)'};"
-            ${isCP ? 'disabled' : ''}>
-        </td>
-        <td style="padding:3px 8px;">
-          <button class="forecast-cp-btn" data-fpid="${pid}" data-fmonday="${m}"
-            title="${isCP ? 'Retirer le marqueur CP' : 'Marquer cette semaine comme CP'}"
-            style="font-size:11px;padding:2px 8px;border:1px solid ${isCP ? '#F59E0B' : 'var(--color-border)'};border-radius:4px;background:${isCP ? '#FEF3C7' : 'transparent'};cursor:pointer;font-weight:${isCP ? '700' : '400'};">
-            ${isCP ? '✓ CP' : 'CP'}
-          </button>
-        </td>
-      </tr>`;
-    });
-    monthSections += `
-      <div style="margin-bottom:12px;">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
-          <strong style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;">${MONTH_NAMES[mo]}</strong>
-          <span style="font-size:11px;color:#666;">Total : <strong>${formatHHMM(monthTotal)}</strong></span>
-        </div>
-        <table style="border-collapse:collapse;width:100%;max-width:320px;">
-          <tbody>${weekRows}</tbody>
-        </table>
-      </div>`;
-  });
-
-  const sigHtml = sig
-    ? `<div style="font-size:11px;color:#16A34A;padding:8px 12px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;">
-        ✅ Prévisionnel signé par <strong>${escapeHTML(sig.signedBy)}</strong> le ${new Date(sig.signedAt).toLocaleDateString('fr-FR')}.
-        <button class="forecast-unsign-btn" data-fpid="${pid}" data-fyear="${year}" style="font-size:11px;margin-left:8px;padding:2px 6px;border:1px solid #BBF7D0;border-radius:4px;background:transparent;cursor:pointer;color:#15803D;">Réinitialiser</button>
-      </div>`
-    : `<button class="forecast-sign-btn" data-fpid="${pid}" data-fyear="${year}"
-        style="padding:7px 16px;background:var(--color-primary);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">
-        ✍️ Valider le prévisionnel ${year}
-      </button>`;
-
-  return `
-    <div class="card forecast-asv-section" data-forecast-pid="${pid}" style="padding:16px 20px;margin-bottom:20px;">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
-        <h3 style="font-size:15px;font-weight:700;color:${p?.color || 'inherit'};margin:0;">${escapeHTML(p?.name || p?.short || pid)}</h3>
-        <div style="display:flex;gap:16px;align-items:center;font-size:12px;">
-          <span>CP : <strong>${cpUsed}/${MAX_CP_WEEKS}</strong> <span style="color:${cpLeft < 0 ? '#DC2626' : cpLeft === 0 ? '#D97706' : '#666'};">(${cpLeft >= 0 ? cpLeft + ' restantes' : Math.abs(cpLeft) + ' en trop'})</span></span>
-          <span>Total prévu : <strong>${formatHHMM(totalPlannedH)}</strong> / ${ANNUAL_FULLTIME_HOURS}h</span>
-          <span style="color:${diffColor};font-weight:700;">${diffSign}${formatHHMM(Math.abs(diff))}${diff >= 0 ? ' ✓' : ' ▼'}</span>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px 20px;">
-        ${monthSections}
-      </div>
-      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--color-border);">
-        ${sigHtml}
-      </div>
-    </div>`;
-}
-
-// Construit la page complète du prévisionnel ASV pour l'année N+1.
-function buildASVForecastPage(year, container) {
-  const sections = ASV_PEOPLE.map((p) => buildASVForecastSection(p.id, year)).join('');
-  // eslint-disable-next-line no-unsanitized/property
-  container.querySelector('#asv-forecast-sections').innerHTML = sections;
-
-  // Liens événements
-  container.querySelectorAll('.forecast-h-input').forEach((inp) => {
-    inp.addEventListener('change', () => {
-      const { fpid, fmonday } = inp.dataset;
-      const val = parseFloat(inp.value);
-      _snapshotBeforeChange();
-      setForecastWeek(fpid, fmonday, isNaN(val) ? null : val);
-      _saveData(false);
-      buildASVForecastPage(year, container);
-    });
-  });
-  container.querySelectorAll('.forecast-cp-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const { fpid, fmonday } = btn.dataset;
-      const isCP = getForecastWeek(fpid, fmonday) === 'CP';
-      _snapshotBeforeChange();
-      setForecastWeek(fpid, fmonday, isCP ? null : 'CP');
-      _saveData(false);
-      buildASVForecastPage(year, container);
-    });
-  });
-  container.querySelectorAll('.forecast-sign-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const { fpid, fyear } = btn.dataset;
-      const userName = store.currentUser?.email || store.currentUser?.person_id || 'Inconnu';
-      _snapshotBeforeChange();
-      setForecastSig(fpid, parseInt(fyear, 10), { signedAt: new Date().toISOString(), signedBy: userName });
-      _saveData();
-      buildASVForecastPage(year, container);
-      showToast('Prévisionnel signé ✓', '✍️');
-    });
-  });
-  container.querySelectorAll('.forecast-unsign-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const { fpid, fyear } = btn.dataset;
-      _snapshotBeforeChange();
-      setForecastSig(fpid, parseInt(fyear, 10), null);
-      _saveData(false);
-      buildASVForecastPage(year, container);
-    });
-  });
-}
 
 // Sous-page "Vue annuelle" d'un onglet groupé — factorisée pour vétérinaires et ASV.
 export function renderAnnualViewForGroup(group) {
   const g = _GROUP_VIEWS[group];
   const container = document.getElementById(g.annualContainer);
   const mode = store.annualYearState[group];
-  const viewKey = mode === 'current' ? g.calendarViewKey : g.forecastViewKey;
-  const cfg = store.CAL_VIEWS[viewKey];
 
-  // Lot 7 : page Prévisionnel ASV spécialisée
+  // Pour ASV, la vue annuelle n'affiche que "Réalisé" (heatmap de l'année courante).
+  // La sous-page "Prévisionnel" est gérée séparément par renderForecastPage (forecast.js).
   if (group === 'asv' && mode === 'forecast') {
-    // eslint-disable-next-line no-unsanitized/property
-    container.innerHTML = `
-      <h2 class="section-title">Prévisionnel ${cfg.year} — ASV</h2>
-      <p class="section-desc" style="margin-bottom:12px;">Planifiez vos heures et congés payés semaine par semaine. Cible annuelle : ${ANNUAL_FULLTIME_HOURS}h.</p>
-      <div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:16px;">
-        <button data-mode="current" class="${mode === 'current' ? 'active' : ''}">${store.CAL_VIEWS[g.calendarViewKey].year} — Réalisé</button>
-        <button data-mode="forecast" class="${mode === 'forecast' ? 'active' : ''}">${cfg.year} — Prévisionnel</button>
-      </div>
-      <div id="asv-forecast-sections"></div>
-    `;
-    buildASVForecastPage(cfg.year, container);
-    container.querySelector(`#${group}-annual-year-toggle`).addEventListener('click', (e) => {
-      const btn = e.target.closest('button');
-      if (!btn) return;
-      store.annualYearState[group] = btn.dataset.mode;
-      renderAnnualViewForGroup(group);
-      _saveViewState();
-    });
-    return;
+    store.annualYearState['asv'] = 'current';
   }
+  const effectiveMode = group === 'asv' ? 'current' : mode;
+  const effectiveViewKey = effectiveMode === 'current' ? g.calendarViewKey : g.forecastViewKey;
+  const effectiveCfg = store.CAL_VIEWS[effectiveViewKey];
+
+  const yearToggle = group === 'vets'
+    ? `<div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
+        <button data-mode="current" class="${effectiveMode === 'current' ? 'active' : ''}">${store.CAL_VIEWS[g.calendarViewKey].year}</button>
+        <button data-mode="forecast" class="${effectiveMode === 'forecast' ? 'active' : ''}">${store.CAL_VIEWS[g.forecastViewKey].year}</button>
+      </div>`
+    : `<div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
+        <button data-mode="current" class="active">${store.CAL_VIEWS[g.calendarViewKey].year} — Réalisé</button>
+      </div>`;
 
   // eslint-disable-next-line no-unsanitized/property
   container.innerHTML = `
-    <h2 class="section-title">Vue Annuelle ${cfg.year} — ${g.label}</h2>
+    <h2 class="section-title">Vue Annuelle ${effectiveCfg.year} — ${g.label}</h2>
     <p class="section-desc" style="margin-bottom:12px;">Heatmap de présence — cliquez une cellule pour voir le détail du jour.</p>
-    <div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
-      <button data-mode="current" class="${mode === 'current' ? 'active' : ''}">${store.CAL_VIEWS[g.calendarViewKey].year}</button>
-      <button data-mode="forecast" class="${mode === 'forecast' ? 'active' : ''}">${store.CAL_VIEWS[g.forecastViewKey].year}</button>
-    </div>
-    <div class="card" style="padding:14px;">${buildHeatmap(cfg.year, cfg.people)}</div>
-    <div class="legend" style="margin-top:12px;padding:10px 16px;">${_buildLegendColors(cfg.people)}</div>
+    ${yearToggle}
+    <div class="card" style="padding:14px;">${buildHeatmap(effectiveCfg.year, effectiveCfg.people)}</div>
+    <div class="legend" style="margin-top:12px;padding:10px 16px;">${_buildLegendColors(effectiveCfg.people)}</div>
   `;
   container.querySelector(`#${group}-annual-year-toggle`).addEventListener('click', (e) => {
     const btn = e.target.closest('button');
@@ -575,11 +390,11 @@ export function renderAnnualViewForGroup(group) {
     _saveViewState();
   });
   container.querySelectorAll('td.hm1-c[data-date]').forEach((cell) => {
-    cell.addEventListener('click', () => openAnnualDayDetail(cell.dataset.date, cfg.people, viewKey));
+    cell.addEventListener('click', () => openAnnualDayDetail(cell.dataset.date, effectiveCfg.people, effectiveViewKey));
     cell.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        openAnnualDayDetail(cell.dataset.date, cfg.people, viewKey);
+        openAnnualDayDetail(cell.dataset.date, effectiveCfg.people, effectiveViewKey);
       }
     });
   });

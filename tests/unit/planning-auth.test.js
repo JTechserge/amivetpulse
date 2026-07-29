@@ -54,6 +54,23 @@ describe('extractPersonIdFromKey', () => {
     expect(extractPersonIdFromKey('2026-07-14_marie_M_decision')).toBe('marie');
     expect(extractPersonIdFromKey('2026-07-14_stephane_AM_decision')).toBe('stephane');
   });
+
+  it('reconnaît les clés forecast hebdo (forecast_<pid>_YYYY-MM-DD)', () => {
+    expect(extractPersonIdFromKey('forecast_marie_2026-01-05')).toBe('marie');
+    expect(extractPersonIdFromKey('forecast_johanna_2026-03-09')).toBe('johanna');
+    expect(extractPersonIdFromKey('forecast_julie_2025-12-29')).toBe('julie');
+  });
+
+  it('reconnaît les clés forecast_sig (forecast_sig_<pid>_<year>)', () => {
+    expect(extractPersonIdFromKey('forecast_sig_johanna_2026')).toBe('johanna');
+    expect(extractPersonIdFromKey('forecast_sig_julie_2025')).toBe('julie');
+    expect(extractPersonIdFromKey('forecast_sig_marie_2027')).toBe('marie');
+  });
+
+  it('régression — les clés classiques restent valides', () => {
+    expect(extractPersonIdFromKey('2026-01-05_marie_M')).toBe('marie');
+    expect(extractPersonIdFromKey('2026-01-05_david_AM_label')).toBe('david');
+  });
 });
 
 // ─── findChangedKeys ──────────────────────────────────────────────────────────
