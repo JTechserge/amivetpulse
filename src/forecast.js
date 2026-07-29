@@ -420,13 +420,13 @@ function _getLightThemeColors() {
   const cs = getComputedStyle(root);
   const g = (v) => cs.getPropertyValue(v).trim();
   const colors = {
-    primary:   g('--color-primary')    || '#EA580C',
-    cpBg:      g('--color-cp')         || '#D1FAE5',
-    cpText:    g('--color-cp-text')    || '#065F46',
-    text:      g('--color-text')       || '#1E293B',
+    primary: g('--color-primary') || '#EA580C',
+    cpBg: g('--color-cp') || '#D1FAE5',
+    cpText: g('--color-cp-text') || '#065F46',
+    text: g('--color-text') || '#1E293B',
     textMuted: g('--color-text-muted') || '#8A8577',
-    border:    g('--color-border')     || '#ECE7DE',
-    surface:   g('--color-surface')    || '#FFFFFF',
+    border: g('--color-border') || '#ECE7DE',
+    surface: g('--color-surface') || '#FFFFFF',
   };
   if (savedTheme) root.setAttribute('data-theme', savedTheme);
   else root.removeAttribute('data-theme');
@@ -470,43 +470,67 @@ function _buildForecastPrintPage(pid, year, colors, logoSrc) {
     ? `<img src="${logoSrc}" alt="Amivet" style="height:36px;width:auto;display:block;border-radius:7px;">`
     : `<div style="width:36px;height:36px;border-radius:9px;background:${primary};display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;">\u{1F43E}</div>`;
 
-
   function fmtRange(wk) {
-    const sd = wk.ds.getUTCDate(), ed = wk.de.getUTCDate();
-    const sm = wk.ds.getUTCMonth(), em = wk.de.getUTCMonth();
-    const M3p = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+    const sd = wk.ds.getUTCDate(),
+      ed = wk.de.getUTCDate();
+    const sm = wk.ds.getUTCMonth(),
+      em = wk.de.getUTCMonth();
+    const M3p = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
     if (sm === em) return `${sd}–${ed}`;
     return `${sd} ${M3p[sm]}–${ed} ${M3p[em]}`;
   }
 
-  const QTITLES = ['1er trimestre','2e trimestre','3e trimestre','4e trimestre'];
-  const MNAMES = ['Janvier','F\xe9vrier','Mars','Avril','Mai','Juin','Juillet',
-                  'Ao\xfbt','Septembre','Octobre','Novembre','D\xe9cembre'];
+  const QTITLES = ['1er trimestre', '2e trimestre', '3e trimestre', '4e trimestre'];
+  const MNAMES = [
+    'Janvier',
+    'F\xe9vrier',
+    'Mars',
+    'Avril',
+    'Mai',
+    'Juin',
+    'Juillet',
+    'Ao\xfbt',
+    'Septembre',
+    'Octobre',
+    'Novembre',
+    'D\xe9cembre',
+  ];
 
-  const quartersHtml = [0, 1, 2, 3].map((q) => {
-    const monthsHtml = [q * 3, q * 3 + 1, q * 3 + 2].map((mo) => {
-      const mWeeks = byMonth[mo];
-      if (!mWeeks.length) return '<div class="mo"></div>';
-      const moTotal = computeMonthTotal(pid, mWeeks);
-      const wkRows = mWeeks.map((wk) => {
-        const v = getForecastWeek(pid, wk.mondayISO);
-        const isCP = v === 'CP';
-        const h = isCP ? 0 : parseFloat(v) || 0;
-        return `<div class="wk${isCP ? ' cp' : ''}">` +
-          `<span class="s">S${String(wk.w).padStart(2, '0')}</span>` +
-          `<span class="dt">${fmtRange(wk)}</span>` +
-          `<span class="h">${isCP ? 'CP' : h ? h + '&thinsp;h' : '—'}</span>` +
-          `</div>`;
-      }).join('');
-      return `<div class="mo">` +
-        `<div class="mo-h"><span class="nm">${MNAMES[mo]}</span>` +
-        `<span class="tot">${moTotal > 0 ? Math.round(moTotal) + '&thinsp;h' : '—'}</span></div>` +
-        wkRows +
-        `</div>`;
-    }).join('');
-    return `<div class="qtr"><div class="qtr-label">${QTITLES[q]}</div>` +
-      `<div class="months">${monthsHtml}</div></div>`;
-  }).join('');
+  const quartersHtml = [0, 1, 2, 3]
+    .map((q) => {
+      const monthsHtml = [q * 3, q * 3 + 1, q * 3 + 2]
+        .map((mo) => {
+          const mWeeks = byMonth[mo];
+          if (!mWeeks.length) return '<div class="mo"></div>';
+          const moTotal = computeMonthTotal(pid, mWeeks);
+          const wkRows = mWeeks
+            .map((wk) => {
+              const v = getForecastWeek(pid, wk.mondayISO);
+              const isCP = v === 'CP';
+              const h = isCP ? 0 : parseFloat(v) || 0;
+              return (
+                `<div class="wk${isCP ? ' cp' : ''}">` +
+                `<span class="s">S${String(wk.w).padStart(2, '0')}</span>` +
+                `<span class="dt">${fmtRange(wk)}</span>` +
+                `<span class="h">${isCP ? 'CP' : h ? h + '&thinsp;h' : '—'}</span>` +
+                `</div>`
+              );
+            })
+            .join('');
+          return (
+            `<div class="mo">` +
+            `<div class="mo-h"><span class="nm">${MNAMES[mo]}</span>` +
+            `<span class="tot">${moTotal > 0 ? Math.round(moTotal) + '&thinsp;h' : '—'}</span></div>` +
+            wkRows +
+            `</div>`
+          );
+        })
+        .join('');
+      return (
+        `<div class="qtr"><div class="qtr-label">${QTITLES[q]}</div>` + `<div class="months">${monthsHtml}</div></div>`
+      );
+    })
+    .join('');
 
   const diffClass = diff >= 0 ? 'kpi pos' : 'kpi neg';
   const kpisHtml =
@@ -519,13 +543,17 @@ function _buildForecastPrintPage(pid, year, colors, logoSrc) {
     `<div class="kpi"><div class="k">Cong&eacute;s pay&eacute;s</div>` +
     `<div class="v">${cpCount}&thinsp;<small>/ 5 sem.</small></div></div>`;
 
-  const brkRows = breakdown.map((r) =>
-    `<div class="brk-row${r.isCP ? ' cp' : ''}">` +
-    `<span class="lab">${r.isCP ? 'Cong&eacute;s pay&eacute;s (CP)' : escapeHTML(r.label) + '&thinsp;/ sem.'}</span>` +
-    `<span class="n">${r.count}&thinsp;sem.</span></div>`
-  ).join('');
+  const brkRows = breakdown
+    .map(
+      (r) =>
+        `<div class="brk-row${r.isCP ? ' cp' : ''}">` +
+        `<span class="lab">${r.isCP ? 'Cong&eacute;s pay&eacute;s (CP)' : escapeHTML(r.label) + '&thinsp;/ sem.'}</span>` +
+        `<span class="n">${r.count}&thinsp;sem.</span></div>`
+    )
+    .join('');
 
-  return `<div class="sheet">` +
+  return (
+    `<div class="sheet">` +
     `<div class="hdr"><div class="hdr-l">${logoHtml}` +
     `<div class="clinic">Clinique Amivet<small>Planning pr&eacute;visionnel &middot; ASV</small></div></div>` +
     `<div class="hdr-r"><div class="who">${escapeHTML(fullName)}</div>` +
@@ -543,13 +571,16 @@ function _buildForecastPrintPage(pid, year, colors, logoSrc) {
     `<div class="sig"><div class="role">L&rsquo;employeur &mdash; V&eacute;t&eacute;rinaire(s)</div>` +
     `<div class="lu">Bon pour accord sur le pr&eacute;visionnel annuel</div>` +
     `<div class="line"></div><div class="who2">Dr David Pelois &amp; Dr St&eacute;phane Maquinay</div></div>` +
-    `</div><div class="genline">Amivet PULSE &mdash; pr&eacute;visionnel ${year}</div></div>`;
+    `</div><div class="genline">Amivet PULSE &mdash; pr&eacute;visionnel ${year}</div></div>`
+  );
 }
 
 function _buildPrintWindowCss(colors) {
   const { primary, cpBg, cpText, text, textMuted, border } = colors;
-  const pos = '#15803D', neg = '#B91C1C';
-  return `@page{size:A4 portrait;margin:12mm;}` +
+  const pos = '#15803D',
+    neg = '#B91C1C';
+  return (
+    `@page{size:A4 portrait;margin:12mm;}` +
     `*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;` +
     `-webkit-print-color-adjust:exact;print-color-adjust:exact;}` +
     `body{background:#fff;color:${text};}` +
@@ -609,44 +640,79 @@ function _buildPrintWindowCss(colors) {
     `.sig .lu{font-size:9px;color:${textMuted};font-style:italic;margin-top:1px;}` +
     `.sig .line{border-bottom:1px solid ${text};height:33px;margin:8px 0 4px;}` +
     `.sig .who2{font-size:9.5px;color:${textMuted};}` +
-    `.genline{margin-top:12px;text-align:right;font-size:8px;color:${textMuted};}`;
+    `.genline{margin-top:12px;text-align:right;font-size:8px;color:${textMuted};}`
+  );
 }
 
 /**
- * Ouvre une fenêtre d'impression A4 pour le prévisionnel d'un ASV.
+ * Affiche un aperçu imprimable en overlay plein écran sur la page courante.
+ * "Imprimer" → window.print() ; "Fermer" / Échap → démonte l'overlay.
+ */
+function _openForecastOverlay(pagesHtml, css, title) {
+  const styleEl = document.createElement('style');
+  styleEl.id = 'fp-print-style';
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
+
+  const screenStyleEl = document.createElement('style');
+  screenStyleEl.id = 'fp-screen-style';
+  screenStyleEl.textContent =
+    '.forecast-print-sheet-wrap .sheet{' +
+    'width:210mm;background:#fff;margin:0 auto 16px;' +
+    'box-shadow:0 2px 14px rgba(0,0,0,.12);padding:14mm 14mm 12mm;}';
+  document.head.appendChild(screenStyleEl);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'forecast-print-overlay';
+  overlay.id = 'forecast-print-overlay';
+  // eslint-disable-next-line no-unsanitized/property
+  overlay.innerHTML =
+    `<div class="forecast-print-toolbar">` +
+    `<span class="fpt-title">${escapeHTML(title)}</span>` +
+    `<div class="fpt-btns">` +
+    `<button class="fpt-btn-print">🖨️ Imprimer</button>` +
+    `<button class="fpt-btn-close">✕ Fermer</button>` +
+    `</div></div>` +
+    `<div class="forecast-print-sheet-wrap">${pagesHtml}</div>`;
+  document.body.appendChild(overlay);
+
+  function _close() {
+    overlay.remove();
+    styleEl.remove();
+    screenStyleEl.remove();
+    document.removeEventListener('keydown', _onKey);
+  }
+  function _onKey(e) { if (e.key === 'Escape') _close(); }
+
+  overlay.querySelector('.fpt-btn-close').addEventListener('click', _close);
+  overlay.querySelector('.fpt-btn-print').addEventListener('click', () => window.print());
+  document.addEventListener('keydown', _onKey);
+}
+
+/**
+ * Aperçu imprimable inline pour le prévisionnel d'un ASV.
  * Conforme à la maquette apercu-previsionnel-impression.html.
  */
 function openForecastPrintWindow(pid, year) {
   const colors = _getLightThemeColors();
   const logoSrc = _getLogoDataUrl();
-  const body = _buildForecastPrintPage(pid, year, colors, logoSrc);
+  const pageHtml = _buildForecastPrintPage(pid, year, colors, logoSrc);
   const css = _buildPrintWindowCss(colors);
-  const html = `<!DOCTYPE html>\n<html lang="fr"><head><meta charset="UTF-8">\n<style>${css}</style>\n</head><body>${body}</body></html>`;
-  const win = window.open('', '_blank', 'width=840,height=1200');
-  if (!win) { showToast('Autorisez les pop-ups pour imprimer', '⚠️'); return; }
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => win.print(), 400);
+  const fullName = asvFullName(pid) || pid;
+  _openForecastOverlay(pageHtml, css, `Pr\xe9visionnel ${year} — ${fullName}`);
 }
 
 /**
- * Impression par lot : une page A4 par ASV active (vét/admin uniquement).
+ * Aperçu imprimable par lot : une feuille A4 par ASV active (vét/admin uniquement).
  */
 export function openForecastPrintWindowAll(year) {
   const colors = _getLightThemeColors();
   const logoSrc = _getLogoDataUrl();
   const activeASV = ASV_PEOPLE.filter((p) => !p.archived);
-  if (!activeASV.length) { showToast('Aucune ASV active à imprimer', '⚠️'); return; }
-  const pages = activeASV.map((p) => _buildForecastPrintPage(p.id, year, colors, logoSrc)).join('\n');
+  if (!activeASV.length) { showToast('Aucune ASV active \xe0 imprimer', '⚠️'); return; }
+  const pagesHtml = activeASV.map((p) => _buildForecastPrintPage(p.id, year, colors, logoSrc)).join('\n');
   const css = _buildPrintWindowCss(colors);
-  const html = `<!DOCTYPE html>\n<html lang="fr"><head><meta charset="UTF-8">\n<style>${css}</style>\n</head><body>${pages}</body></html>`;
-  const win = window.open('', '_blank', 'width=840,height=1200');
-  if (!win) { showToast('Autorisez les pop-ups pour imprimer', '⚠️'); return; }
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => win.print(), 500);
+  _openForecastOverlay(pagesHtml, css, `Pr\xe9visionnel ${year} — toutes les ASV`);
 }
 
 /**
