@@ -27,6 +27,7 @@ export function setupLeaveRequests({ snapshotBeforeChange, saveData, renderDashb
 
 // Repos planifié ne nécessite pas d'approbation vétérinaire → exclu des demandes de congé.
 export function isReposLabel(label){ const lc=(label||'').toLowerCase().trim(); return lc==='repos'||lc==='repos planifié'||lc==='non travaillé'; }
+export function isSickOrAccidentLabel(label){ const lc=(label||'').toLowerCase().trim(); return lc.includes('maladie')||lc.includes('arrêt')||lc.includes('accident'); }
 
 export function collectAllLeaveGroups(){
   const groups = [];
@@ -41,11 +42,14 @@ export function collectAllLeaveGroups(){
           SLOTS.forEach(slot=>{
             if(getSlotState(iso, person.id, slot) !== 'absent'){ current = null; return; }
             const label = getSlotLabel(iso, person.id, slot);
-            if(isReposLabel(label)){ current = null; return; }
+            if(isReposLabel(label) || isSickOrAccidentLabel(label)){ current = null; return; }
             const status = getLeaveDecision(iso, person.id, slot) || 'pending';
             const comment = getLeaveDecisionComment(iso, person.id, slot);
-            if(current && current.label === label && current.status === status && current.comment === comment){
+            if(current && current.label === label){
               current.slots.push({ iso, slot });
+              // Statut du groupe = le plus urgent parmi les demi-journées
+              if(status === 'pending') current.status = 'pending';
+              else if(status === 'rejected' && current.status !== 'pending') current.status = 'rejected';
             } else {
               current = { personId: person.id, label, status, comment, slots: [{ iso, slot }] };
               groups.push(current);
