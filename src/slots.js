@@ -282,6 +282,31 @@ export function isPersonWorkingDay(personId, date) {
   return true;
 }
 
+// ── Prévisionnel ASV (Lot 7) ─────────────────────────────────────
+// Stocke les heures prévues ou le marqueur CP par semaine (clé = lundi ISO).
+export function forecastKey(pid, mondayISO) {
+  return `forecast_${pid}_${mondayISO}`;
+}
+export function getForecastWeek(pid, mondayISO) {
+  return store.DATA.slots[forecastKey(pid, mondayISO)] || null; // "35", "42", "CP", ou null
+}
+export function setForecastWeek(pid, mondayISO, value) {
+  const k = forecastKey(pid, mondayISO);
+  if (value === null || value === undefined || value === '') delete store.DATA.slots[k];
+  else store.DATA.slots[k] = String(value);
+}
+export function forecastSigKey(pid, year) {
+  return `forecast_sig_${pid}_${year}`;
+}
+export function getForecastSig(pid, year) {
+  const raw = store.DATA.slots[forecastSigKey(pid, year)];
+  try { return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+export function setForecastSig(pid, year, sig) {
+  if (sig) store.DATA.slots[forecastSigKey(pid, year)] = JSON.stringify(sig);
+  else delete store.DATA.slots[forecastSigKey(pid, year)];
+}
+
 // ── Clôture de mois (Lot 6) ──────────────────────────────────────
 // month : 0-indexé (0=Jan … 11=Déc), cohérent avec cfg.navState.month et Date.getMonth().
 export function closedMonthKey(year, month) {
