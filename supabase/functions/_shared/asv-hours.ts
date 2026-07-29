@@ -15,21 +15,38 @@ const SATURDAY_HOURS_BY_PID: Record<string, number> = {
   carla: 7.25,
 };
 
+// Heures par demi-journée selon type de poste (Lot 2)
+const SLOT_NOMINAL_H: Record<string, Record<string, number>> = {
+  O: { M: 4.5, AM: 4.0 },
+  F: { M: 4.0, AM: 4.25 },
+  D: { M: 4.0, AM: 4.0 },
+};
+const SLOT_KEYS = ['M', 'AM'] as const;
+
 export function timeToMins(t: string): number {
   const [h, m] = t.split(':').map(Number);
   return (h || 0) * 60 + (m || 0);
 }
 
-export function getShiftType(slots: SlotsRecord, iso: string, pid: string): 'O' | 'F' {
-  return (slots[`${iso}_${pid}_shift`] as 'O' | 'F') || 'O';
+export function getShiftType(slots: SlotsRecord, iso: string, pid: string): string {
+  return slots[`${iso}_${pid}_shift`] || 'O';
 }
 
-/** Heures nominales du jour selon poste et jour de semaine.
- *  Samedi : 7.25h pour Carla (saturdayOnly), 7.0h pour les autres ASV.
- *  Semaine : Fermeture 8.25h, Ouverture 8.5h. */
+export function getSlotShiftType(slots: SlotsRecord, iso: string, pid: string, slot: string): string {
+  return slots[`${iso}_${pid}_${slot}_shift`] || getShiftType(slots, iso, pid);
+}
+
+export function getSlotNominalH(slots: SlotsRecord, iso: string, pid: string, slot: string, wd: number): number {
+  if (wd === 6) return slot === 'M' ? (SATURDAY_HOURS_BY_PID[pid] ?? 7.0) : 0;
+  return (SLOT_NOMINAL_H[getSlotShiftType(slots, iso, pid, slot)] ?? SLOT_NOMINAL_H.O)[slot] ?? 4.0;
+}
+
+/** Heures nominales du jour = somme des demi-journées présentes (Lot 2). */
 export function getDayNominalH(slots: SlotsRecord, iso: string, pid: string, wd: number): number {
-  if (wd === 6) return SATURDAY_HOURS_BY_PID[pid] ?? 7.0;
-  return getShiftType(slots, iso, pid) === 'F' ? 8.25 : 8.5;
+  return SLOT_KEYS.reduce((sum: number, slot: string) => {
+    if (slots[`${iso}_${pid}_${slot}`] !== 'present') return sum;
+    return sum + getSlotNominalH(slots, iso, pid, slot, wd);
+  }, 0);
 }
 
 export function getDayAllOtH(slots: SlotsRecord, iso: string, pid: string): number {

@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   timeToMins,
   getShiftType,
+  getSlotShiftType,
+  getSlotNominalH,
   getDayNominalH,
   getDayAllOtH,
   getDayDeficitH,
@@ -13,10 +15,15 @@ import {
 // (supabase/functions/_shared/asv-hours.ts) soient en accord.
 // Toute divergence ici = désaccord potentiel dans les récapitulatifs email.
 
-const ISO_SAT  = '2026-07-11'; // samedi (wd=6)
-const ISO_MON  = '2026-07-07'; // lundi  (wd=1)
+const ISO_SAT = '2026-07-11'; // samedi (wd=6)
+const ISO_MON = '2026-07-07'; // lundi  (wd=1)
 
-function s(iso, pid, key, val){ return { [`${iso}_${pid}_${key}`]: val }; }
+function s(iso, pid, key, val) { return { [`${iso}_${pid}_${key}`]: val }; }
+
+// Construit un objet slots avec état 'present' pour les créneaux donnés
+function present(iso, pid, ...slots) {
+  return Object.assign({}, ...slots.map(slot => s(iso, pid, slot, 'present')));
+}
 
 describe('timeToMins', () => {
   it('convertit HH:MM en minutes', () => {
@@ -35,21 +42,82 @@ describe('getShiftType', () => {
   });
 });
 
-describe('getDayNominalH — bug Carla corrigé', () => {
-  it('Carla samedi → 7.25h (contrat)', () => {
-    expect(getDayNominalH({}, ISO_SAT, 'carla', 6)).toBe(7.25);
+describe('getSlotShiftType', () => {
+  it('retourne O par défaut (fallback getShiftType)', () => {
+    expect(getSlotShiftType({}, ISO_MON, 'alice', 'M')).toBe('O');
+    expect(getSlotShiftType({}, ISO_MON, 'alice', 'AM')).toBe('O');
   });
-  it('autre ASV samedi → 7.0h', () => {
-    expect(getDayNominalH({}, ISO_SAT, 'marie', 6)).toBe(7.0);
-    expect(getDayNominalH({}, ISO_SAT, 'alice', 6)).toBe(7.0);
+  it('utilise la clé par demi-journée si présente', () => {
+    expect(getSlotShiftType(s(ISO_MON, 'alice', 'M_shift', 'F'), ISO_MON, 'alice', 'M')).toBe('F');
+    expect(getSlotShiftType(s(ISO_MON, 'alice', 'AM_shift', 'D'), ISO_MON, 'alice', 'AM')).toBe('D');
   });
-  it('semaine Ouverture → 8.5h', () => {
-    expect(getDayNominalH({}, ISO_MON, 'carla', 1)).toBe(8.5);
-    expect(getDayNominalH({}, ISO_MON, 'alice', 1)).toBe(8.5);
+  it('M et AM peuvent avoir des types différents', () => {
+    const slots = { ...s(ISO_MON, 'alice', 'M_shift', 'O'), ...s(ISO_MON, 'alice', 'AM_shift', 'D') };
+    expect(getSlotShiftType(slots, ISO_MON, 'alice', 'M')).toBe('O');
+    expect(getSlotShiftType(slots, ISO_MON, 'alice', 'AM')).toBe('D');
   });
-  it('semaine Fermeture → 8.25h', () => {
-    const slotsF = s(ISO_MON, 'alice', 'shift', 'F');
-    expect(getDayNominalH(slotsF, ISO_MON, 'alice', 1)).toBe(8.25);
+  it('fallback vers clé jour si pas de clé demi-journée', () => {
+    const slots = s(ISO_MON, 'alice', 'shift', 'F');
+    expect(getSlotShiftType(slots, ISO_MON, 'alice', 'M')).toBe('F');
+    expect(getSlotShiftType(slots, ISO_MON, 'alice', 'AM')).toBe('F');
+  });
+});
+
+describe('getSlotNominalH', () => {
+  it('Ouverture Mat. → 4.5h', () => {
+    expect(getSlotNominalH({}, ISO_MON, 'alice', 'M', 1)).toBe(4.5);
+  });
+  it('Ouverture A-m. → 4.0h', () => {
+    expect(getSlotNominalH({}, ISO_MON, 'alice', 'AM', 1)).toBe(4.0);
+  });
+  it('Fermeture Mat. → 4.0h', () => {
+    expect(getSlotNominalH(s(ISO_MON, 'alice', 'M_shift', 'F'), ISO_MON, 'alice', 'M', 1)).toBe(4.0);
+  });
+  it('Fermeture A-m. → 4.25h', () => {
+    expect(getSlotNominalH(s(ISO_MON, 'alice', 'AM_shift', 'F'), ISO_MON, 'alice', 'AM', 1)).toBe(4.25);
+  });
+  it('Demi-j. Mat. → 4.0h', () => {
+    expect(getSlotNominalH(s(ISO_MON, 'alice', 'M_shift', 'D'), ISO_MON, 'alice', 'M', 1)).toBe(4.0);
+  });
+  it('Demi-j. A-m. → 4.0h', () => {
+    expect(getSlotNominalH(s(ISO_MON, 'alice', 'AM_shift', 'D'), ISO_MON, 'alice', 'AM', 1)).toBe(4.0);
+  });
+  it('Carla samedi Mat. → 7.25h', () => {
+    expect(getSlotNominalH({}, ISO_SAT, 'carla', 'M', 6)).toBe(7.25);
+  });
+  it('autre ASV samedi Mat. → 7.0h', () => {
+    expect(getSlotNominalH({}, ISO_SAT, 'alice', 'M', 6)).toBe(7.0);
+  });
+  it('samedi A-m. → 0h (non travaillé)', () => {
+    expect(getSlotNominalH({}, ISO_SAT, 'carla', 'AM', 6)).toBe(0);
+    expect(getSlotNominalH({}, ISO_SAT, 'alice', 'AM', 6)).toBe(0);
+  });
+});
+
+describe('getDayNominalH — modèle presence-aware (Lot 2)', () => {
+  it('aucun créneau présent → 0h', () => {
+    expect(getDayNominalH({}, ISO_MON, 'carla', 1)).toBe(0);
+    expect(getDayNominalH({}, ISO_SAT, 'carla', 6)).toBe(0);
+  });
+  it('journée complète Ouverture → 8.5h (4.5+4.0)', () => {
+    expect(getDayNominalH(present(ISO_MON, 'alice', 'M', 'AM'), ISO_MON, 'alice', 1)).toBe(8.5);
+  });
+  it('journée complète Fermeture → 8.25h (4.0+4.25)', () => {
+    const slots = { ...present(ISO_MON, 'alice', 'M', 'AM'), ...s(ISO_MON, 'alice', 'shift', 'F') };
+    expect(getDayNominalH(slots, ISO_MON, 'alice', 1)).toBeCloseTo(8.25);
+  });
+  it('Mat. seul Ouverture → 4.5h', () => {
+    expect(getDayNominalH(present(ISO_MON, 'alice', 'M'), ISO_MON, 'alice', 1)).toBe(4.5);
+  });
+  it('A-m. seul Fermeture → 4.25h', () => {
+    const slots = { ...present(ISO_MON, 'alice', 'AM'), ...s(ISO_MON, 'alice', 'AM_shift', 'F') };
+    expect(getDayNominalH(slots, ISO_MON, 'alice', 1)).toBe(4.25);
+  });
+  it('Carla samedi Mat. présent → 7.25h (contrat)', () => {
+    expect(getDayNominalH(present(ISO_SAT, 'carla', 'M'), ISO_SAT, 'carla', 6)).toBe(7.25);
+  });
+  it('autre ASV samedi Mat. présent → 7.0h', () => {
+    expect(getDayNominalH(present(ISO_SAT, 'alice', 'M'), ISO_SAT, 'alice', 6)).toBe(7.0);
   });
 });
 
