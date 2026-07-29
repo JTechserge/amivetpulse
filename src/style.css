@@ -99,6 +99,8 @@
   --color-closing:#D1FAE5;
   --color-closing-border:#34D399;
   --color-closing-text:#065F46;
+  --color-cp:#D1FAE5;
+  --color-cp-text:#065F46;
   --shadow-sm:0 1px 3px rgba(30,23,10,0.06);
   --shadow-md:0 4px 14px rgba(30,23,10,0.09);
   --shadow-lg:0 12px 32px rgba(30,23,10,0.14);
@@ -153,6 +155,8 @@
     --color-closing:#022C22;
     --color-closing-border:#065F46;
     --color-closing-text:#D1FAE5;
+    --color-cp:#022C22;
+    --color-cp-text:#D1FAE5;
     --shadow-sm:0 1px 3px rgba(0,0,0,0.4);
     --shadow-md:0 4px 14px rgba(0,0,0,0.5);
     --shadow-lg:0 12px 32px rgba(0,0,0,0.6);
@@ -198,6 +202,8 @@
   --color-closing:#022C22;
   --color-closing-border:#065F46;
   --color-closing-text:#D1FAE5;
+  --color-cp:#022C22;
+  --color-cp-text:#D1FAE5;
   --shadow-sm:0 1px 3px rgba(0,0,0,0.4);
   --shadow-md:0 4px 14px rgba(0,0,0,0.5);
   --shadow-lg:0 12px 32px rgba(0,0,0,0.6);
@@ -242,6 +248,8 @@
   --color-closing:#D1FAE5;
   --color-closing-border:#34D399;
   --color-closing-text:#065F46;
+  --color-cp:#D1FAE5;
+  --color-cp-text:#065F46;
   --shadow-sm:0 1px 3px rgba(30,23,10,0.06);
   --shadow-md:0 4px 14px rgba(30,23,10,0.09);
   --shadow-lg:0 12px 32px rgba(30,23,10,0.14);
