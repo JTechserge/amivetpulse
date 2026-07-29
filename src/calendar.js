@@ -2100,6 +2100,7 @@ function initCalendarInteractions() {
     if (!cell || cell.dataset.action) return;
     if (!_canEditSlot(cell.dataset.person)) return;
     e.preventDefault();
+    if (!isASVPerson(cell.dataset.person)) return; // VET : clic long uniquement
     if (dragCtx) {
       clearTimeout(dragCtx.longPressTimer);
       dragCtx = null;
