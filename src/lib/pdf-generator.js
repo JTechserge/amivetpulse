@@ -3,7 +3,7 @@ import html2canvas from 'html2canvas';
 import { MONTH_NAMES } from '../config.js';
 import { asvFullName, escapeHTML, fmtISO, holidayName, formatHHMM, daysInMonth } from '../utils.js';
 import {
-  getSlotState, getSlotLabel, getShiftType, getEarlyDep,
+  getSlotState, getSlotLabel, getShiftType,
   getDayAllOtH, getDayDeficitH, getDayNominal,
 } from '../slots.js';
 
@@ -76,7 +76,6 @@ function buildSheetHtml({ personId, year, month, signedAt, signedName, signature
     const present = mS === 'present' || amS === 'present';
     const absent  = mS === 'absent'  && amS === 'absent';
     const shType  = getShiftType(iso, personId);
-    const early   = getEarlyDep(iso, personId);
     const otH     = present ? getDayAllOtH(iso, personId)  : 0;
     const defH    = present ? getDayDeficitH(iso, personId) : 0;
     const nom     = present ? getDayNominal(iso, personId)  : 0;
@@ -92,7 +91,7 @@ function buildSheetHtml({ personId, year, month, signedAt, signedName, signature
         ? '<em>Congé</em>'
         : lbl.includes('maladie') ? '<em>Maladie</em>' : '<em>Repos / Congé</em>';
     } else if (present) {
-      stateCell = `Poste ${shType === 'F' ? 'Fermeture' : 'Ouverture'}${early ? ` — départ ${early}` : ''}`;
+      stateCell = `Poste ${shType === 'F' ? 'Fermeture' : 'Ouverture'}`;
     } else {
       stateCell = '<span style="color:#BBB;">—</span>';
     }

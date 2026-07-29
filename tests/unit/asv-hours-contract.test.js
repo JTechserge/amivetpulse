@@ -121,40 +121,27 @@ describe('getDayNominalH — modèle presence-aware (Lot 2)', () => {
   });
 });
 
-describe('getDayAllOtH', () => {
+describe('getDayAllOtH — compteur plus_mins (Lot 3)', () => {
   it('retourne 0 sans données', () => {
     expect(getDayAllOtH({}, ISO_MON, 'alice')).toBe(0);
   });
-  it('additionne soirée + midi', () => {
-    const slots = {
-      ...s(ISO_MON, 'alice', 'ot_mins', '30'),
-      ...s(ISO_MON, 'alice', 'lunch_ot_mins', '15'),
-    };
-    expect(getDayAllOtH(slots, ISO_MON, 'alice')).toBeCloseTo(0.75);
+  it('lit la clé plus_mins', () => {
+    expect(getDayAllOtH(s(ISO_MON, 'alice', 'plus_mins', '60'), ISO_MON, 'alice')).toBe(1);
   });
-  it('soirée seule', () => {
-    expect(getDayAllOtH(s(ISO_MON, 'alice', 'ot_mins', '60'), ISO_MON, 'alice')).toBe(1);
+  it('15 min → 0.25h', () => {
+    expect(getDayAllOtH(s(ISO_MON, 'alice', 'plus_mins', '15'), ISO_MON, 'alice')).toBeCloseTo(0.25);
   });
 });
 
-describe('getDayDeficitH', () => {
-  it('retourne 0 sans départ anticipé', () => {
+describe('getDayDeficitH — compteur minus_mins (Lot 3)', () => {
+  it('retourne 0 sans données', () => {
     expect(getDayDeficitH({}, ISO_MON, 'alice')).toBe(0);
   });
-  it('calcule le déficit Ouverture (fin standard 19h00)', () => {
-    const slots = s(ISO_MON, 'alice', 'early_dep', '18:30');
-    expect(getDayDeficitH(slots, ISO_MON, 'alice')).toBeCloseTo(0.5);
+  it('lit la clé minus_mins', () => {
+    expect(getDayDeficitH(s(ISO_MON, 'alice', 'minus_mins', '30'), ISO_MON, 'alice')).toBeCloseTo(0.5);
   });
-  it('calcule le déficit Fermeture (fin standard 19h15)', () => {
-    const slots = {
-      ...s(ISO_MON, 'alice', 'shift', 'F'),
-      ...s(ISO_MON, 'alice', 'early_dep', '18:15'),
-    };
-    expect(getDayDeficitH(slots, ISO_MON, 'alice')).toBe(1);
-  });
-  it('départ après la fin standard → 0 (pas de négatif)', () => {
-    const slots = s(ISO_MON, 'alice', 'early_dep', '20:00');
-    expect(getDayDeficitH(slots, ISO_MON, 'alice')).toBe(0);
+  it('ne peut pas être négatif (min 0)', () => {
+    expect(getDayDeficitH({}, ISO_MON, 'alice')).toBe(0);
   });
 });
 

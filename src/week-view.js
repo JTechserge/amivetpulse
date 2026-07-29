@@ -11,18 +11,13 @@ import {
   getShiftType,
   shiftTypeKey,
   getDayNominal,
-  getEarlyDep,
-  setEarlyDep,
-  getDayDeficitH,
-  getWeekOtMins,
-  setWeekOtMins,
-  getDayOtH,
-  getLunchOtMins,
-  setLunchOtMins,
-  getDayLunchOtH,
   getDayAllOtH,
+  getDayDeficitH,
+  getPlusMins,
+  setPlusMins,
+  getMinusMins,
+  setMinusMins,
   getOvertimeHours,
-  timeToMins,
 } from './slots.js';
 import { isMonthSigned } from './signatures.js';
 
@@ -186,7 +181,6 @@ function openMonthPrintWindow(pids, year, month) {
       const present = mS === 'present' || amS === 'present';
       const absent = mS === 'absent' && amS === 'absent';
       const shType = getShiftType(iso, pid);
-      const early = getEarlyDep(iso, pid);
       const otH = present ? getDayAllOtH(iso, pid) : 0;
       const defH = present ? getDayDeficitH(iso, pid) : 0;
       const nom = present ? getDayNominal(iso, pid) : 0;
@@ -211,7 +205,7 @@ function openMonthPrintWindow(pids, year, month) {
               : '<em>Repos / Congé</em>';
         rowCls = 'abs';
       } else if (present) {
-        stateCell = `Poste ${shType === 'F' ? 'Fermeture' : 'Ouverture'}${early ? ` &mdash; départ ${early}` : ''}`;
+        stateCell = `Poste ${shType === 'F' ? 'Fermeture' : 'Ouverture'}`;
       } else {
         stateCell = '<span class="dash">—</span>';
       }
@@ -359,59 +353,6 @@ function openMonthPrintPopup(viewKey) {
   };
 }
 
-function openEarlyDepPicker(iso, pid) {
-  const backdrop = document.getElementById('popover-backdrop');
-  const box = document.getElementById('popover-box');
-  const p = personOf(pid);
-  const current = getEarlyDep(iso, pid) || '';
-  const shType = getShiftType(iso, pid);
-  const stdEndStr = shType === 'F' ? '19h15' : '19h00';
-  // eslint-disable-next-line no-unsanitized/property
-  box.innerHTML = `
-    <div class="popover-title">🕐 Départ anticipé — ${escapeHTML(p?.short || pid)}</div>
-    <p style="font-size:12px;color:var(--color-text-muted);margin:0 0 12px;">
-      Poste ${shType === 'O' ? 'Ouverture' : 'Fermeture'} (fin standard <strong>${stdEndStr}</strong>)<br>
-      Sélectionnez l'heure de départ <strong>avant 19h00</strong>.
-    </p>
-    <div style="margin-bottom:14px;">
-      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Heure de départ :</label>
-      <input type="time" id="early-dep-time" min="15:00" max="18:59" step="900" value="${current || '18:00'}"
-        style="padding:7px 10px;border:1px solid var(--color-border);border-radius:6px;font-family:inherit;font-size:14px;width:100%;box-sizing:border-box;background:var(--color-surface);color:var(--color-text);">
-    </div>
-    ${current ? `<div style="margin-bottom:12px;"><button class="btn btn-sm" id="early-dep-clear" style="color:#B91C1C;border-color:#FCA5A5;">Supprimer le départ anticipé</button></div>` : ''}
-    <div class="popover-actions">
-      <button class="btn" id="popover-cancel">Annuler</button>
-      <button class="btn btn-primary" id="early-dep-save">Enregistrer</button>
-    </div>`;
-  backdrop.classList.add('open');
-  const close = () => backdrop.classList.remove('open');
-  box.querySelector('#popover-cancel').onclick = close;
-  backdrop.onclick = (e) => {
-    if (e.target === backdrop) close();
-  };
-  if (current)
-    box.querySelector('#early-dep-clear').onclick = () => {
-      _snapshotBeforeChange();
-      setEarlyDep(iso, pid, '');
-      _saveData();
-      close();
-      renderWeekViewASV();
-    };
-  box.querySelector('#early-dep-save').onclick = () => {
-    const val = box.querySelector('#early-dep-time').value;
-    if (!val) return;
-    if (timeToMins(val) >= 19 * 60) {
-      showToast("L'heure doit être avant 19h00", '⚠️');
-      return;
-    }
-    _snapshotBeforeChange();
-    setEarlyDep(iso, pid, val);
-    _saveData();
-    close();
-    renderWeekViewASV();
-  };
-  box.querySelector('#early-dep-time').focus();
-}
 
 function renderWeekViewASV() {
   const container = document.getElementById('asv-sub-week');
@@ -479,75 +420,46 @@ function renderWeekViewASV() {
     })
     .join('')}</tr>`;
 
-  // ── 2. Ligne Départ anticipé (toujours cliquable si édition possible) ─
-  const defRow = `<tr><td class="week-footer-label" style="font-size:9px;color:#DC2626;font-weight:700;line-height:1.3;">Départ<br>anticipé</td>${days
-    .map((d) => {
-      const iso = fmtISO(d);
-      if (isNonWorkingDay(d)) return `<td class="week-deficit-cell" style="background:#f8fafc;"></td>`;
-      if (!isDayPresent(d)) return `<td class="week-deficit-cell" style="${cellGrey(d)}"></td>`;
-      const defH = getDayDeficitH(iso, pid);
-      const early = getEarlyDep(iso, pid);
-      const ce = canEditDay(d);
-      const cAttr = ce
-        ? ` class="week-am-cell" data-am-iso="${iso}" data-am-pid="${pid}" style="cursor:pointer;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;" title="Cliquer pour définir un départ anticipé"`
-        : ' style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;"';
-      if (!defH)
-        return `<td class="week-deficit-cell"><div${cAttr}><span style="color:var(--color-text-muted);font-size:9px;">${ce ? '＋ ajouter' : '—'}</span></div></td>`;
-      const defMins = Math.round(defH * 60);
-      const defStr = `-${Math.floor(defMins / 60)}h${defMins % 60 > 0 ? String(defMins % 60).padStart(2, '0') : ''}`;
-      return `<td class="week-deficit-cell"><div${cAttr}><span style="font-size:16px;font-weight:800;color:#DC2626;">${defStr}</span><span style="font-size:9px;color:var(--color-text-muted);">${early}</span></div></td>`;
-    })
-    .join('')}</tr>`;
-
-  // ── 3. Zone H.supp. 13h→15h (toujours draggable si édition possible) ─
-  const LUNCH_SLOTS = 8,
-    LUNCH_START_MINS = 13 * 60;
-  function buildLunchOtCell(d) {
-    const iso = fmtISO(d);
-    const cg = cellGrey(d);
-    if (isNonWorkingDay(d)) return `<td class="week-ot-cell" style="background:#f8fafc;"></td>`;
-    if (!isDayPresent(d)) return `<td class="week-ot-cell" style="${cg}"></td>`;
-    const otMins = getLunchOtMins(iso, pid);
-    const filledSlots = Math.ceil(otMins / 15);
-    const ce = canEditDay(d);
-    const slots = Array.from({ length: LUNCH_SLOTS }, (_, i) => {
-      const slotStart = LUNCH_START_MINS + i * 15;
-      const h2 = Math.floor(slotStart / 60),
-        m2 = slotStart % 60;
-      const lbl = m2 === 0 ? `${h2}h` : '';
-      const filled = i < filledSlots;
-      const dAttr = ce ? ` data-ot-iso="${iso}" data-ot-pid="${pid}" data-ot-slot="${i}" data-ot-zone="lunch"` : '';
-      return `<div class="week-ot-slot${filled ? ' filled' : ''}${ce ? ' interactive' : ''}"${dAttr} title="${String(h2).padStart(2, '0')}:${String(m2).padStart(2, '0')}">${lbl ? `<span class="week-ot-lbl">${lbl}</span>` : ''}</div>`;
-    }).join('');
-    const lOtH = getDayLunchOtH(iso, pid);
-    return `<td class="week-ot-cell">${lOtH > 0 ? `<span class="week-ot-total">+${formatHHMM(lOtH)}</span>` : ''}<div class="week-ot-slots">${slots}</div></td>`;
+  // Helper format minutes → "+Xh YY" ou "−Xh YY"
+  function fmtCounter(mins, sign) {
+    if (!mins) return sign === '+' ? '—' : '—';
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return `${sign}${h}h${m > 0 ? String(m).padStart(2, '0') : ''}`;
   }
-  const lunchOtZoneRow = `<tr><td class="week-footer-label" style="font-size:9px;color:#16A34A;font-weight:700;line-height:1.4;">H.supp.<br><span style="font-size:8px;font-weight:400;color:var(--color-text-muted);">13h→15h</span></td>${days.map(buildLunchOtCell).join('')}</tr>`;
 
-  // ── 4. Zone H.supp. 19h→21h (toujours draggable si édition possible) ─
-  const OT_SLOTS = 8,
-    OT_START_MINS = 19 * 60;
-  function buildOtCell(d) {
+  // ── 2. Ligne H.supp. (+15 min par incrément) ─────────────────
+  function buildPlusCell(d) {
     const iso = fmtISO(d);
-    const cg = cellGrey(d);
-    if (isNonWorkingDay(d)) return `<td class="week-ot-cell" style="background:#f8fafc;"></td>`;
-    if (!isDayPresent(d)) return `<td class="week-ot-cell" style="${cg}"></td>`;
-    const otMins = getWeekOtMins(iso, pid);
-    const filledSlots = Math.ceil(otMins / 15);
+    if (isNonWorkingDay(d)) return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;
+    if (!isDayPresent(d)) return `<td class="week-footer-cell" style="${cellGrey(d)}"></td>`;
+    const mins = getPlusMins(iso, pid);
     const ce = canEditDay(d);
-    const slots = Array.from({ length: OT_SLOTS }, (_, i) => {
-      const slotStart = OT_START_MINS + i * 15;
-      const h2 = Math.floor(slotStart / 60),
-        m2 = slotStart % 60;
-      const lbl = m2 === 0 ? `${h2}h` : '';
-      const filled = i < filledSlots;
-      const dAttr = ce ? ` data-ot-iso="${iso}" data-ot-pid="${pid}" data-ot-slot="${i}" data-ot-zone="evening"` : '';
-      return `<div class="week-ot-slot${filled ? ' filled' : ''}${ce ? ' interactive' : ''}"${dAttr} title="${String(h2).padStart(2, '0')}:${String(m2).padStart(2, '0')}">${lbl ? `<span class="week-ot-lbl">${lbl}</span>` : ''}</div>`;
-    }).join('');
-    const otH = getDayOtH(iso, pid);
-    return `<td class="week-ot-cell">${otH > 0 ? `<span class="week-ot-total">+${formatHHMM(otH)}</span>` : ''}<div class="week-ot-slots">${slots}</div></td>`;
+    const lbl = fmtCounter(mins, '+');
+    if (!ce) return `<td class="week-footer-cell"><span style="font-size:11px;color:#16A34A;font-weight:700;">${lbl}</span></td>`;
+    return `<td class="week-footer-cell" style="padding:2px;"><div style="display:flex;align-items:center;gap:2px;justify-content:center;">
+      <button class="week-counter-btn" data-ciso="${iso}" data-cpid="${pid}" data-ctype="plus" data-cdelta="-15" style="font-size:13px;color:#DC2626;padding:0 3px;background:none;border:none;cursor:pointer;"${mins === 0 ? ' disabled' : ''}>−</button>
+      <span style="font-size:10px;font-weight:700;color:#16A34A;min-width:32px;text-align:center;">${lbl}</span>
+      <button class="week-counter-btn" data-ciso="${iso}" data-cpid="${pid}" data-ctype="plus" data-cdelta="15" style="font-size:13px;color:#16A34A;padding:0 3px;background:none;border:none;cursor:pointer;">＋</button>
+    </div></td>`;
   }
-  const otZoneRow = `<tr><td class="week-footer-label" style="font-size:9px;color:#16A34A;font-weight:700;line-height:1.4;">H.supp.<br><span style="font-size:8px;font-weight:400;color:var(--color-text-muted);">19h→21h</span></td>${days.map(buildOtCell).join('')}</tr>`;
+  const plusRow = `<tr><td class="week-footer-label" style="font-size:9px;color:#16A34A;font-weight:700;line-height:1.4;">H.supp.<br><span style="font-size:8px;font-weight:400;color:var(--color-text-muted);">+15 min</span></td>${days.map(buildPlusCell).join('')}</tr>`;
+
+  // ── 3. Ligne H.manq. (−15 min par incrément) ─────────────────
+  function buildMinusCell(d) {
+    const iso = fmtISO(d);
+    if (isNonWorkingDay(d)) return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;
+    if (!isDayPresent(d)) return `<td class="week-footer-cell" style="${cellGrey(d)}"></td>`;
+    const mins = getMinusMins(iso, pid);
+    const ce = canEditDay(d);
+    const lbl = fmtCounter(mins, '−');
+    if (!ce) return `<td class="week-footer-cell"><span style="font-size:11px;color:#DC2626;font-weight:700;">${lbl}</span></td>`;
+    return `<td class="week-footer-cell" style="padding:2px;"><div style="display:flex;align-items:center;gap:2px;justify-content:center;">
+      <button class="week-counter-btn" data-ciso="${iso}" data-cpid="${pid}" data-ctype="minus" data-cdelta="-15" style="font-size:13px;color:#16A34A;padding:0 3px;background:none;border:none;cursor:pointer;"${mins === 0 ? ' disabled' : ''}>−</button>
+      <span style="font-size:10px;font-weight:700;color:#DC2626;min-width:32px;text-align:center;">${lbl}</span>
+      <button class="week-counter-btn" data-ciso="${iso}" data-cpid="${pid}" data-ctype="minus" data-cdelta="15" style="font-size:13px;color:#DC2626;padding:0 3px;background:none;border:none;cursor:pointer;">＋</button>
+    </div></td>`;
+  }
+  const minusRow = `<tr><td class="week-footer-label" style="font-size:9px;color:#DC2626;font-weight:700;line-height:1.4;">H.manq.<br><span style="font-size:8px;font-weight:400;color:var(--color-text-muted);">−15 min</span></td>${days.map(buildMinusCell).join('')}</tr>`;
 
   // ── 5. Ligne heures totales ───────────────────────────────
   const totRow = `<tr><td class="week-footer-label">Heures</td>${days
@@ -598,7 +510,7 @@ function renderWeekViewASV() {
       ${asvPicker}
     </div>
     <div class="week-view-wrap card" style="padding:0;">
-      <table class="week-table"><thead>${headerRow}</thead><tbody>${shiftRow}${defRow}${lunchOtZoneRow}${otZoneRow}${totRow}</tbody></table>
+      <table class="week-table"><thead>${headerRow}</thead><tbody>${shiftRow}${plusRow}${minusRow}${totRow}</tbody></table>
     </div>
     <div class="week-total-banner">
       <span>Total semaine</span>
@@ -628,16 +540,15 @@ function renderWeekViewASV() {
       const label = `${monday.getDate()} ${MONTH_NAMES[monday.getMonth()].toLowerCase()} – ${days[5].getDate()} ${MONTH_NAMES[days[5].getMonth()].toLowerCase()}`;
       openConfirmModal({
         title: `Vider la semaine du ${label} ?`,
-        message: `Tous les ajustements de ${p?.short || ''} (départs anticipés, H.supp.) seront effacés.`,
+        message: `Tous les compteurs de ${p?.short || ''} (H.supp., H.manq.) seront remis à zéro.`,
         confirmLabel: 'Vider',
         onConfirm: () => {
           _snapshotBeforeChange();
           days.forEach((d) => {
             if (isSunday(d) || !canEditDay(d)) return;
             const iso = fmtISO(d);
-            setEarlyDep(iso, pid, '');
-            setWeekOtMins(iso, pid, 0);
-            setLunchOtMins(iso, pid, 0);
+            setPlusMins(iso, pid, 0);
+            setMinusMins(iso, pid, 0);
           });
           _saveData();
           showToast(`Semaine vidée (${p?.short || ''})`, '🗑️');
@@ -656,6 +567,18 @@ function renderWeekViewASV() {
       const iso2 = btn.dataset.shiftIso,
         pid2 = btn.dataset.shiftPid;
       store.DATA.slots[shiftTypeKey(iso2, pid2)] = getShiftType(iso2, pid2) === 'O' ? 'F' : 'O';
+      _saveData(false);
+      renderWeekViewASV();
+    });
+  });
+
+  container.querySelectorAll('.week-counter-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const { ciso, cpid, ctype, cdelta } = btn.dataset;
+      const delta = parseInt(cdelta, 10);
+      _snapshotBeforeChange();
+      if (ctype === 'plus') setPlusMins(ciso, cpid, getPlusMins(ciso, cpid) + delta);
+      else setMinusMins(ciso, cpid, getMinusMins(ciso, cpid) + delta);
       _saveData(false);
       renderWeekViewASV();
     });
@@ -795,5 +718,4 @@ export {
   getWeekAlerts,
   openMonthPrintWindow,
   openMonthPrintPopup,
-  openEarlyDepPicker,
 };

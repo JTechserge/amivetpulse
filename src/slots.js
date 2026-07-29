@@ -182,65 +182,29 @@ export function getDayNominal(iso, pid) {
   }, 0);
 }
 
-// Départ anticipé (vue semaine)
-export function earlyDepKey(iso, pid) {
-  return `${iso}_${pid}_early_dep`;
+// Compteur heures supplémentaires (+15 min par incrément, Lot 3)
+export function plusMinsKey(iso, pid) { return `${iso}_${pid}_plus_mins`; }
+export function getPlusMins(iso, pid) { return parseInt(store.DATA.slots[plusMinsKey(iso, pid)]) || 0; }
+export function setPlusMins(iso, pid, v) {
+  const n = Math.max(0, v);
+  if (n > 0) store.DATA.slots[plusMinsKey(iso, pid)] = n;
+  else delete store.DATA.slots[plusMinsKey(iso, pid)];
 }
-export function getEarlyDep(iso, pid) {
-  return store.DATA.slots[earlyDepKey(iso, pid)] || '';
-}
-export function setEarlyDep(iso, pid, v) {
-  if (v) store.DATA.slots[earlyDepKey(iso, pid)] = v;
-  else delete store.DATA.slots[earlyDepKey(iso, pid)];
-}
+export function getPlusH(iso, pid) { return getPlusMins(iso, pid) / 60; }
 
-// Heures déficitaires : départ anticipé personnel ou fermeture anticipée clinique (le plus tôt des deux)
-export function getDayDeficitH(iso, pid) {
-  const earlyDep = getEarlyDep(iso, pid);
-  const clinicEarly = getClinicEarlyClose(iso);
-  const effectiveDep =
-    earlyDep && clinicEarly
-      ? timeToMins(earlyDep) < timeToMins(clinicEarly)
-        ? earlyDep
-        : clinicEarly
-      : earlyDep || clinicEarly;
-  if (!effectiveDep) return 0;
-  const stdEndMins = getShiftType(iso, pid) === 'F' ? 19 * 60 + 15 : 19 * 60;
-  return Math.max(0, (stdEndMins - timeToMins(effectiveDep)) / 60);
+// Compteur heures manquantes (−15 min par incrément, Lot 3)
+export function minusMinsKey(iso, pid) { return `${iso}_${pid}_minus_mins`; }
+export function getMinusMins(iso, pid) { return parseInt(store.DATA.slots[minusMinsKey(iso, pid)]) || 0; }
+export function setMinusMins(iso, pid, v) {
+  const n = Math.max(0, v);
+  if (n > 0) store.DATA.slots[minusMinsKey(iso, pid)] = n;
+  else delete store.DATA.slots[minusMinsKey(iso, pid)];
 }
+export function getMinusH(iso, pid) { return getMinusMins(iso, pid) / 60; }
 
-// Heures supplémentaires semaine (zone drag, stockées en minutes entières)
-export function weekOtKey(iso, pid) {
-  return `${iso}_${pid}_ot_mins`;
-}
-export function getWeekOtMins(iso, pid) {
-  return parseInt(store.DATA.slots[weekOtKey(iso, pid)], 10) || 0;
-}
-export function setWeekOtMins(iso, pid, v) {
-  if (v > 0) store.DATA.slots[weekOtKey(iso, pid)] = v;
-  else delete store.DATA.slots[weekOtKey(iso, pid)];
-}
-export function getDayOtH(iso, pid) {
-  return getWeekOtMins(iso, pid) / 60;
-}
-
-// Heures supplémentaires pause repas
-export function lunchOtKey(iso, pid) {
-  return `${iso}_${pid}_lunch_ot_mins`;
-}
-export function getLunchOtMins(iso, pid) {
-  return parseInt(store.DATA.slots[lunchOtKey(iso, pid)], 10) || 0;
-}
-export function setLunchOtMins(iso, pid, v) {
-  if (v > 0) store.DATA.slots[lunchOtKey(iso, pid)] = v;
-  else delete store.DATA.slots[lunchOtKey(iso, pid)];
-}
-export function getDayLunchOtH(iso, pid) {
-  return getLunchOtMins(iso, pid) / 60;
-}
-export function getDayAllOtH(iso, pid) {
-  return getDayOtH(iso, pid) + getDayLunchOtH(iso, pid);
-}
+// Délégation pour compatibilité avec les appelants existants (dashboard, vue semaine)
+export function getDayAllOtH(iso, pid) { return getPlusH(iso, pid); }
+export function getDayDeficitH(iso, pid) { return getMinusH(iso, pid); }
 
 // Note de jour (texte libre par ASV)
 export function dayNoteKey(iso, pid) {

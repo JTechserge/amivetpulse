@@ -41,16 +41,11 @@ export function getDayNominalH(slots, iso, pid, wd){
 }
 
 export function getDayAllOtH(slots, iso, pid){
-  const eveningMins = parseInt(slots[`${iso}_${pid}_ot_mins`]) || 0;
-  const lunchMins   = parseInt(slots[`${iso}_${pid}_lunch_ot_mins`]) || 0;
-  return (eveningMins + lunchMins) / 60;
+  return (parseInt(slots[`${iso}_${pid}_plus_mins`]) || 0) / 60;
 }
 
 export function getDayDeficitH(slots, iso, pid){
-  const early = slots[`${iso}_${pid}_early_dep`] || '';
-  if(!early) return 0;
-  const stdEnd = getShiftType(slots, iso, pid) === 'F' ? 19 * 60 + 15 : 19 * 60;
-  return Math.max(0, (stdEnd - timeToMins(early)) / 60);
+  return (parseInt(slots[`${iso}_${pid}_minus_mins`]) || 0) / 60;
 }
 
 /** Rétrocompatibilité : ancienne clé _overtime (avant la refacto vue semaine ASV). */

@@ -52,9 +52,8 @@ import {
   getDayNominal,
   getDayAllOtH,
   getDayDeficitH,
-  setEarlyDep,
-  setWeekOtMins,
-  setLunchOtMins,
+  setPlusMins,
+  setMinusMins,
   setDayNote,
   getOvertimeNote,
   setOvertimeNote,
@@ -68,7 +67,6 @@ import {
   getWeekAlerts,
   computeWeekTotalHours,
   renderWeekViewASV,
-  openEarlyDepPicker,
   openMonthPrintPopup,
 } from './week-view.js';
 
@@ -281,10 +279,10 @@ function clearMonth(viewKey, month, personId) {
       SLOTS.forEach((slot) => setSlotState(iso, p.id, slot, 'empty'));
       setOvertimeHours(iso, p.id, 0);
     });
-    // ASV : efface aussi les ajustements semaine et notes
+    // ASV : efface aussi les compteurs HS/manquants et notes
     asvTargets.forEach((p) => {
-      setEarlyDep(iso, p.id, '');
-      setWeekOtMins(iso, p.id, 0);
+      setPlusMins(iso, p.id, 0);
+      setMinusMins(iso, p.id, 0);
       setDayNote(iso, p.id, '');
     });
     if (!personId) setDayComment(iso, '');
@@ -764,7 +762,8 @@ function buildWeekGrid(year, month, people) {
               }
 
               // Bloc fusionné couvrant exactement spanHalves demi-colonnes
-              const lblTypeCls = { repos: ' lbl-repos', sick: ' lbl-sick', accident: ' lbl-accident' }[bi.visualType] ?? '';
+              const lblTypeCls =
+                { repos: ' lbl-repos', sick: ' lbl-sick', accident: ' lbl-accident' }[bi.visualType] ?? '';
               const lbl = bi.label
                 ? `<div class="pstrip-leave-label-merged${lblTypeCls}">${escapeHTML(bi.label)}</div>`
                 : bi.visualType === 'pending'
@@ -1320,7 +1319,12 @@ function startDrag(cell) {
   const { date: iso, person: personId, slot } = cell.dataset;
   const isASVDrag = _getCurrentView() === 'asv' && isASVPerson(personId);
   let paintValue;
-  if (isASVDrag && (store.calMonthPaintMode === 'opening' || store.calMonthPaintMode === 'closing' || store.calMonthPaintMode === 'demi')) {
+  if (
+    isASVDrag &&
+    (store.calMonthPaintMode === 'opening' ||
+      store.calMonthPaintMode === 'closing' ||
+      store.calMonthPaintMode === 'demi')
+  ) {
     paintValue = 'present';
   } else if (
     isASVDrag &&
@@ -1358,7 +1362,13 @@ function applyPaint(cell, value) {
   // Outil congé : ne jamais écraser un arrêt maladie ou un accident du travail déjà posé
   if (dragCtx.paintMode === 'conge') {
     const lc = getSlotLabel(iso, personId, slot).toLowerCase().trim();
-    if (lc === 'maladie' || lc === 'arrêt maladie' || lc === 'arrêt' || lc === 'accident du travail' || lc === 'accident')
+    if (
+      lc === 'maladie' ||
+      lc === 'arrêt maladie' ||
+      lc === 'arrêt' ||
+      lc === 'accident du travail' ||
+      lc === 'accident'
+    )
       return;
   }
   dragCtx.touched.add(`${iso}|${personId}|${slot}`);
@@ -2178,55 +2188,6 @@ function initCalendarInteractions() {
     renderWeekViewASV();
   });
 
-  // Clic sur cellule après-midi → départ anticipé
-  document.addEventListener('click', (e) => {
-    const cell = e.target.closest('.week-am-cell[data-am-iso]');
-    if (!cell) return;
-    openEarlyDepPicker(cell.dataset.amIso, cell.dataset.amPid);
-  });
-
-  // Drag sur les slots H.supp.
-  const otDragCtx = { active: false, iso: null, pid: null, zone: 'evening', startSlot: 0, curSlot: 0, _preview: 0 };
-  function otApplyDrag(slot) {
-    if (!otDragCtx.active) return;
-    otDragCtx.curSlot = slot;
-    const maxSlot = Math.max(otDragCtx.startSlot, slot);
-    document
-      .querySelectorAll(`.week-ot-slot[data-ot-iso="${otDragCtx.iso}"][data-ot-zone="${otDragCtx.zone}"]`)
-      .forEach((el) => {
-        el.classList.toggle('drag-preview', parseInt(el.dataset.otSlot, 10) <= maxSlot);
-      });
-    otDragCtx._preview = maxSlot + 1;
-  }
-  document.addEventListener('mousedown', (e) => {
-    const slot = e.target.closest('.week-ot-slot.interactive');
-    if (!slot) return;
-    e.preventDefault();
-    otDragCtx.active = true;
-    otDragCtx.iso = slot.dataset.otIso;
-    otDragCtx.pid = slot.dataset.otPid;
-    otDragCtx.zone = slot.dataset.otZone || 'evening';
-    otDragCtx.startSlot = parseInt(slot.dataset.otSlot, 10);
-    otDragCtx.curSlot = otDragCtx.startSlot;
-    otDragCtx._preview = otDragCtx.startSlot + 1;
-    otApplyDrag(otDragCtx.startSlot);
-  });
-  document.addEventListener('mousemove', (e) => {
-    if (!otDragCtx.active) return;
-    const slot = e.target.closest('.week-ot-slot.interactive');
-    if (slot && slot.dataset.otIso === otDragCtx.iso && slot.dataset.otZone === otDragCtx.zone)
-      otApplyDrag(parseInt(slot.dataset.otSlot, 10));
-  });
-  document.addEventListener('mouseup', () => {
-    if (!otDragCtx.active) return;
-    otDragCtx.active = false;
-    const newMins = (otDragCtx._preview || 0) * 15;
-    _snapshotBeforeChange();
-    if (otDragCtx.zone === 'lunch') setLunchOtMins(otDragCtx.iso, otDragCtx.pid, newMins);
-    else setWeekOtMins(otDragCtx.iso, otDragCtx.pid, newMins);
-    _saveData();
-    renderWeekViewASV();
-  });
 
   document.addEventListener('click', (e) => {
     const viewKey = calViewKeyOfEventTarget(e.target);
