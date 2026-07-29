@@ -18,13 +18,21 @@ export interface UserProfile {
 }
 
 /**
- * Extrait le person_id d'une clé de planning "YYYY-MM-DD_personId[_suffixe]".
+ * Extrait le person_id d'une clé de planning.
+ * Formats reconnus :
+ *  - "YYYY-MM-DD_<personId>[_suffixe]" (format classique)
+ *  - "forecast_<personId>_<YYYY-MM-DD>"  (clé prévisionnel hebdo)
+ *  - "forecast_sig_<personId>_<year>"    (clé signature prévisionnel)
  * Contrainte : les person_id ne doivent jamais contenir `_` (voir config.js côté front).
  */
 export function extractPersonIdFromKey(key: string): string | null {
   if (!key) return null;
-  const m = key.match(/^\d{4}-\d{2}-\d{2}_([^_]+)/);
-  return m ? m[1] : null;
+  // Format forecast_<pid>_YYYY-MM-DD ou forecast_sig_<pid>_<year>
+  const fm = key.match(/^forecast(?:_sig)?_([^_]+)_/);
+  if (fm) return fm[1];
+  // Format date classique YYYY-MM-DD_<pid>_...
+  const dm = key.match(/^\d{4}-\d{2}-\d{2}_([^_]+)/);
+  return dm ? dm[1] : null;
 }
 
 /** Renvoie les clés dont la valeur diffère entre deux états. */
