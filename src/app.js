@@ -24,6 +24,7 @@ import { loadAnnouncements, renderAnnounces } from './announcements.js';
 import { setupSignatures, loadSignatures, openSignConfirmModal } from './signatures.js';
 import { isASVPerson, setSlotState, setSlotLabel } from './slots.js';
 import { setupAnnualView, renderAnnualViewForGroup } from './annual-view.js';
+import { setupForecast, renderForecastPage } from './forecast.js';
 import { setupDashboard, renderDashboard, setDashSubTab, countPendingLeaveRequests } from './dashboard.js';
 import { setupWeekView, renderWeekViewASV } from './week-view.js';
 import {
@@ -561,8 +562,14 @@ function renderGroupSubPage(group) {
   const g = GROUP_VIEWS[group];
   const sub = store.subNavState[group];
   if (sub === 'calendar') renderCalendarView(g.calendarViewKey);
-  else if (sub === 'forecast') renderCalendarView(g.forecastViewKey);
-  else if (sub === 'week' && group === 'asv') renderWeekViewASV();
+  else if (sub === 'forecast') {
+    if (group === 'asv') {
+      const container = document.getElementById(g.forecastContainer);
+      renderForecastPage(container, store.CAL_VIEWS[g.forecastViewKey].year);
+    } else {
+      renderCalendarView(g.forecastViewKey);
+    }
+  } else if (sub === 'week' && group === 'asv') renderWeekViewASV();
   else renderAnnualViewForGroup(group);
 }
 function switchSubPage(group, subKey) {
@@ -960,6 +967,7 @@ setupWeekView({
 setupLogin({ loadCurrentUser, initApp });
 setupSignatures({ onLoaded: renderCurrentView, renderCalendarView });
 setupAnnualView({ switchSubPage, switchView, openDaySidebar, saveViewState, buildLegendColors, GROUP_VIEWS, saveData, snapshotBeforeChange });
+setupForecast({ saveData, snapshotBeforeChange });
 setupDashboard({
   openResetYearModal,
   saveViewState,
