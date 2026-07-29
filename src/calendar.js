@@ -239,16 +239,14 @@ function buildCalendarToolbar(viewKey) {
   const paintBar = hasASV
     ? `
     <div class="cal-paint-bar" id="cal-paint-bar-${viewKey}"${monthClosed && isCurrentUserASV ? ' style="opacity:0.4;pointer-events:none;" title="Mois clôturé"' : ''}>
-      <label for="cal-paint-select-${viewKey}" style="font-size:11px;font-weight:600;color:var(--color-text-muted);">Outil :</label>
-      <select class="paint-tool-select" id="cal-paint-select-${viewKey}">
-        <option value="opening" ${store.calMonthPaintMode === 'opening' ? 'selected' : ''}>🟢 Ouverture</option>
-        <option value="closing" ${store.calMonthPaintMode === 'closing' ? 'selected' : ''}>🌿 Fermeture</option>
-        <option value="demi" ${store.calMonthPaintMode === 'demi' ? 'selected' : ''}>🩷 Demi-journée</option>
-        <option value="conge" ${store.calMonthPaintMode === 'conge' ? 'selected' : ''}>🔵 Congé</option>
-        <option value="maladie" ${store.calMonthPaintMode === 'maladie' ? 'selected' : ''}>🤒 Arrêt maladie</option>
-        <option value="accident" ${store.calMonthPaintMode === 'accident' ? 'selected' : ''}>🤕 Accident travail</option>
-        <option value="erase" ${store.calMonthPaintMode === 'erase' ? 'selected' : ''}>🧹 Gomme</option>
-      </select>
+      <span style="font-size:11px;font-weight:600;color:var(--color-text-muted);">Outil :</span>
+      <button class="paint-tool${store.calMonthPaintMode === 'opening' ? ' active' : ''}" data-paint="opening" title="Ouverture — Mat. 8h30→13h | A-m. 15h→19h">🟢 Ouverture</button>
+      <button class="paint-tool${store.calMonthPaintMode === 'closing' ? ' active' : ''}" data-paint="closing" title="Fermeture — Mat. 9h→13h | A-m. 15h→19h15">🌿 Fermeture</button>
+      <button class="paint-tool${store.calMonthPaintMode === 'demi' ? ' active' : ''}" data-paint="demi" title="Demi-journée — Mat. 9h→13h | A-m. 15h→19h">🩷 Demi-j.</button>
+      <button class="paint-tool${store.calMonthPaintMode === 'conge' ? ' active' : ''}" data-paint="conge" title="Demande de congé (validation vétérinaires)">🔵 Congé</button>
+      <button class="paint-tool${store.calMonthPaintMode === 'maladie' ? ' active' : ''}" data-paint="maladie" title="Arrêt maladie (direct, sans approbation)">🤒 Maladie</button>
+      <button class="paint-tool${store.calMonthPaintMode === 'accident' ? ' active' : ''}" data-paint="accident" title="Accident du travail (direct, sans approbation)">🤕 Accident</button>
+      <button class="paint-tool paint-tool-erase${store.calMonthPaintMode === 'erase' ? ' active' : ''}" data-paint="erase" title="Gomme — efface la case">🧹 Gomme</button>
     </div>`
     : '';
   return `
@@ -1434,7 +1432,14 @@ function applyPaint(cell, value) {
     setSlotState(iso, personId, slot, value);
   }
   // Vue mensuelle ASV : toute modification dans les 14 prochains jours → approbation vétérinaire
-  if (dragCtx.paintMode && dragCtx.paintMode !== 'erase' && dragCtx.paintMode !== 'maladie' && dragCtx.paintMode !== 'accident' && isASVPerson(personId) && isWithinNextTwoWeeks(iso)) {
+  if (
+    dragCtx.paintMode &&
+    dragCtx.paintMode !== 'erase' &&
+    dragCtx.paintMode !== 'maladie' &&
+    dragCtx.paintMode !== 'accident' &&
+    isASVPerson(personId) &&
+    isWithinNextTwoWeeks(iso)
+  ) {
     setChangeDecision(iso, personId, slot, 'pending');
   }
   updateHalfDOM(cell);
@@ -2183,15 +2188,15 @@ function initCalendarInteractions() {
     }
   });
 
-  // Select paint-tool (sélection de l'outil de peinture mensuelle)
-  document.addEventListener('change', (e) => {
-    const sel = e.target.closest('.paint-tool-select');
-    if (sel && sel.value) {
-      store.calMonthPaintMode = sel.value;
-      // Synchroniser tous les selects (multi-vues)
-      document.querySelectorAll('.paint-tool-select').forEach((s) => {
-        s.value = store.calMonthPaintMode;
-      });
+  // Boutons paint-tool (sélection de l'outil de peinture mensuelle)
+  document.addEventListener('click', (e) => {
+    const paintBtn = e.target.closest('.paint-tool');
+    if (paintBtn && paintBtn.dataset.paint) {
+      store.calMonthPaintMode = paintBtn.dataset.paint;
+      document
+        .querySelectorAll('.paint-tool')
+        .forEach((b) => b.classList.toggle('active', b.dataset.paint === store.calMonthPaintMode));
+      return;
     }
   });
 
