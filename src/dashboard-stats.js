@@ -33,6 +33,7 @@ import {
   getDayDeficitH,
   getDayAllOtH,
   isClinicClosed,
+  getForecastWeek,
 } from './slots.js';
 import { getSignatureDetail } from './signatures.js';
 
@@ -812,6 +813,28 @@ export function buildASVSaturdayEquityCard(year) {
 }
 
 // ── Carte 4 : Heures mensuelles — tableau compact ──────────────
+// Lot 8 : calcule les heures prévisionnel pour un mois donné en sommant les semaines qui y tombent.
+function computeASVForecastMonthH(pid, year, month) {
+  let total = 0;
+  // Itérer sur toutes les semaines de l'année
+  let d = getWeekMondayDate(new Date(year, 0, 1));
+  const limit = new Date(year, 11, 31);
+  while (d <= limit) {
+    const mondayISO = fmtISO(d);
+    const v = getForecastWeek(pid, mondayISO);
+    if (v && v !== 'CP') {
+      // Associer la semaine au mois de son vendredi (cohérent avec buildASVForecastSection)
+      const friday = new Date(d);
+      friday.setDate(friday.getDate() + 4);
+      const mo = friday.getFullYear() === year ? friday.getMonth() : (d.getFullYear() === year ? d.getMonth() : -1);
+      if (mo === month) total += parseFloat(v) || 0;
+    }
+    d = new Date(d);
+    d.setDate(d.getDate() + 7);
+  }
+  return total;
+}
+
 export function buildASVMonthlyTable(year) {
   const cy = getCurrentYear();
   const cm = today.getMonth();
@@ -834,7 +857,12 @@ export function buildASVMonthlyTable(year) {
         const w = computeASVWorkedHoursNew(p.id, year, m);
         const pct = q.monthly > 0 ? w / q.monthly : 0;
         const icon = pct > 1.05 ? '🔴' : pct >= 0.9 ? '🟢' : w > 0 ? '🟡' : '';
-        return `<td style="padding:5px 10px;text-align:right;font-size:13px;">${icon} <strong>${formatNum(w)}</strong><span style="color:var(--color-text-muted);font-size:11px;">h</span></td>`;
+        const fcast = computeASVForecastMonthH(p.id, year, m);
+        const diff = fcast > 0 ? w - fcast : null;
+        const diffHtml = diff !== null
+          ? `<br><span style="font-size:10px;color:${Math.abs(diff) <= 2 ? '#16A34A' : diff < 0 ? '#DC2626' : '#D97706'};">${diff >= 0 ? '+' : ''}${formatNum(diff)}h vs prévis.</span>`
+          : '';
+        return `<td style="padding:5px 10px;text-align:right;font-size:13px;">${icon} <strong>${formatNum(w)}</strong><span style="color:var(--color-text-muted);font-size:11px;">h</span>${diffHtml}</td>`;
       })
       .join('');
     rows += `<tr style="${isCur ? 'background:#f0fdf4;font-weight:700;' : ''}">

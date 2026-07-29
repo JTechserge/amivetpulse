@@ -959,7 +959,7 @@ setupWeekView({
 });
 setupLogin({ loadCurrentUser, initApp });
 setupSignatures({ onLoaded: renderCurrentView, renderCalendarView });
-setupAnnualView({ switchSubPage, switchView, openDaySidebar, saveViewState, buildLegendColors, GROUP_VIEWS });
+setupAnnualView({ switchSubPage, switchView, openDaySidebar, saveViewState, buildLegendColors, GROUP_VIEWS, saveData, snapshotBeforeChange });
 setupDashboard({
   openResetYearModal,
   saveViewState,
