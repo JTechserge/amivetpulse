@@ -2,17 +2,14 @@ import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { MONTH_NAMES } from '../config.js';
 import { asvFullName, escapeHTML, fmtISO, holidayName, formatHHMM, daysInMonth } from '../utils.js';
-import {
-  getSlotState, getSlotLabel, getShiftType,
-  getDayAllOtH, getDayDeficitH, getDayNominal,
-} from '../slots.js';
+import { getSlotState, getSlotLabel, getShiftType, getDayAllOtH, getDayDeficitH, getDayNominal } from '../slots.js';
 
 const DOW_FR = ['Di', 'Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa'];
 
-const ROW_BG_EVEN  = '#F6F6F6';
-const ROW_BG_ODD   = '#ffffff';
-const ROW_BG_SAT   = '#EBEBEB';
-const ROW_BG_HOL   = '#F2F2F2';
+const ROW_BG_EVEN = '#F6F6F6';
+const ROW_BG_ODD = '#ffffff';
+const ROW_BG_SAT = '#EBEBEB';
+const ROW_BG_HOL = '#F2F2F2';
 
 function rowBg(isSat, isHol, idx) {
   if (isSat || isHol) return isSat ? ROW_BG_SAT : ROW_BG_HOL;
@@ -35,7 +32,7 @@ async function getLogoDataUrl() {
     const blob = await res.blob();
     return await new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onload = (e) => resolve(/** @type {string} */(e.target.result));
+      reader.onload = (e) => resolve(/** @type {string} */ (e.target.result));
       reader.onerror = () => resolve('');
       reader.readAsDataURL(blob);
     });
@@ -43,10 +40,13 @@ async function getLogoDataUrl() {
     if (!img.complete || !img.naturalWidth) return '';
     try {
       const c = document.createElement('canvas');
-      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
       c.getContext('2d').drawImage(img, 0, 0);
       return c.toDataURL('image/png');
-    } catch { return ''; }
+    } catch {
+      return '';
+    }
   }
 }
 
@@ -56,12 +56,18 @@ function buildSheetHtml({ personId, year, month, signedAt, signedName, signature
   const nb = daysInMonth(year, month);
 
   const signedDateTimeStr = new Date(signedAt).toLocaleString('fr-FR', {
-    day: 'numeric', month: 'long', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/Paris',
   });
 
   let rows = '';
-  let mTotalH = 0, mTotalOt = 0, mTotalDef = 0;
+  let mTotalH = 0,
+    mTotalOt = 0,
+    mTotalDef = 0;
   let rowIdx = 0;
 
   for (let day = 1; day <= nb; day++) {
@@ -74,22 +80,29 @@ function buildSheetHtml({ personId, year, month, signedAt, signedName, signature
     const mS = getSlotState(iso, personId, 'M');
     const amS = getSlotState(iso, personId, 'AM');
     const present = mS === 'present' || amS === 'present';
-    const absent  = mS === 'absent'  && amS === 'absent';
-    const shType  = getShiftType(iso, personId);
-    const otH     = present ? getDayAllOtH(iso, personId)  : 0;
-    const defH    = present ? getDayDeficitH(iso, personId) : 0;
-    const nom     = present ? getDayNominal(iso, personId)  : 0;
-    const total   = present ? Math.round((nom + otH - defH) * 100) / 100 : 0;
-    if (present) { mTotalH += total; mTotalOt += otH; mTotalDef += defH; }
+    const absent = mS === 'absent' && amS === 'absent';
+    const shType = getShiftType(iso, personId);
+    const otH = present ? getDayAllOtH(iso, personId) : 0;
+    const defH = present ? getDayDeficitH(iso, personId) : 0;
+    const nom = present ? getDayNominal(iso, personId) : 0;
+    const total = present ? Math.round((nom + otH - defH) * 100) / 100 : 0;
+    if (present) {
+      mTotalH += total;
+      mTotalOt += otH;
+      mTotalDef += defH;
+    }
 
     let stateCell;
     if (hName) {
       stateCell = `<em>${escapeHTML(hName)}</em>`;
     } else if (absent) {
       const lbl = (getSlotLabel(iso, personId, 'M') || getSlotLabel(iso, personId, 'AM') || '').toLowerCase();
-      stateCell = lbl.includes('congé') || lbl.includes('conge')
-        ? '<em>Congé</em>'
-        : lbl.includes('maladie') ? '<em>Maladie</em>' : '<em>Repos / Congé</em>';
+      stateCell =
+        lbl.includes('congé') || lbl.includes('conge')
+          ? '<em>Congé</em>'
+          : lbl.includes('maladie')
+            ? '<em>Maladie</em>'
+            : '<em>Repos / Congé</em>';
     } else if (present) {
       stateCell = `Poste ${shType === 'F' ? 'Fermeture' : 'Ouverture'}`;
     } else {
@@ -97,12 +110,12 @@ function buildSheetHtml({ personId, year, month, signedAt, signedName, signature
     }
 
     const bg = rowBg(isSat, !!hName, rowIdx);
-    const textColor = (hName || absent) ? '#555' : '#111';
-    const fontStyle = (isSat || hName) ? 'font-style:italic;' : '';
+    const textColor = hName || absent ? '#555' : '#111';
+    const fontStyle = isSat || hName ? 'font-style:italic;' : '';
     const trStyle = `background:${bg};color:${textColor};${fontStyle}`;
 
-    const hCell  = present ? formatHHMM(total) : '<span style="color:#BBB;">—</span>';
-    const otCell = otH  > 0 ? `<strong>+${formatHHMM(otH)}</strong>`  : '<span style="color:#BBB;">—</span>';
+    const hCell = present ? formatHHMM(total) : '<span style="color:#BBB;">—</span>';
+    const otCell = otH > 0 ? `<strong>+${formatHHMM(otH)}</strong>` : '<span style="color:#BBB;">—</span>';
     const dfCell = defH > 0 ? `<strong>−${formatHHMM(defH)}</strong>` : '<span style="color:#BBB;">—</span>';
 
     rows += `<tr style="${trStyle}">
@@ -115,9 +128,9 @@ function buildSheetHtml({ personId, year, month, signedAt, signedName, signature
     rowIdx++;
   }
 
-  const fTH  = Math.round(mTotalH  * 100) / 100;
+  const fTH = Math.round(mTotalH * 100) / 100;
   const fTOt = Math.round(mTotalOt * 100) / 100;
-  const fTDef= Math.round(mTotalDef* 100) / 100;
+  const fTDef = Math.round(mTotalDef * 100) / 100;
   const printDate = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
   const logoHtml = logoSrc ? `<img style="height:38px;width:auto;display:block;" src="${logoSrc}" alt="Amivet">` : '';
 
@@ -223,7 +236,9 @@ export async function generateSignaturePdf({ personId, year, month, signedAt, si
     const imgData = canvas.toDataURL('image/jpeg', 0.88);
     // Chiffrement RC4-128 : ouverture sans mot de passe, modifications bloquées sans clé owner
     const pdf = new jsPDF({
-      orientation: 'portrait', unit: 'mm', format: 'a4',
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
       encryption: {
         userPassword: '',
         ownerPassword: 'AmivetPULSE-verrouille',

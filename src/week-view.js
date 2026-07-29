@@ -352,7 +352,6 @@ function openMonthPrintPopup(viewKey) {
   };
 }
 
-
 function renderWeekViewASV() {
   const container = document.getElementById('asv-sub-week');
   if (!container) return;
@@ -422,7 +421,8 @@ function renderWeekViewASV() {
   // Helper format minutes → "+Xh YY" ou "−Xh YY"
   function fmtCounter(mins, sign) {
     if (!mins) return sign === '+' ? '—' : '—';
-    const h = Math.floor(mins / 60), m = mins % 60;
+    const h = Math.floor(mins / 60),
+      m = mins % 60;
     return `${sign}${h}h${m > 0 ? String(m).padStart(2, '0') : ''}`;
   }
 
@@ -434,7 +434,8 @@ function renderWeekViewASV() {
     const mins = getPlusMins(iso, pid);
     const ce = canEditDay(d);
     const lbl = fmtCounter(mins, '+');
-    if (!ce) return `<td class="week-footer-cell"><span style="font-size:11px;color:#16A34A;font-weight:700;">${lbl}</span></td>`;
+    if (!ce)
+      return `<td class="week-footer-cell"><span style="font-size:11px;color:#16A34A;font-weight:700;">${lbl}</span></td>`;
     return `<td class="week-footer-cell" style="padding:2px;"><div style="display:flex;align-items:center;gap:2px;justify-content:center;">
       <button class="week-counter-btn" data-ciso="${iso}" data-cpid="${pid}" data-ctype="plus" data-cdelta="-15" style="font-size:13px;color:#DC2626;padding:0 3px;background:none;border:none;cursor:pointer;"${mins === 0 ? ' disabled' : ''}>−</button>
       <span style="font-size:10px;font-weight:700;color:#16A34A;min-width:32px;text-align:center;">${lbl}</span>
@@ -451,7 +452,8 @@ function renderWeekViewASV() {
     const mins = getMinusMins(iso, pid);
     const ce = canEditDay(d);
     const lbl = fmtCounter(mins, '−');
-    if (!ce) return `<td class="week-footer-cell"><span style="font-size:11px;color:#DC2626;font-weight:700;">${lbl}</span></td>`;
+    if (!ce)
+      return `<td class="week-footer-cell"><span style="font-size:11px;color:#DC2626;font-weight:700;">${lbl}</span></td>`;
     return `<td class="week-footer-cell" style="padding:2px;"><div style="display:flex;align-items:center;gap:2px;justify-content:center;">
       <button class="week-counter-btn" data-ciso="${iso}" data-cpid="${pid}" data-ctype="minus" data-cdelta="-15" style="font-size:13px;color:#16A34A;padding:0 3px;background:none;border:none;cursor:pointer;"${mins === 0 ? ' disabled' : ''}>−</button>
       <span style="font-size:10px;font-weight:700;color:#DC2626;min-width:32px;text-align:center;">${lbl}</span>

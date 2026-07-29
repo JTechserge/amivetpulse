@@ -18,11 +18,13 @@ import {
 const ISO_SAT = '2026-07-11'; // samedi (wd=6)
 const ISO_MON = '2026-07-07'; // lundi  (wd=1)
 
-function s(iso, pid, key, val) { return { [`${iso}_${pid}_${key}`]: val }; }
+function s(iso, pid, key, val) {
+  return { [`${iso}_${pid}_${key}`]: val };
+}
 
 // Construit un objet slots avec état 'present' pour les créneaux donnés
 function present(iso, pid, ...slots) {
-  return Object.assign({}, ...slots.map(slot => s(iso, pid, slot, 'present')));
+  return Object.assign({}, ...slots.map((slot) => s(iso, pid, slot, 'present')));
 }
 
 describe('timeToMins', () => {

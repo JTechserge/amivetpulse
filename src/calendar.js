@@ -63,12 +63,7 @@ import {
   setClinicEarlyClose,
 } from './slots.js';
 import { computeLeaveBlocks } from './leave-blocks.js';
-import {
-  getWeekAlerts,
-  computeWeekTotalHours,
-  renderWeekViewASV,
-  openMonthPrintPopup,
-} from './week-view.js';
+import { getWeekAlerts, computeWeekTotalHours, renderWeekViewASV, openMonthPrintPopup } from './week-view.js';
 
 // État "aujourd'hui" local au module (équivalent au const today d'app.js — même jour au chargement).
 const today = new Date();
@@ -2187,7 +2182,6 @@ function initCalendarInteractions() {
     store.weekNavState.weekTool = btn.dataset.weekTool;
     renderWeekViewASV();
   });
-
 
   document.addEventListener('click', (e) => {
     const viewKey = calViewKeyOfEventTarget(e.target);

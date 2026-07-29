@@ -183,28 +183,44 @@ export function getDayNominal(iso, pid) {
 }
 
 // Compteur heures supplémentaires (+15 min par incrément, Lot 3)
-export function plusMinsKey(iso, pid) { return `${iso}_${pid}_plus_mins`; }
-export function getPlusMins(iso, pid) { return parseInt(store.DATA.slots[plusMinsKey(iso, pid)]) || 0; }
+export function plusMinsKey(iso, pid) {
+  return `${iso}_${pid}_plus_mins`;
+}
+export function getPlusMins(iso, pid) {
+  return parseInt(store.DATA.slots[plusMinsKey(iso, pid)]) || 0;
+}
 export function setPlusMins(iso, pid, v) {
   const n = Math.max(0, v);
   if (n > 0) store.DATA.slots[plusMinsKey(iso, pid)] = n;
   else delete store.DATA.slots[plusMinsKey(iso, pid)];
 }
-export function getPlusH(iso, pid) { return getPlusMins(iso, pid) / 60; }
+export function getPlusH(iso, pid) {
+  return getPlusMins(iso, pid) / 60;
+}
 
 // Compteur heures manquantes (−15 min par incrément, Lot 3)
-export function minusMinsKey(iso, pid) { return `${iso}_${pid}_minus_mins`; }
-export function getMinusMins(iso, pid) { return parseInt(store.DATA.slots[minusMinsKey(iso, pid)]) || 0; }
+export function minusMinsKey(iso, pid) {
+  return `${iso}_${pid}_minus_mins`;
+}
+export function getMinusMins(iso, pid) {
+  return parseInt(store.DATA.slots[minusMinsKey(iso, pid)]) || 0;
+}
 export function setMinusMins(iso, pid, v) {
   const n = Math.max(0, v);
   if (n > 0) store.DATA.slots[minusMinsKey(iso, pid)] = n;
   else delete store.DATA.slots[minusMinsKey(iso, pid)];
 }
-export function getMinusH(iso, pid) { return getMinusMins(iso, pid) / 60; }
+export function getMinusH(iso, pid) {
+  return getMinusMins(iso, pid) / 60;
+}
 
 // Délégation pour compatibilité avec les appelants existants (dashboard, vue semaine)
-export function getDayAllOtH(iso, pid) { return getPlusH(iso, pid); }
-export function getDayDeficitH(iso, pid) { return getMinusH(iso, pid); }
+export function getDayAllOtH(iso, pid) {
+  return getPlusH(iso, pid);
+}
+export function getDayDeficitH(iso, pid) {
+  return getMinusH(iso, pid);
+}
 
 // Note de jour (texte libre par ASV)
 export function dayNoteKey(iso, pid) {
