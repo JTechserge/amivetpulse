@@ -7,7 +7,6 @@ import {
   isPersonWorkingDay,
   getSlotState,
   getSlotLabel,
-  getLeaveDecision,
   getShiftType,
   shiftTypeKey,
   getDayNominal,
@@ -621,66 +620,26 @@ function getWeekAlerts(personId, sundayISO) {
   if (!p) return [];
   const sun = new Date(sundayISO + 'T00:00:00');
   const mon = getWeekMondayDate(sun);
-  let workDays = 0,
-    approvedLeaveDays = 0;
-  for (let d = 0; d < 6; d++) {
-    const dt = new Date(mon);
-    dt.setDate(dt.getDate() + d);
-    const iso = fmtISO(dt);
-    const mS = getSlotState(iso, personId, 'M'),
-      amS = getSlotState(iso, personId, 'AM');
-    if (mS === 'present' || amS === 'present') {
-      workDays++;
-      continue;
-    }
-    const mD = mS === 'absent' ? getLeaveDecision(iso, personId, 'M') : null;
-    const aD = amS === 'absent' ? getLeaveDecision(iso, personId, 'AM') : null;
-    if (mD === 'approved' || aD === 'approved') approvedLeaveDays++;
-  }
   const alerts = [];
-  // Règle jours travaillés
-  if (p.saturdayOnly) {
-    const satIso = fmtISO(new Date(mon.getTime() + 5 * 86400000));
-    const satOk =
-      getSlotState(satIso, personId, 'M') === 'present' || getSlotState(satIso, personId, 'AM') === 'present';
-    if (!satOk) alerts.push('Samedi non travaillé');
-  } else {
-    const expected = p.timeFraction >= 1 ? 4 : 3;
-    const required = Math.max(0, expected - approvedLeaveDays);
-    if (workDays < required) alerts.push(`Jours travaillés : ${workDays} sur ${required} attendus cette semaine`);
-  }
-  // Règle 42h
+
+  // Alerte dépassement 42h
   const weekH = computeWeekTotalHours(personId, mon);
   if (!p.saturdayOnly && weekH >= WEEKLY_MAX_HOURS)
     alerts.push(`Durée de la semaine : ${formatHHMM(weekH)} — dépasse le maximum de 42h`);
-  // Effectif ≠ 2 par jour ouvré + alerte même poste O/F
+
+  // Alerte couverture O/F : deux ASV présentes sur le même poste (lundi–vendredi)
   const poolNC = ASV_PEOPLE.filter((q) => !q.archived && !q.saturdayOnly);
-  const poolAll = ASV_PEOPLE.filter((q) => !q.archived);
   const DAY_FULL = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-  for (let d = 0; d < 6; d++) {
+  for (let d = 0; d < 5; d++) {
     const dt = new Date(mon);
     dt.setDate(dt.getDate() + d);
     const iso2 = fmtISO(dt);
     if (holidayName(iso2)) continue;
-    const pool = dt.getDay() === 6 ? poolAll : poolNC;
-    const present = pool.filter(
+    const present = poolNC.filter(
       (q) => getSlotState(iso2, q.id, 'M') === 'present' || getSlotState(iso2, q.id, 'AM') === 'present'
     );
     const iAmPresent = present.some((q) => q.id === personId);
-
-    // Effectif insuffisant — alerter les ASV absentes pour les aider à se positionner
-    if (present.length < 2 && !iAmPresent) {
-      if (present.length === 0) {
-        alerts.push(`${DAY_FULL[d]} : aucune ASV n'est positionnée ce jour`);
-      } else {
-        alerts.push(
-          `${DAY_FULL[d]} : seulement ${present[0].short} est positionnée ce jour (une deuxième est nécessaire)`
-        );
-      }
-    }
-
-    // Même poste — seulement si cette ASV est l'une des deux impliquées
-    if (present.length === 2 && iAmPresent && dt.getDay() !== 6) {
+    if (present.length === 2 && iAmPresent) {
       const s0 = store.DATA.slots[shiftTypeKey(iso2, present[0].id)] || null;
       const s1 = store.DATA.slots[shiftTypeKey(iso2, present[1].id)] || null;
       if (s0 && s1 && s0 === s1) {
@@ -690,22 +649,6 @@ function getWeekAlerts(personId, sundayISO) {
       }
     }
   }
-  // CP annuel > 5 semaines (25 jours ouvrés = 50 demi-journées hors samedi/dimanche)
-  const yr = sun.getFullYear();
-  let cpHalf = 0;
-  for (let m = 0; m < 12; m++) {
-    const nb = daysInMonth(yr, m);
-    for (let d2 = 1; d2 <= nb; d2++) {
-      const wd = new Date(yr, m, d2).getDay();
-      if (wd === 0 || wd === 6) continue;
-      const iso3 = fmtISO(new Date(yr, m, d2));
-      if (getLeaveDecision(iso3, personId, 'M') === 'approved') cpHalf++;
-      if (getLeaveDecision(iso3, personId, 'AM') === 'approved') cpHalf++;
-    }
-  }
-  const cpDays = cpHalf / 2;
-  if (cpDays > 25)
-    alerts.push(`Congés payés : ${Math.round(cpDays * 2) / 2} jours posés sur l'année (maximum 25 jours / 5 semaines)`);
   return alerts;
 }
 
