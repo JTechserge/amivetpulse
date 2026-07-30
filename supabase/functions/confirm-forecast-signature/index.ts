@@ -18,12 +18,18 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Non authentifié.' }), { status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Non authentifié.' }), {
+        status: 401,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
     }
 
     const { token_id } = await req.json();
     if (!token_id) {
-      return new Response(JSON.stringify({ error: 'token_id manquant.' }), { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'token_id manquant.' }), {
+        status: 400,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
     }
 
     // Vérifier l'identité du compte connecté
@@ -31,7 +37,10 @@ Deno.serve(async (req) => {
       headers: { apikey: ANON_KEY, Authorization: authHeader },
     });
     if (!userRes.ok) {
-      return new Response(JSON.stringify({ error: 'Token invalide.' }), { status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Token invalide.' }), {
+        status: 401,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
     }
     const authUser = await userRes.json();
 
@@ -42,7 +51,10 @@ Deno.serve(async (req) => {
     );
     const [profile] = await profRes.json();
     if (!profile?.person_id) {
-      return new Response(JSON.stringify({ error: 'Profil introuvable.' }), { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Profil introuvable.' }), {
+        status: 403,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
     }
 
     // Récupérer et valider le token
@@ -53,16 +65,28 @@ Deno.serve(async (req) => {
     const [tokenRow] = await tokenRes.json();
 
     if (!tokenRow) {
-      return new Response(JSON.stringify({ error: 'Lien invalide ou introuvable.' }), { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Lien invalide ou introuvable.' }), {
+        status: 403,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
     }
     if (tokenRow.type !== 'forecast') {
-      return new Response(JSON.stringify({ error: "Ce lien n'est pas un lien de signature de prévisionnel." }), { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: "Ce lien n'est pas un lien de signature de prévisionnel." }), {
+        status: 400,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
     }
     if (new Date(tokenRow.expires_at) < new Date()) {
-      return new Response(JSON.stringify({ error: "Ce lien a expiré — demandez un nouvel email de signature depuis l'app." }), { status: 410, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+      return new Response(
+        JSON.stringify({ error: "Ce lien a expiré — demandez un nouvel email de signature depuis l'app." }),
+        { status: 410, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
+      );
     }
     if (tokenRow.person_id !== profile.person_id) {
-      return new Response(JSON.stringify({ error: 'Ce lien ne correspond pas à votre compte.' }), { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Ce lien ne correspond pas à votre compte.' }), {
+        status: 403,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
     }
 
     const { year, person_id } = tokenRow;

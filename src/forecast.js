@@ -284,7 +284,9 @@ function _renderASVContent(layout, year) {
   _lastForecastLayout = layout;
   _lastForecastYear = year;
   setupForecastSignatures({
-    onSigned: () => { if (_lastForecastLayout) _renderASVContent(_lastForecastLayout, _lastForecastYear); },
+    onSigned: () => {
+      if (_lastForecastLayout) _renderASVContent(_lastForecastLayout, _lastForecastYear);
+    },
   });
 
   const st = store.forecastPageState;
@@ -409,6 +411,8 @@ function _renderASVContent(layout, year) {
     try {
       const asvPerson = ASV_PEOPLE.find((p) => p.id === pid);
       await requestForecastSignature(pid, year, asvPerson?.short || pid);
+      btn.disabled = false;
+      btn.textContent = 'Demander la signature';
     } catch (e) {
       showToast(e.message || 'Erreur lors de la demande de signature', '❌');
       btn.disabled = false;

@@ -990,7 +990,16 @@ setupWeekView({
 });
 setupLogin({ loadCurrentUser, initApp });
 setupSignatures({ onLoaded: renderCurrentView, renderCalendarView });
-setupAnnualView({ switchSubPage, switchView, openDaySidebar, saveViewState, buildLegendColors, GROUP_VIEWS, saveData, snapshotBeforeChange });
+setupAnnualView({
+  switchSubPage,
+  switchView,
+  openDaySidebar,
+  saveViewState,
+  buildLegendColors,
+  GROUP_VIEWS,
+  saveData,
+  snapshotBeforeChange,
+});
 setupForecast({ saveData, snapshotBeforeChange });
 setupDashboard({
   openResetYearModal,

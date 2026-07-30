@@ -43,7 +43,7 @@ export const store = {
   calStateAsvForecast: { month: 0 },
 
   // Dashboard + sub-navigation state
-  dashState: { year: 0 },           // year set by initCalState()
+  dashState: { year: 0 }, // year set by initCalState()
   subNavState: { vets: 'calendar', asv: 'calendar' },
   annualYearState: { vets: 'current', asv: 'current' },
 

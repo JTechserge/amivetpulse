@@ -178,31 +178,33 @@ export async function renderDashboardSignatures() {
   const asvList = ASV_PEOPLE.filter((p) => !p.archived);
 
   // Ligne par ASV pour la table des prévisionnels signés
-  const forecastRows = asvList.map((p) => {
-    const sig = getForecastSig(p.id, year);
-    if (sig) {
-      const dateStr = new Date(sig.signedAt).toLocaleDateString('fr-FR');
-      const revokeBtn = canRevoke
-        ? `<button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:#B91C1C;border-color:#FCA5A5;"
+  const forecastRows = asvList
+    .map((p) => {
+      const sig = getForecastSig(p.id, year);
+      if (sig) {
+        const dateStr = new Date(sig.signedAt).toLocaleDateString('fr-FR');
+        const revokeBtn = canRevoke
+          ? `<button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:#B91C1C;border-color:#FCA5A5;"
              data-revoke-forecast="${p.id}|${year}">✕ Annuler</button>`
-        : '';
-      const viewBtn = `<button class="btn btn-sm" style="font-size:11px;padding:2px 8px;"
+          : '';
+        const viewBtn = `<button class="btn btn-sm" style="font-size:11px;padding:2px 8px;"
            data-view-forecast-pid="${p.id}">📋 Voir</button>`;
-      return `<tr>
+        return `<tr>
         <td style="font-weight:600;padding:6px 8px;">${escapeHTML(p.short)}</td>
         <td style="padding:6px 8px;"><span style="color:#16A34A;font-size:12px;font-weight:600;">✅ Signé</span></td>
         <td style="padding:6px 8px;font-size:12px;color:var(--color-text-muted);">${escapeHTML(sig.signedBy || '—')}</td>
         <td style="padding:6px 8px;font-size:12px;color:var(--color-text-muted);">${dateStr}</td>
         <td style="padding:6px 8px;text-align:right;white-space:nowrap;">${viewBtn} ${revokeBtn}</td>
       </tr>`;
-    } else {
-      return `<tr>
+      } else {
+        return `<tr>
         <td style="font-weight:600;padding:6px 8px;">${escapeHTML(p.short)}</td>
         <td style="padding:6px 8px;"><span style="font-size:12px;color:var(--color-text-muted);">— Non signé</span></td>
         <td colspan="3" style="padding:6px 8px;"></td>
       </tr>`;
-    }
-  }).join('');
+      }
+    })
+    .join('');
 
   // Squelette immédiat (pas de flash blanc)
   // eslint-disable-next-line no-unsanitized/property

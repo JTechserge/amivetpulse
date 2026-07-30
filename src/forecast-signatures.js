@@ -12,10 +12,16 @@ export function setupForecastSignatures({ onSigned }) {
   _onSigned = onSigned;
 }
 
-function _key(pid, year) { return `${pid}|${year}`; }
+function _key(pid, year) {
+  return `${pid}|${year}`;
+}
 
-export function isForecastSigned(pid, year) { return store.forecastSignatures.has(_key(pid, year)); }
-export function getForecastSig(pid, year) { return store.forecastSignatures.get(_key(pid, year)) || null; }
+export function isForecastSigned(pid, year) {
+  return store.forecastSignatures.has(_key(pid, year));
+}
+export function getForecastSig(pid, year) {
+  return store.forecastSignatures.get(_key(pid, year)) || null;
+}
 
 export async function loadForecastSignatures() {
   const rows = await fetchForecastSignatures();
@@ -75,7 +81,9 @@ export function openForecastSignConfirmModal(tokenId) {
   backdrop.classList.add('open');
   const close = () => backdrop.classList.remove('open');
   box.querySelector('#modal-cancel').onclick = close;
-  backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
+  backdrop.onclick = (e) => {
+    if (e.target === backdrop) close();
+  };
   box.querySelector('#forecast-sign-do-confirm').onclick = async () => {
     const confirmBtn = box.querySelector('#forecast-sign-do-confirm');
     const errorEl = box.querySelector('#forecast-sign-confirm-error');

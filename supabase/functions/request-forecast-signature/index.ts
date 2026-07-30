@@ -150,23 +150,37 @@ Deno.serve(async (req) => {
         <strong style="color:${COLORS.text};">Pour</strong> : ${asvName}
       </td></tr></table>`;
 
-    const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sender: { name: 'Amivet PULSE', email: 'noreply@amivet.fr' },
-        to: [{ email: asvEmail, name: asvName }],
-        subject: `Signature requise — Prévisionnel ${year} · Amivet`,
-        htmlContent: wrapEmailHtml(emailBody),
-      }),
+    let emailSent = false;
+    let emailError = '';
+    try {
+      console.log('[brevo] sending forecast sig request to', asvEmail);
+      const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender: { name: 'Amivet PULSE', email: 'jeremie.pvt@gmail.com' },
+          to: [{ email: asvEmail, name: asvName }],
+          subject: `Signature requise — Prévisionnel ${year} · Amivet`,
+          htmlContent: wrapEmailHtml(emailBody),
+          trackClicks: false,
+          trackOpens: false,
+        }),
+      });
+      const brevoBody = await emailRes.text();
+      console.log('[brevo] status', emailRes.status, brevoBody);
+      if (emailRes.ok) {
+        emailSent = true;
+      } else {
+        emailError = `Brevo HTTP ${emailRes.status}: ${brevoBody}`;
+      }
+    } catch (err) {
+      emailError = String((err as Error)?.message || err);
+    }
+
+    return new Response(JSON.stringify({ signing_link: signingLink, email_sent: emailSent, email_error: emailError }), {
+      status: 200,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
-
-    const emailError = emailRes.ok ? null : await emailRes.text();
-
-    return new Response(
-      JSON.stringify({ signing_link: signingLink, email_sent: emailRes.ok, email_error: emailError }),
-      { status: 200, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
-    );
   } catch (err) {
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
