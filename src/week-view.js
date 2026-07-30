@@ -466,7 +466,18 @@ function renderWeekViewASV() {
     return `${sign}${h}h${m > 0 ? String(m).padStart(2, '0') : ''}`;
   }
 
-  // ── 2. Ligne H.supp. (+15 min par incrément) ─────────────────
+  // Génère les <option> pour un sélecteur à pas de 15 min (0 → 8h)
+  function buildTimeOpts(currentMins) {
+    let o = `<option value="0"${currentMins === 0 ? ' selected' : ''}>—</option>`;
+    for (let m = 15; m <= 480; m += 15) {
+      const h = Math.floor(m / 60), mn = m % 60;
+      const lbl = h > 0 ? `${h}h${mn > 0 ? String(mn).padStart(2, '0') : ''}` : `${mn}min`;
+      o += `<option value="${m}"${currentMins === m ? ' selected' : ''}>${lbl}</option>`;
+    }
+    return o;
+  }
+
+  // ── 2. Ligne H.supp. (sélecteur 15 min) ──────────────────────
   function buildPlusCell(d) {
     const iso = fmtISO(d);
     if (isNonWorkingDay(d)) return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;
@@ -476,15 +487,16 @@ function renderWeekViewASV() {
     const lbl = fmtCounter(mins, '+');
     if (!ce)
       return `<td class="week-footer-cell"><span style="font-size:11px;color:#16A34A;font-weight:700;">${lbl}</span></td>`;
-    return `<td class="week-footer-cell" style="padding:2px;"><div style="display:flex;align-items:center;gap:2px;justify-content:center;">
-      <button class="week-counter-btn" data-ciso="${iso}" data-cpid="${pid}" data-ctype="plus" data-cdelta="-15" style="font-size:13px;color:#DC2626;padding:0 3px;background:none;border:none;cursor:pointer;"${mins === 0 ? ' disabled' : ''}>−</button>
-      <span style="font-size:10px;font-weight:700;color:#16A34A;min-width:32px;text-align:center;">${lbl}</span>
-      <button class="week-counter-btn" data-ciso="${iso}" data-cpid="${pid}" data-ctype="plus" data-cdelta="15" style="font-size:13px;color:#16A34A;padding:0 3px;background:none;border:none;cursor:pointer;">＋</button>
-    </div></td>`;
+    return `<td class="week-footer-cell" style="padding:3px 4px;">
+      <select class="week-counter-sel" data-ciso="${iso}" data-cpid="${pid}" data-ctype="plus"
+        style="font-size:11px;font-weight:700;color:#16A34A;border:1px solid var(--color-border);border-radius:5px;background:var(--color-surface);padding:2px;width:100%;cursor:pointer;">
+        ${buildTimeOpts(mins)}
+      </select>
+    </td>`;
   }
-  const plusRow = `<tr><td class="week-footer-label" style="font-size:9px;color:#16A34A;font-weight:700;line-height:1.4;">H.supp.<br><span style="font-size:8px;font-weight:400;color:var(--color-text-muted);">+15 min</span></td>${days.map(buildPlusCell).join('')}</tr>`;
+  const plusRow = `<tr><td class="week-footer-label" style="font-size:9px;color:#16A34A;font-weight:700;">H.supp.</td>${days.map(buildPlusCell).join('')}</tr>`;
 
-  // ── 3. Ligne H.manq. (−15 min par incrément) ─────────────────
+  // ── 3. Ligne H.manq. (sélecteur 15 min) ──────────────────────
   function buildMinusCell(d) {
     const iso = fmtISO(d);
     if (isNonWorkingDay(d)) return `<td class="week-footer-cell" style="background:#f8fafc;"></td>`;
@@ -494,13 +506,14 @@ function renderWeekViewASV() {
     const lbl = fmtCounter(mins, '−');
     if (!ce)
       return `<td class="week-footer-cell"><span style="font-size:11px;color:#DC2626;font-weight:700;">${lbl}</span></td>`;
-    return `<td class="week-footer-cell" style="padding:2px;"><div style="display:flex;align-items:center;gap:2px;justify-content:center;">
-      <button class="week-counter-btn" data-ciso="${iso}" data-cpid="${pid}" data-ctype="minus" data-cdelta="-15" style="font-size:13px;color:#16A34A;padding:0 3px;background:none;border:none;cursor:pointer;"${mins === 0 ? ' disabled' : ''}>−</button>
-      <span style="font-size:10px;font-weight:700;color:#DC2626;min-width:32px;text-align:center;">${lbl}</span>
-      <button class="week-counter-btn" data-ciso="${iso}" data-cpid="${pid}" data-ctype="minus" data-cdelta="15" style="font-size:13px;color:#DC2626;padding:0 3px;background:none;border:none;cursor:pointer;">＋</button>
-    </div></td>`;
+    return `<td class="week-footer-cell" style="padding:3px 4px;">
+      <select class="week-counter-sel" data-ciso="${iso}" data-cpid="${pid}" data-ctype="minus"
+        style="font-size:11px;font-weight:700;color:#DC2626;border:1px solid var(--color-border);border-radius:5px;background:var(--color-surface);padding:2px;width:100%;cursor:pointer;">
+        ${buildTimeOpts(mins)}
+      </select>
+    </td>`;
   }
-  const minusRow = `<tr><td class="week-footer-label" style="font-size:9px;color:#DC2626;font-weight:700;line-height:1.4;">H.manq.<br><span style="font-size:8px;font-weight:400;color:var(--color-text-muted);">−15 min</span></td>${days.map(buildMinusCell).join('')}</tr>`;
+  const minusRow = `<tr><td class="week-footer-label" style="font-size:9px;color:#DC2626;font-weight:700;">H.manq.</td>${days.map(buildMinusCell).join('')}</tr>`;
 
   // ── 5. Ligne heures totales ───────────────────────────────
   const totRow = `<tr><td class="week-footer-label">Heures</td>${days
@@ -613,21 +626,21 @@ function renderWeekViewASV() {
     });
   });
 
-  container.querySelectorAll('.week-counter-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const { ciso, cpid, ctype, cdelta } = btn.dataset;
-      // Lot 6 : bloquer les modifications ASV sur un mois clôturé
+  container.querySelectorAll('.week-counter-sel').forEach((sel) => {
+    sel.addEventListener('change', () => {
+      const { ciso, cpid, ctype } = sel.dataset;
       if (_effectiveRole() === 'asv') {
         const [yr, mo] = ciso.split('-').map(Number);
         if (isMonthClosed(yr, mo - 1)) {
           showToast('Ce mois est clôturé — modifications ASV bloquées', '🔒');
+          sel.value = String(ctype === 'plus' ? getPlusMins(ciso, cpid) : getMinusMins(ciso, cpid));
           return;
         }
       }
-      const delta = parseInt(cdelta, 10);
+      const val = parseInt(sel.value, 10);
       _snapshotBeforeChange();
-      if (ctype === 'plus') setPlusMins(ciso, cpid, getPlusMins(ciso, cpid) + delta);
-      else setMinusMins(ciso, cpid, getMinusMins(ciso, cpid) + delta);
+      if (ctype === 'plus') setPlusMins(ciso, cpid, val);
+      else setMinusMins(ciso, cpid, val);
       _saveData(false);
       renderWeekViewASV();
     });
