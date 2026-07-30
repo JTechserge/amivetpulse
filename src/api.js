@@ -111,3 +111,25 @@ export async function apiRevokeSignature(personId, year, month) {
   const data = await res.json();
   if (!data.ok) throw new Error(data.error || 'Erreur inconnue');
 }
+
+// ── Signatures prévisionnel ─────────────────────────────────────────────────
+
+export async function fetchForecastSignatures() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}forecast_signatures?select=*`, { headers: supabaseHeaders() });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    console.warn('Signatures prévisionnel inaccessibles (hors ligne ?).', e);
+    return null;
+  }
+}
+
+// Suppression directe via REST (RLS autorise vet/admin authentifiés).
+export async function apiRevokeForecastSignature(personId, year) {
+  const res = await fetch(
+    `${SUPABASE_URL}forecast_signatures?person_id=eq.${encodeURIComponent(personId)}&year=eq.${year}`,
+    { method: 'DELETE', headers: supabaseHeaders() }
+  );
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}

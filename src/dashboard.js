@@ -4,6 +4,7 @@ import { supabaseHeaders } from './auth.js';
 import { store } from './store.js';
 import { showToast, openConfirmModal } from './ui.js';
 import { revokeSignature } from './signatures.js';
+import { isForecastSigned, getForecastSig, revokeForecastSig, loadForecastSignatures } from './forecast-signatures.js';
 import { fetchSignatureArchive, fetchSignedStorageUrl } from './api.js';
 import { triggerPushNotification } from './pwa.js';
 
@@ -173,12 +174,58 @@ export async function renderDashboardSignatures() {
   const year = store.dashState.year;
   const cy = getCurrentYear();
 
+  const canRevoke = ['vet', 'admin'].includes(store.currentUser?.role);
+  const asvList = ASV_PEOPLE.filter((p) => !p.archived);
+
+  // Ligne par ASV pour la table des prévisionnels signés
+  const forecastRows = asvList.map((p) => {
+    const sig = getForecastSig(p.id, year);
+    if (sig) {
+      const dateStr = new Date(sig.signedAt).toLocaleDateString('fr-FR');
+      const revokeBtn = canRevoke
+        ? `<button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:#B91C1C;border-color:#FCA5A5;"
+             data-revoke-forecast="${p.id}|${year}">✕ Annuler</button>`
+        : '';
+      const viewBtn = `<button class="btn btn-sm" style="font-size:11px;padding:2px 8px;"
+           data-view-forecast-pid="${p.id}">📋 Voir</button>`;
+      return `<tr>
+        <td style="font-weight:600;padding:6px 8px;">${escapeHTML(p.short)}</td>
+        <td style="padding:6px 8px;"><span style="color:#16A34A;font-size:12px;font-weight:600;">✅ Signé</span></td>
+        <td style="padding:6px 8px;font-size:12px;color:var(--color-text-muted);">${escapeHTML(sig.signedBy || '—')}</td>
+        <td style="padding:6px 8px;font-size:12px;color:var(--color-text-muted);">${dateStr}</td>
+        <td style="padding:6px 8px;text-align:right;white-space:nowrap;">${viewBtn} ${revokeBtn}</td>
+      </tr>`;
+    } else {
+      return `<tr>
+        <td style="font-weight:600;padding:6px 8px;">${escapeHTML(p.short)}</td>
+        <td style="padding:6px 8px;"><span style="font-size:12px;color:var(--color-text-muted);">— Non signé</span></td>
+        <td colspan="3" style="padding:6px 8px;"></td>
+      </tr>`;
+    }
+  }).join('');
+
   // Squelette immédiat (pas de flash blanc)
   // eslint-disable-next-line no-unsanitized/property
   container.innerHTML = `
     <div class="year-toggle" id="dash-sig-year-toggle">
       <button data-year="${cy}" class="${year === cy ? 'active' : ''}">${cy}</button>
       <button data-year="${cy + 1}" class="${year === cy + 1 ? 'active' : ''}">${cy + 1}</button>
+    </div>
+    <div class="card" style="margin-top:18px;">
+      <h3 style="font-size:16px;margin-bottom:4px;">Prévisionnels ${year} — état des signatures</h3>
+      <p class="text-muted" style="font-size:12.5px;margin-bottom:10px;">Signature électronique du prévisionnel annuel par chaque ASV.</p>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--color-border);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--color-text-muted);">
+            <th style="padding:4px 8px;text-align:left;font-weight:600;">ASV</th>
+            <th style="padding:4px 8px;text-align:left;font-weight:600;">Statut</th>
+            <th style="padding:4px 8px;text-align:left;font-weight:600;">Signé par</th>
+            <th style="padding:4px 8px;text-align:left;font-weight:600;">Date</th>
+            <th style="padding:4px 8px;"></th>
+          </tr>
+        </thead>
+        <tbody>${forecastRows}</tbody>
+      </table>
     </div>
     <div class="card" id="dash-pdf-archive-card" style="margin-top:18px;">
       <h3 style="font-size:16px;margin-bottom:4px;">Feuilles de présence signées ${year}</h3>
@@ -193,6 +240,29 @@ export async function renderDashboardSignatures() {
     if (!btn) return;
     store.dashState.year = parseInt(btn.dataset.year, 10);
     renderDashboardSignatures();
+  });
+
+  // Handlers : prévisionnels signés
+  container.querySelectorAll('[data-revoke-forecast]').forEach((btn) => {
+    btn.onclick = () => {
+      const [pid, y] = btn.dataset.revokeForecast.split('|');
+      openConfirmModal({
+        title: 'Annuler la signature du prévisionnel ?',
+        message: `Le prévisionnel ${y} de ${personOf(pid).short} redeviendra modifiable.`,
+        confirmLabel: 'Annuler la signature',
+        onConfirm: async () => {
+          await revokeForecastSig(pid, parseInt(y, 10));
+          renderDashboardSignatures();
+          showToast('Signature annulée', '🔓');
+        },
+      });
+    };
+  });
+  container.querySelectorAll('[data-view-forecast-pid]').forEach((btn) => {
+    btn.onclick = () => {
+      const pid = btn.dataset.viewForecastPid;
+      window.dispatchEvent(new CustomEvent('app:show-forecast', { detail: { pid } }));
+    };
   });
 
   // Charger l'archive PDF puis injecter dans la card

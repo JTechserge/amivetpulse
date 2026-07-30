@@ -826,7 +826,7 @@ function computeASVForecastMonthH(pid, year, month) {
       // Associer la semaine au mois de son vendredi (cohérent avec buildASVForecastSection)
       const friday = new Date(d);
       friday.setDate(friday.getDate() + 4);
-      const mo = friday.getFullYear() === year ? friday.getMonth() : (d.getFullYear() === year ? d.getMonth() : -1);
+      const mo = friday.getFullYear() === year ? friday.getMonth() : d.getFullYear() === year ? d.getMonth() : -1;
       if (mo === month) total += parseFloat(v) || 0;
     }
     d = new Date(d);
@@ -840,55 +840,87 @@ export function buildASVMonthlyTable(year) {
   const cm = today.getMonth();
   const modulated = ASV_PEOPLE.filter((p) => !p.archived && !p.saturdayOnly);
   if (!modulated.length) return '';
-  const headers = modulated
+
+  const TD = 'padding:4px 8px;text-align:right;font-size:12.5px;';
+  const TH =
+    'padding:4px 6px;text-align:right;font-size:10px;color:var(--color-text-muted);font-weight:600;white-space:nowrap;';
+  function dColor(d) {
+    if (d === null) return 'var(--color-text-muted)';
+    return Math.abs(d) <= 2 ? '#16A34A' : d < 0 ? '#DC2626' : '#D97706';
+  }
+
+  const nameHeaders = modulated
     .map(
       (p) =>
-        `<th style="text-align:right;padding:6px 10px;">${escapeHTML(p.short)}<br><span style="font-weight:400;font-size:10px;color:var(--color-text-muted);">quota ${formatNum(getASVQuota(p.id).monthly)}h/m</span></th>`
+        `<th colspan="3" style="text-align:center;padding:6px 8px;border-bottom:1px solid var(--color-border);">${escapeHTML(p.short)}<br><span style="font-weight:400;font-size:10px;color:var(--color-text-muted);">quota ${formatNum(getASVQuota(p.id).monthly)}h/m</span></th>`
     )
     .join('');
+  const subHeaders = modulated
+    .map(() => `<th style="${TH}">Réalisé</th><th style="${TH}">Prévis.</th><th style="${TH}">Δ</th>`)
+    .join('');
+
   let rows = '';
   for (let m = 0; m < 12; m++) {
     const isFuture = year === cy && m > cm;
     const isCur = year === cy && m === cm;
+    const bg = isCur ? 'background:#f0fdf4;font-weight:700;' : '';
+    const dash = `<td style="${TD}color:var(--color-text-muted);">—</td>`;
     const cols = modulated
       .map((p) => {
-        if (isFuture) return `<td style="padding:5px 10px;text-align:right;color:var(--color-text-muted);">—</td>`;
-        const q = getASVQuota(p.id);
+        if (isFuture) return dash + dash + dash;
         const w = computeASVWorkedHoursNew(p.id, year, m);
+        const fcast = computeASVForecastMonthH(p.id, year, m);
+        const diff = fcast > 0 ? Math.round((w - fcast) * 10) / 10 : null;
+        const q = getASVQuota(p.id);
         const pct = q.monthly > 0 ? w / q.monthly : 0;
         const icon = pct > 1.05 ? '🔴' : pct >= 0.9 ? '🟢' : w > 0 ? '🟡' : '';
-        const fcast = computeASVForecastMonthH(p.id, year, m);
-        const diff = fcast > 0 ? w - fcast : null;
-        const diffHtml = diff !== null
-          ? `<br><span style="font-size:10px;color:${Math.abs(diff) <= 2 ? '#16A34A' : diff < 0 ? '#DC2626' : '#D97706'};">${diff >= 0 ? '+' : ''}${formatNum(diff)}h vs prévis.</span>`
-          : '';
-        return `<td style="padding:5px 10px;text-align:right;font-size:13px;">${icon} <strong>${formatNum(w)}</strong><span style="color:var(--color-text-muted);font-size:11px;">h</span>${diffHtml}</td>`;
+        return (
+          `<td style="${TD}font-weight:700;">${icon} ${formatNum(w)}<span style="font-size:10px;font-weight:400;color:var(--color-text-muted);">h</span></td>` +
+          `<td style="${TD}color:var(--color-text-muted);">${fcast > 0 ? formatNum(fcast) + '<span style="font-size:10px;">h</span>' : '—'}</td>` +
+          `<td style="${TD}font-weight:700;color:${dColor(diff)};">${diff !== null ? (diff >= 0 ? '+' : '') + formatNum(diff) + 'h' : '—'}</td>`
+        );
       })
       .join('');
-    rows += `<tr style="${isCur ? 'background:#f0fdf4;font-weight:700;' : ''}">
-      <td style="padding:5px 10px;font-size:13px;color:${isCur ? 'var(--color-primary)' : 'inherit'};">${MONTH_NAMES[m]}${isCur ? ' ←' : ''}</td>
+    rows += `<tr style="${bg}">
+      <td style="padding:4px 8px;font-size:13px;white-space:nowrap;color:${isCur ? 'var(--color-primary)' : 'inherit'};">${MONTH_NAMES[m]}${isCur ? ' ←' : ''}</td>
       ${cols}
     </tr>`;
   }
+
   const totalCols = modulated
     .map((p) => {
       const q = getASVQuota(p.id);
       const w = computeASVWorkedHoursNew(p.id, year, null);
+      const fcastTotal =
+        Math.round(
+          Array.from({ length: 12 }, (_, m2) => computeASVForecastMonthH(p.id, year, m2)).reduce((a, b) => a + b, 0) *
+            10
+        ) / 10;
+      const diff = fcastTotal > 0 ? Math.round((w - fcastTotal) * 10) / 10 : null;
       const pct = q.annual > 0 ? Math.round((w / q.annual) * 100) : 0;
       const c = pct > 100 ? '#DC2626' : pct >= 90 ? '#F59E0B' : '#16A34A';
-      return `<td style="padding:8px 10px;text-align:right;font-weight:700;border-top:2px solid var(--color-border);"><span style="color:${c};">${formatNum(w)}h</span><span style="font-size:11px;color:var(--color-text-muted);"> / ${formatNum(q.annual)}h (${pct}%)</span></td>`;
+      const BT = 'border-top:2px solid var(--color-border);padding:6px 8px;text-align:right;font-weight:700;';
+      return (
+        `<td style="${BT}"><span style="color:${c};">${formatNum(w)}h</span><br><span style="font-size:10px;font-weight:400;color:var(--color-text-muted);">${pct}% / ${formatNum(q.annual)}h</span></td>` +
+        `<td style="${BT}color:var(--color-text-muted);font-weight:400;">${fcastTotal > 0 ? formatNum(fcastTotal) + 'h' : '—'}</td>` +
+        `<td style="${BT}color:${dColor(diff)};">${diff !== null ? (diff >= 0 ? '+' : '') + formatNum(diff) + 'h' : '—'}</td>`
+      );
     })
     .join('');
+
   return `<div class="card" style="margin-bottom:18px;">
     <div style="margin-bottom:10px;">
       <h3 style="font-size:15px;font-weight:700;margin-bottom:2px;">📊 Heures mensuelles — ${year}</h3>
-      <p style="font-size:12px;color:var(--color-text-muted);margin:0;">🟢 Quota atteint · 🟡 &lt; 90% du quota · 🔴 Dépassement</p>
+      <p style="font-size:12px;color:var(--color-text-muted);margin:0;">🟢 ≥ quota · 🟡 &lt; 90% · 🔴 dépassement · Δ = réalisé − prévisionnel</p>
     </div>
     <div style="overflow-x:auto;">
-      <table class="recap-table" style="min-width:320px;width:100%;">
-        <thead><tr><th style="text-align:left;">Mois</th>${headers}</tr></thead>
+      <table class="recap-table" style="min-width:500px;width:100%;border-collapse:collapse;">
+        <thead>
+          <tr><th rowspan="2" style="text-align:left;padding:6px 8px;vertical-align:bottom;">Mois</th>${nameHeaders}</tr>
+          <tr>${subHeaders}</tr>
+        </thead>
         <tbody>${rows}</tbody>
-        <tfoot><tr><td style="font-weight:800;padding:8px 10px;">Total ${year}</td>${totalCols}</tr></tfoot>
+        <tfoot><tr><td style="font-weight:800;padding:6px 8px;border-top:2px solid var(--color-border);">Total ${year}</td>${totalCols}</tr></tfoot>
       </table>
     </div>
   </div>`;

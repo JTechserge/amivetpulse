@@ -11,10 +11,14 @@ export const store = {
   adminViewMode: 'vet', // 'vet' | 'asv' — admin only
   adminImpersonatedPersonId: null,
 
-  // Signatures
+  // Signatures mensuelles
   SIGNATURES: new Set(),
   signatureDetails: new Map(),
   pendingSignToken: null,
+
+  // Signatures prévisionnel (Supabase-backed)
+  forecastSignatures: new Map(),
+  pendingForecastSignToken: null,
 
   // Annual interviews
   INTERVIEWS: [],

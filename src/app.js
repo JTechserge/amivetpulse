@@ -22,6 +22,7 @@ import { setupLogin, renderLoginScreen, renderSetPasswordScreen } from './login.
 import { initServiceWorker, showIOSInstallTip, updatePwaOfflineBanner } from './pwa.js';
 import { loadAnnouncements, renderAnnounces } from './announcements.js';
 import { setupSignatures, loadSignatures, openSignConfirmModal } from './signatures.js';
+import { loadForecastSignatures, openForecastSignConfirmModal } from './forecast-signatures.js';
 import { isASVPerson, setSlotState, setSlotLabel } from './slots.js';
 import { setupAnnualView, renderAnnualViewForGroup } from './annual-view.js';
 import { setupForecast, renderForecastPage } from './forecast.js';
@@ -794,6 +795,11 @@ function initApp() {
     store.pendingSignToken = null;
     openSignConfirmModal(token);
   }
+  if (store.pendingForecastSignToken) {
+    const token = store.pendingForecastSignToken;
+    store.pendingForecastSignToken = null;
+    openForecastSignConfirmModal(token);
+  }
   handlePwaShortcutAction();
 }
 
@@ -819,6 +825,15 @@ async function init() {
     store.pendingSignToken = signToken;
     const cleanUrl = new URL(window.location.href);
     cleanUrl.searchParams.delete('sign');
+    history.replaceState({}, '', cleanUrl.toString());
+  }
+
+  // Lien de signature prévisionnel (?sign-forecast=UUID)
+  const forecastSignToken = query.get('sign-forecast');
+  if (forecastSignToken) {
+    store.pendingForecastSignToken = forecastSignToken;
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete('sign-forecast');
     history.replaceState({}, '', cleanUrl.toString());
   }
 
@@ -855,12 +870,21 @@ function refreshData() {
     });
   }
   loadSignatures();
+  loadForecastSignatures();
   loadInterviews();
   loadAnnouncements();
 }
 function refreshAllPwaData() {
   refreshData();
 }
+// Navigation vers le prévisionnel d'une ASV depuis le tableau de bord
+window.addEventListener('app:show-forecast', (e) => {
+  const { pid } = e.detail;
+  if (store.forecastPageState) store.forecastPageState.currentPid = pid;
+  switchView('asv');
+  switchSubPage('asv', 'forecast');
+});
+
 window.addEventListener('online', () => {
   updatePwaOfflineBanner();
   refreshAllPwaData();

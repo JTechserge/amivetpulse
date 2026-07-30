@@ -470,7 +470,8 @@ function renderWeekViewASV() {
   function buildTimeOpts(currentMins) {
     let o = `<option value="0"${currentMins === 0 ? ' selected' : ''}>—</option>`;
     for (let m = 15; m <= 480; m += 15) {
-      const h = Math.floor(m / 60), mn = m % 60;
+      const h = Math.floor(m / 60),
+        mn = m % 60;
       const lbl = h > 0 ? `${h}h${mn > 0 ? String(mn).padStart(2, '0') : ''}` : `${mn}min`;
       o += `<option value="${m}"${currentMins === m ? ' selected' : ''}>${lbl}</option>`;
     }

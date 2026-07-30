@@ -6,10 +6,21 @@
 import { ASV_PEOPLE, MONTH_NAMES, MONTH_SHORT, ANNUAL_FULLTIME_HOURS } from './config.js';
 import { escapeHTML, asvFullName } from './utils.js';
 import { store } from './store.js';
-import { getForecastWeek, setForecastWeek, getForecastSig, setForecastSig } from './slots.js';
+import { getForecastWeek, setForecastWeek } from './slots.js';
+import {
+  isForecastSigned,
+  getForecastSig,
+  requestForecastSignature,
+  revokeForecastSig,
+  setupForecastSignatures,
+} from './forecast-signatures.js';
 import { showToast } from './ui.js';
 
 const MAX_CP_WEEKS = 5;
+
+// Refs pour le callback post-signature (re-render depuis forecast-signatures.js)
+let _lastForecastLayout = null;
+let _lastForecastYear = null;
 
 /* ================================================================
    Fonctions pures exportées (testables par Vitest)
@@ -270,11 +281,17 @@ function _renderASVMode(view, year) {
 }
 
 function _renderASVContent(layout, year) {
+  _lastForecastLayout = layout;
+  _lastForecastYear = year;
+  setupForecastSignatures({
+    onSigned: () => { if (_lastForecastLayout) _renderASVContent(_lastForecastLayout, _lastForecastYear); },
+  });
+
   const st = store.forecastPageState;
   const pid = st.currentPid;
   const sig = getForecastSig(pid, year);
   const weeks = buildYearWeeks(year);
-  const isReadOnly = !!sig;
+  const isReadOnly = isForecastSigned(pid, year);
   const canUnsign = store.currentUser?.role === 'vet' || store.currentUser?.role === 'admin';
 
   // Grouper les semaines par mois (mois du jeudi = .month)
@@ -383,16 +400,20 @@ function _renderASVContent(layout, year) {
     });
   });
 
-  // Bouton Signer — ouvre le document A4 puis enregistre la signature
-  layout.querySelector('#forecast-sign-btn')?.addEventListener('click', () => {
-    openForecastPrintWindow(pid, year);
-    const userName =
-      store.currentUser?.display_name || store.currentUser?.email || store.currentUser?.person_id || 'Inconnu';
-    _snapshotBeforeChange();
-    setForecastSig(pid, year, { signedAt: new Date().toISOString(), signedBy: userName });
-    _saveData();
-    _renderASVContent(layout, year);
-    showToast('Document généré — prévisionnel signé', '✍️');
+  // Bouton Signer — envoie un email de demande de signature à l'ASV (flux email+token)
+  layout.querySelector('#forecast-sign-btn')?.addEventListener('click', async () => {
+    const btn = layout.querySelector('#forecast-sign-btn');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = 'Envoi en cours…';
+    try {
+      const asvPerson = ASV_PEOPLE.find((p) => p.id === pid);
+      await requestForecastSignature(pid, year, asvPerson?.short || pid);
+    } catch (e) {
+      showToast(e.message || 'Erreur lors de la demande de signature', '❌');
+      btn.disabled = false;
+      btn.textContent = 'Demander la signature';
+    }
   });
 
   // Bouton Imprimer (sans signer)
@@ -400,12 +421,15 @@ function _renderASVContent(layout, year) {
     openForecastPrintWindow(pid, year);
   });
 
-  // Bouton R\xe9initialiser (vet/admin uniquement)
-  layout.querySelector('#forecast-unsign-btn')?.addEventListener('click', () => {
-    _snapshotBeforeChange();
-    setForecastSig(pid, year, null);
-    _saveData(false);
-    _renderASVContent(layout, year);
+  // Bouton Annuler (vet/admin uniquement)
+  layout.querySelector('#forecast-unsign-btn')?.addEventListener('click', async () => {
+    try {
+      await revokeForecastSig(pid, year);
+      _renderASVContent(layout, year);
+      showToast('Signature annulée', '🔓');
+    } catch (e) {
+      showToast(e.message || "Erreur lors de l'annulation", '❌');
+    }
   });
 }
 
@@ -779,7 +803,7 @@ function _renderSummaryPanel(panel, pid, year, weeks, sig, canUnsign, isReadOnly
     : '';
 
   const signBtnHtml = !isReadOnly
-    ? `<button class="forecast-sign-btn" id="forecast-sign-btn">Signer le pr\xe9visionnel</button>`
+    ? `<button class="forecast-sign-btn" id="forecast-sign-btn">Demander la signature</button>`
     : '';
   const printBtnHtml = `<button class="forecast-print-btn" id="forecast-print-btn">Imprimer le pr\xe9visionnel</button>`;
 
