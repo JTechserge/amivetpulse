@@ -171,6 +171,7 @@ export function renderDashboardStats() {
 
 export async function renderDashboardSignatures() {
   const container = document.getElementById('dash-sub-signatures');
+  await loadForecastSignatures();
   const year = store.dashState.year;
   const cy = getCurrentYear();
 
