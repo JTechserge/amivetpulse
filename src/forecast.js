@@ -645,76 +645,60 @@ function _buildPrintWindowCss(colors) {
 }
 
 /**
- * Affiche un aperçu imprimable en overlay plein écran sur la page courante.
- * "Imprimer" → window.print() ; "Fermer" / Échap → démonte l'overlay.
+ * Lance l'impression directe : injecte un div caché avec le contenu A4,
+ * appelle window.print(), puis nettoie via l'événement afterprint.
  */
-function _openForecastOverlay(pagesHtml, css, title) {
+function _printForecastDirect(pagesHtml, css) {
+  document.getElementById('fp-print-style')?.remove();
+  document.getElementById('fp-print-content')?.remove();
+
   const styleEl = document.createElement('style');
   styleEl.id = 'fp-print-style';
-  styleEl.textContent = css;
+  styleEl.textContent =
+    css +
+    '@media print{' +
+    'body>*:not(#fp-print-content){display:none!important;}' +
+    '#fp-print-content{display:block!important;}' +
+    '}';
   document.head.appendChild(styleEl);
 
-  const screenStyleEl = document.createElement('style');
-  screenStyleEl.id = 'fp-screen-style';
-  screenStyleEl.textContent =
-    '.forecast-print-sheet-wrap .sheet{' +
-    'width:210mm;background:#fff;margin:0 auto 16px;' +
-    'box-shadow:0 2px 14px rgba(0,0,0,.12);padding:14mm 14mm 12mm;}';
-  document.head.appendChild(screenStyleEl);
-
-  const overlay = document.createElement('div');
-  overlay.className = 'forecast-print-overlay';
-  overlay.id = 'forecast-print-overlay';
+  const container = document.createElement('div');
+  container.id = 'fp-print-content';
+  container.style.display = 'none';
   // eslint-disable-next-line no-unsanitized/property
-  overlay.innerHTML =
-    `<div class="forecast-print-toolbar">` +
-    `<span class="fpt-title">${escapeHTML(title)}</span>` +
-    `<div class="fpt-btns">` +
-    `<button class="fpt-btn-print">🖨️ Imprimer</button>` +
-    `<button class="fpt-btn-close">✕ Fermer</button>` +
-    `</div></div>` +
-    `<div class="forecast-print-sheet-wrap">${pagesHtml}</div>`;
-  document.body.appendChild(overlay);
+  container.innerHTML = pagesHtml;
+  document.body.appendChild(container);
 
-  function _close() {
-    overlay.remove();
+  function cleanup() {
+    container.remove();
     styleEl.remove();
-    screenStyleEl.remove();
-    document.removeEventListener('keydown', _onKey);
+    window.removeEventListener('afterprint', cleanup);
   }
-  function _onKey(e) { if (e.key === 'Escape') _close(); }
-
-  overlay.querySelector('.fpt-btn-close').addEventListener('click', _close);
-  overlay.querySelector('.fpt-btn-print').addEventListener('click', () => window.print());
-  document.addEventListener('keydown', _onKey);
+  window.addEventListener('afterprint', cleanup);
+  window.print();
 }
 
 /**
- * Aperçu imprimable inline pour le prévisionnel d'un ASV.
- * Conforme à la maquette apercu-previsionnel-impression.html.
+ * Impression directe du prévisionnel d'un ASV.
  */
 function openForecastPrintWindow(pid, year) {
   const colors = _getLightThemeColors();
   const logoSrc = _getLogoDataUrl();
   const pageHtml = _buildForecastPrintPage(pid, year, colors, logoSrc);
-  const css = _buildPrintWindowCss(colors);
-  const fullName = asvFullName(pid) || pid;
-  _openForecastOverlay(pageHtml, css, `Pr\xe9visionnel ${year} — ${fullName}`);
+  _printForecastDirect(pageHtml, _buildPrintWindowCss(colors));
 }
 
 /**
- * Aperçu imprimable par lot : une feuille A4 par ASV active (vét/admin uniquement).
+ * Impression directe par lot : une feuille A4 par ASV active (vét/admin uniquement).
  */
 export function openForecastPrintWindowAll(year) {
   const colors = _getLightThemeColors();
   const logoSrc = _getLogoDataUrl();
   const activeASV = ASV_PEOPLE.filter((p) => !p.archived);
-  if (!activeASV.length) { showToast('Aucune ASV active \xe0 imprimer', '⚠️'); return; }
+  if (!activeASV.length) { showToast('Aucune ASV active \xe0 imprimer', '\u26a0\ufe0f'); return; }
   const pagesHtml = activeASV.map((p) => _buildForecastPrintPage(p.id, year, colors, logoSrc)).join('\n');
-  const css = _buildPrintWindowCss(colors);
-  _openForecastOverlay(pagesHtml, css, `Pr\xe9visionnel ${year} — toutes les ASV`);
+  _printForecastDirect(pagesHtml, _buildPrintWindowCss(colors));
 }
-
 /**
  * Formate la plage de dates d'une semaine : "1–7" ou "29 déc – 4 janv" si cheval sur 2 mois.
  */
