@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { person_id, year } = await req.json();
+    const { person_id, year, pdf_base64 } = await req.json();
     if (!person_id || typeof year !== 'number') {
       return new Response(JSON.stringify({ error: 'person_id et year sont requis.' }), {
         status: 400,
@@ -164,6 +164,7 @@ Deno.serve(async (req) => {
           htmlContent: wrapEmailHtml(emailBody),
           trackClicks: false,
           trackOpens: false,
+          ...(pdf_base64 ? { attachment: [{ content: pdf_base64, name: `previsionnel-${year}-${person_id}.pdf` }] } : {}),
         }),
       });
       const brevoBody = await emailRes.text();

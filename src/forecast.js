@@ -407,10 +407,17 @@ function _renderASVContent(layout, year) {
     const btn = layout.querySelector('#forecast-sign-btn');
     if (!btn) return;
     btn.disabled = true;
+    btn.textContent = 'Préparation du PDF…';
+    let pdfBase64 = null;
+    try {
+      pdfBase64 = await _generateForecastPdfBase64(pid, year);
+    } catch (e) {
+      console.warn('[forecast] PDF generation failed, sending without attachment:', e);
+    }
     btn.textContent = 'Envoi en cours…';
     try {
       const asvPerson = ASV_PEOPLE.find((p) => p.id === pid);
-      await requestForecastSignature(pid, year, asvPerson?.short || pid);
+      await requestForecastSignature(pid, year, asvPerson?.short || pid, pdfBase64);
       btn.disabled = false;
       btn.textContent = 'Demander la signature';
     } catch (e) {
@@ -676,6 +683,46 @@ function _buildPrintWindowCss(colors) {
  * Lance l'impression directe : injecte un div caché avec le contenu A4,
  * appelle window.print(), puis nettoie via l'événement afterprint.
  */
+async function _generateForecastPdfBase64(pid, year) {
+  const { jsPDF } = await import('jspdf');
+  const { default: html2canvas } = await import('html2canvas');
+  const colors = _getLightThemeColors();
+  const logoSrc = _getLogoDataUrl();
+  const pageHtml = _buildForecastPrintPage(pid, year, colors, logoSrc);
+  const css = _buildPrintWindowCss(colors);
+
+  const styleEl = document.createElement('style');
+  styleEl.id = 'fp-pdf-gen-style';
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
+
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:#fff;pointer-events:none;z-index:-1;';
+  // eslint-disable-next-line no-unsanitized/property
+  wrapper.innerHTML = pageHtml;
+  document.body.appendChild(wrapper);
+
+  try {
+    await document.fonts.ready;
+    const sheetEl = wrapper.querySelector('.sheet') || wrapper;
+    const canvas = await html2canvas(sheetEl, {
+      scale: 1.5,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+    });
+    const imgData = canvas.toDataURL('image/jpeg', 0.85);
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pdfWidth = 210;
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+    return pdf.output('datauristring').split(',')[1];
+  } finally {
+    wrapper.remove();
+    styleEl.remove();
+  }
+}
+
 function _printForecastDirect(pagesHtml, css) {
   document.getElementById('fp-print-style')?.remove();
   document.getElementById('fp-print-content')?.remove();

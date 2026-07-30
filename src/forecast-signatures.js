@@ -38,11 +38,13 @@ export async function loadForecastSignatures() {
 
 // Appel par le vétérinaire : envoie l'email de demande de signature à l'ASV.
 // Si l'email échoue, ouvre le modal avec le lien à copier manuellement.
-export async function requestForecastSignature(pid, year, asvLabel) {
+export async function requestForecastSignature(pid, year, asvLabel, pdfBase64 = null) {
+  const body = { person_id: pid, year };
+  if (pdfBase64) body.pdf_base64 = pdfBase64;
   const res = await fetch(`${SUPABASE_FUNCTIONS_URL}request-forecast-signature`, {
     method: 'POST',
     headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ person_id: pid, year }),
+    body: JSON.stringify(body),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
