@@ -164,7 +164,9 @@ Deno.serve(async (req) => {
           htmlContent: wrapEmailHtml(emailBody),
           trackClicks: false,
           trackOpens: false,
-          ...(pdf_base64 ? { attachment: [{ content: pdf_base64, name: `previsionnel-${year}-${person_id}.pdf` }] } : {}),
+          ...(pdf_base64
+            ? { attachment: [{ content: pdf_base64, name: `previsionnel-${year}-${person_id}.pdf` }] }
+            : {}),
         }),
       });
       const brevoBody = await emailRes.text();

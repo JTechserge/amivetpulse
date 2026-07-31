@@ -62,7 +62,7 @@ describe('easterDate (leave-requests.js)', () => {
       const day = d.getDate();
       const ok =
         (m === 2 && day >= 22) || // mars ≥ 22
-        (m === 3 && day <= 25);   // avril ≤ 25
+        (m === 3 && day <= 25); // avril ≤ 25
       expect(ok).toBe(true);
     }
   });
@@ -116,7 +116,7 @@ describe('cpPeriodISO (leave-requests.js)', () => {
     expect(end).toBe('2026-12-31');
   });
 
-  it('le label mentionne l\'année', () => {
+  it("le label mentionne l'année", () => {
     const { label } = cpPeriodISO(2026);
     expect(label).toContain('2026');
   });

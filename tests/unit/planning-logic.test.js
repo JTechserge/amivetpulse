@@ -166,7 +166,7 @@ describe('getASVQuota (src/dashboard-stats.js)', () => {
   });
 
   it('Carla : quota mensuel ≈ 32.1h (7h25 × 52 ÷ 12)', () => {
-    expect(getASVQuota('carla').monthly).toBeCloseTo((7 + 25 / 60) * 52 / 12, 0);
+    expect(getASVQuota('carla').monthly).toBeCloseTo(((7 + 25 / 60) * 52) / 12, 0);
   });
 
   it('tous les quotas hebdo ASV non-samedi sont sous le plafond de 42h', () => {

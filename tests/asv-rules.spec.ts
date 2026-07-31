@@ -1,5 +1,5 @@
-import { test, expect } from "@playwright/test";
-import type { Page } from "@playwright/test";
+import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 // ============================================================
 // TNR — Règles ASV : modulation, quotas, effectif, icônes PWA
@@ -22,59 +22,56 @@ interface AsvPerson {
   saturdayOnly: boolean;
 }
 
-
 async function getRoster(page: Page): Promise<AsvPerson[]> {
-  await page.goto("./");
+  await page.goto('./');
   await page.waitForTimeout(600);
-  return page.evaluate<AsvPerson[]>(() =>
-    JSON.parse(localStorage.getItem("amivet_asv_roster") || "[]")
-  );
+  return page.evaluate<AsvPerson[]>(() => JSON.parse(localStorage.getItem('amivet_asv_roster') || '[]'));
 }
 
 // ────────────────────────────────────────────────────────────
 // A. Tests navigateur
 // ────────────────────────────────────────────────────────────
 
-test.describe("Effectif ASV — localStorage après init", () => {
+test.describe('Effectif ASV — localStorage après init', () => {
   // loadASVRoster() s'exécute dans init() → DOMContentLoaded
   // et sauvegarde le roster (+ Carla si absente) dans localStorage.
 
-  test("le roster contient exactement 4 ASV (Marie, Johanna, Julie, Carla)", async ({ page }) => {
+  test('le roster contient exactement 4 ASV (Marie, Johanna, Julie, Carla)', async ({ page }) => {
     const roster = await getRoster(page);
     expect(roster).toHaveLength(4);
     const ids = roster.map((p: AsvPerson) => p.id);
-    expect(ids).toContain("marie");
-    expect(ids).toContain("johanna");
-    expect(ids).toContain("julie");
-    expect(ids).toContain("carla");
+    expect(ids).toContain('marie');
+    expect(ids).toContain('johanna');
+    expect(ids).toContain('julie');
+    expect(ids).toContain('carla');
   });
 
-  test("Carla est marquée saturdayOnly:true", async ({ page }) => {
+  test('Carla est marquée saturdayOnly:true', async ({ page }) => {
     const roster = await getRoster(page);
-    const carla = roster.find((p: AsvPerson) => p.id === "carla");
+    const carla = roster.find((p: AsvPerson) => p.id === 'carla');
     expect(carla).toBeTruthy();
     expect(carla?.saturdayOnly).toBe(true);
   });
 
-  test("Marie et Johanna sont à temps plein (timeFraction 1.0)", async ({ page }) => {
+  test('Marie et Johanna sont à temps plein (timeFraction 1.0)', async ({ page }) => {
     const roster = await getRoster(page);
-    const marie = roster.find((p: AsvPerson) => p.id === "marie");
-    const johanna = roster.find((p: AsvPerson) => p.id === "johanna");
+    const marie = roster.find((p: AsvPerson) => p.id === 'marie');
+    const johanna = roster.find((p: AsvPerson) => p.id === 'johanna');
     expect(marie?.timeFraction).toBeCloseTo(1.0, 2);
     expect(johanna?.timeFraction).toBeCloseTo(1.0, 2);
   });
 
-  test("Julie est à 3/4 temps (timeFraction 0.75)", async ({ page }) => {
+  test('Julie est à 3/4 temps (timeFraction 0.75)', async ({ page }) => {
     const roster = await getRoster(page);
-    const julie = roster.find((p: AsvPerson) => p.id === "julie");
+    const julie = roster.find((p: AsvPerson) => p.id === 'julie');
     expect(julie?.timeFraction).toBeCloseTo(0.75, 2);
   });
 
-  test("Carla a une timeFraction cohérente avec 7h25/semaine (≈ 0.207)", async ({ page }) => {
+  test('Carla a une timeFraction cohérente avec 7h25/semaine (≈ 0.207)', async ({ page }) => {
     const roster = await getRoster(page);
-    const carla = roster.find((p: AsvPerson) => p.id === "carla");
+    const carla = roster.find((p: AsvPerson) => p.id === 'carla');
     // 7.25 / 35 ≈ 0.2071
-    expect(carla?.timeFraction).toBeGreaterThan(0.20);
+    expect(carla?.timeFraction).toBeGreaterThan(0.2);
     expect(carla?.timeFraction).toBeLessThan(0.22);
   });
 
@@ -84,7 +81,7 @@ test.describe("Effectif ASV — localStorage après init", () => {
     expect(archived).toHaveLength(0);
   });
 
-  test("chaque ASV a un id, un nom et une couleur valides", async ({ page }) => {
+  test('chaque ASV a un id, un nom et une couleur valides', async ({ page }) => {
     const roster = await getRoster(page);
     for (const p of roster) {
       expect(p.id).toBeTruthy();
@@ -98,42 +95,42 @@ test.describe("Effectif ASV — localStorage après init", () => {
 // A2. Icônes et assets PWA
 // ────────────────────────────────────────────────────────────
 
-test.describe("Icônes PWA — assets servis", () => {
+test.describe('Icônes PWA — assets servis', () => {
   const icons = [
-    "icons/icon-192.png",
-    "icons/icon-512.png",
-    "icons/icon-maskable-192.png",
-    "icons/icon-maskable-512.png",
-    "icons/apple-touch-icon.png",
-    "logo.png",
+    'icons/icon-192.png',
+    'icons/icon-512.png',
+    'icons/icon-maskable-192.png',
+    'icons/icon-maskable-512.png',
+    'icons/apple-touch-icon.png',
+    'logo.png',
   ];
 
   for (const icon of icons) {
     test(`${icon} est accessible (HTTP 200)`, async ({ request }) => {
       const res = await request.get(icon);
       expect(res.ok()).toBeTruthy();
-      const ct = res.headers()["content-type"] || "";
-      expect(ct).toContain("image/png");
+      const ct = res.headers()['content-type'] || '';
+      expect(ct).toContain('image/png');
     });
   }
 
-  test("le manifest.json référence icon-192 et icon-512", async ({ request }) => {
-    const res = await request.get("manifest.json");
+  test('le manifest.json référence icon-192 et icon-512', async ({ request }) => {
+    const res = await request.get('manifest.json');
     expect(res.ok()).toBeTruthy();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const manifest = await res.json() as any;
+    const manifest = (await res.json()) as any;
     const icons: Array<{ sizes: string; purpose?: string }> = manifest.icons || [];
     const sizes = icons.map((i) => i.sizes);
-    expect(sizes.some((s) => s && s.includes("192"))).toBeTruthy();
-    expect(sizes.some((s) => s && s.includes("512"))).toBeTruthy();
+    expect(sizes.some((s) => s && s.includes('192'))).toBeTruthy();
+    expect(sizes.some((s) => s && s.includes('512'))).toBeTruthy();
   });
 
-  test("le manifest.json déclare au moins une icône maskable", async ({ request }) => {
-    const res = await request.get("manifest.json");
+  test('le manifest.json déclare au moins une icône maskable', async ({ request }) => {
+    const res = await request.get('manifest.json');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const manifest = await res.json() as any;
+    const manifest = (await res.json()) as any;
     const icons: Array<{ sizes: string; purpose?: string }> = manifest.icons || [];
-    const maskable = icons.filter((i) => i.purpose && i.purpose.includes("maskable"));
+    const maskable = icons.filter((i) => i.purpose && i.purpose.includes('maskable'));
     expect(maskable.length).toBeGreaterThan(0);
   });
 });
@@ -142,24 +139,24 @@ test.describe("Icônes PWA — assets servis", () => {
 // A3. Interface — éléments observables sans authentification
 // ────────────────────────────────────────────────────────────
 
-test.describe("Interface auth sans session", () => {
+test.describe('Interface auth sans session', () => {
   test("le bouton Mot de passe oublié est visible sur l'écran de login", async ({ page }) => {
-    await page.goto("./");
-    await expect(page.locator("#forgot-btn")).toBeVisible();
+    await page.goto('./');
+    await expect(page.locator('#forgot-btn')).toBeVisible();
   });
 
   test("l'écran de réinitialisation s'affiche au clic sur Mot de passe oublié", async ({ page }) => {
-    await page.goto("./");
-    await page.click("#forgot-btn");
-    await expect(page.locator("#forgot-form")).toBeVisible();
-    await expect(page.locator("#forgot-email")).toBeVisible();
+    await page.goto('./');
+    await page.click('#forgot-btn');
+    await expect(page.locator('#forgot-form')).toBeVisible();
+    await expect(page.locator('#forgot-email')).toBeVisible();
   });
 
-  test("le formulaire oublié repasse en login au clic Retour", async ({ page }) => {
-    await page.goto("./");
-    await page.click("#forgot-btn");
-    await page.click("#back-login");
-    await expect(page.locator("#login-form")).toBeVisible();
+  test('le formulaire oublié repasse en login au clic Retour', async ({ page }) => {
+    await page.goto('./');
+    await page.click('#forgot-btn');
+    await page.click('#back-login');
+    await expect(page.locator('#login-form')).toBeVisible();
   });
 });
 
