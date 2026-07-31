@@ -4,7 +4,7 @@ import { supabaseHeaders } from './auth.js';
 import { store } from './store.js';
 import { showToast, openConfirmModal } from './ui.js';
 import { revokeSignature } from './signatures.js';
-import { isForecastSigned, getForecastSig, revokeForecastSig, loadForecastSignatures } from './forecast-signatures.js';
+import { getForecastSig, revokeForecastSig, loadForecastSignatures } from './forecast-signatures.js';
 import { fetchSignatureArchive, fetchSignedStorageUrl } from './api.js';
 import { triggerPushNotification } from './pwa.js';
 

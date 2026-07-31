@@ -499,7 +499,7 @@ function _buildForecastPrintPage(pid, year, colors, logoSrc) {
   const diff = Math.round((annualTotal - ANNUAL_FULLTIME_HOURS) * 10) / 10;
   const diffStr = (diff >= 0 ? '+' : '') + diff + ' h';
 
-  const { primary, cpBg, cpText, text, textMuted, border } = colors;
+  const { primary } = colors;
 
   const logoHtml = logoSrc
     ? `<img src="${logoSrc}" alt="Amivet" style="height:36px;width:auto;display:block;border-radius:7px;">`
@@ -512,7 +512,7 @@ function _buildForecastPrintPage(pid, year, colors, logoSrc) {
       em = wk.de.getUTCMonth();
     const M3p = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
     if (sm === em) return `${sd}–${ed}`;
-    return `${sd} ${M3p[sm]}–${ed} ${M3p[em]}`;
+    return `${sd} ${M3p[sm]}–${ed} ${M3p[em]}`;
   }
 
   const QTITLES = ['1er trimestre', '2e trimestre', '3e trimestre', '4e trimestre'];
@@ -697,7 +697,8 @@ async function _generateForecastPdfBase64(pid, year) {
   document.head.appendChild(styleEl);
 
   const wrapper = document.createElement('div');
-  wrapper.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:#fff;pointer-events:none;z-index:-1;';
+  wrapper.style.cssText =
+    'position:fixed;left:-9999px;top:0;width:794px;background:#fff;pointer-events:none;z-index:-1;';
   // eslint-disable-next-line no-unsanitized/property
   wrapper.innerHTML = pageHtml;
   document.body.appendChild(wrapper);
