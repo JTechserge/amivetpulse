@@ -42,14 +42,8 @@ export function setupLeaveRequests({ snapshotBeforeChange, saveData, renderDashb
    ================================================================ */
 
 // Repos planifié ne nécessite pas d'approbation vétérinaire → exclu des demandes de congé.
-export function isReposLabel(label) {
-  const lc = (label || '').toLowerCase().trim();
-  return lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé';
-}
-export function isSickOrAccidentLabel(label) {
-  const lc = (label || '').toLowerCase().trim();
-  return lc.includes('maladie') || lc.includes('arrêt') || lc.includes('accident');
-}
+import { isReposLabel, isSickOrAccidentLabel } from './lib/leave-utils.js';
+export { isReposLabel, isSickOrAccidentLabel };
 
 export function collectAllLeaveGroups() {
   const groups = [];
