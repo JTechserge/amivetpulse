@@ -27,7 +27,7 @@ LATEST=".tnr/latest.log"
   echo "--- npm run lint ---"
   npm run lint
   LINT_EXIT=$?
-  echo "lint_exit=$LINT_EXIT"
+  echo "-> lint termine (code $LINT_EXIT)"
 
   if [ "$LINT_EXIT" -ne 0 ]; then
     echo "Lint en echec — arret anticipe."
@@ -39,7 +39,7 @@ LATEST=".tnr/latest.log"
     echo "--- npm run test:unit ---"
     npm run test:unit
     UNIT_EXIT=$?
-    echo "unit_exit=$UNIT_EXIT"
+    echo "-> test:unit termine (code $UNIT_EXIT)"
 
     if [ "$UNIT_EXIT" -ne 0 ]; then
       echo "Tests unitaires en echec — arret anticipe."
@@ -50,7 +50,7 @@ LATEST=".tnr/latest.log"
       echo "--- npm run build ---"
       npm run build
       BUILD_EXIT=$?
-      echo "build_exit=$BUILD_EXIT"
+      echo "-> build termine (code $BUILD_EXIT)"
 
       if [ "$BUILD_EXIT" -ne 0 ]; then
         echo "Build en echec — arret anticipe."
@@ -61,7 +61,7 @@ LATEST=".tnr/latest.log"
         echo "--- npx playwright test ---"
         npx playwright test
         TEST_EXIT=$?
-        echo "test_exit=$TEST_EXIT"
+        echo "-> playwright termine (code $TEST_EXIT)"
       fi
     fi
   fi
