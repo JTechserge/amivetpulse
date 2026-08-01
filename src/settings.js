@@ -1761,7 +1761,7 @@ function openHelpModal() {
   <div class="ho-card"><div class="ho-card-icon">🐾</div><strong>Suivi ASV</strong><p>Heures effectuées, H.supp. cumulées, départs anticipés et solde net par ASV sur la période choisie.</p></div>
   <div class="ho-card"><div class="ho-card-icon">📋</div><strong>Demandes</strong><p>Toutes les demandes de congé et modifications en attente. Approbation ou refus en un clic. Les modifications urgentes (violet) apparaissent en priorité.</p></div>
   <div class="ho-card"><div class="ho-card-icon">✍️</div><strong>Feuilles signées</strong><p>Historique complet des signatures électroniques ASV avec date, heure et identité du signataire.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">📝</div><strong>Entretiens & visites</strong><p>Suivi des visites médicales et entretiens annuels de chaque collaborateur.</p></div>
+  <div class="ho-card"><div class="ho-card-icon">📝</div><strong>Entretiens annuels</strong><p>Suivi des entretiens annuels de chaque collaborateur.</p></div>
 </div>
 <h3 class="ho-subtitle">🩺 Vétérinaires</h3>
 <div class="ho-cards">
@@ -1895,7 +1895,7 @@ function openHelpModal() {
     },
     {
       q: 'Quelle différence entre la feuille de présence et le prévisionnel ?',
-      a: "La <strong>feuille de présence</strong> (mensuelle) récapitule les heures <em>réellement effectuées</em> sur le mois écoulé. Le <strong>prévisionnel</strong> (hebdomadaire) présente les heures <em>planifiées à venir</em>. Les deux peuvent être signés électroniquement via un lien reçu par email.",
+      a: 'La <strong>feuille de présence</strong> (mensuelle) récapitule les heures <em>réellement effectuées</em> sur le mois écoulé. Le <strong>prévisionnel</strong> (hebdomadaire) présente les heures <em>planifiées à venir</em>. Les deux peuvent être signés électroniquement via un lien reçu par email.',
     },
   ];
 
