@@ -1838,6 +1838,18 @@ function openHelpModal() {
       q: 'Comment imprimer le calendrier mensuel ?',
       a: 'Dans les vues mensuelles, un bouton <strong>Imprimer</strong> est disponible en haut de la page. Le format est optimisé A4 portrait avec logo et mise en page N&B.',
     },
+    {
+      q: "Comment demander la signature du prévisionnel d'une ASV ?",
+      a: "🐾 ASV > Vue hebdomadaire → sélectionner la semaine cible → bouton <strong>✉️ Demander la signature</strong>. Un email est envoyé à l'ASV avec le prévisionnel en <strong>PDF joint</strong>. Le lien de signature est à usage unique et valable 7 jours.",
+    },
+    {
+      q: 'Comment consulter les signatures de prévisionnels ?',
+      a: "Tableau de bord → onglet <strong>Signatures</strong>. Chaque ligne indique l'ASV, la période, la date et l'identité du signataire. Les prévisionnels non encore signés affichent le bouton <em>Demander la signature</em>.",
+    },
+    {
+      q: "Comment ajuster finement les heures supplémentaires ou manquantes d'une ASV ?",
+      a: "Vue hebdomadaire → lignes <strong>H.supp.</strong> et <strong>H.manq.</strong> : cliquer sur la valeur pour ouvrir un sélecteur au quart d'heure (0 min → 3h30 par pas de 15 min). Le total de la semaine se met à jour automatiquement.",
+    },
   ];
 
   const faqDataAsv = [
@@ -1876,6 +1888,14 @@ function openHelpModal() {
     {
       q: 'Mon mot de passe est perdu, que faire ?',
       a: "Sur l'écran de connexion, cliquer sur <strong>Mot de passe oublié ?</strong> → entrer votre email → un lien de réinitialisation vous est envoyé.",
+    },
+    {
+      q: 'Comment signer mon prévisionnel ?',
+      a: "Votre responsable vous envoie un email avec le prévisionnel en <strong>PDF joint</strong>. Ouvrez l'email → vérifiez le document → cliquez sur <strong>✍️ Je certifie et signe mon prévisionnel</strong>. Le lien est à usage unique et valable 7 jours.",
+    },
+    {
+      q: 'Quelle différence entre la feuille de présence et le prévisionnel ?',
+      a: "La <strong>feuille de présence</strong> (mensuelle) récapitule les heures <em>réellement effectuées</em> sur le mois écoulé. Le <strong>prévisionnel</strong> (hebdomadaire) présente les heures <em>planifiées à venir</em>. Les deux peuvent être signés électroniquement via un lien reçu par email.",
     },
   ];
 
