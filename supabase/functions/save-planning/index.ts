@@ -6,6 +6,7 @@ import {
   findChangedKeys,
   hasFullAccess,
   validateAsvWrite,
+  validateVetEmployeWrite,
   type SlotsRecord,
 } from '../_shared/planning-auth.ts';
 
@@ -79,7 +80,7 @@ Deno.serve(async (req) => {
 
     // ── 2. Profil utilisateur ────────────────────────────────────────────────
     const profRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${authUser.id}&select=role,can_edit_vet_calendar,can_edit_all_asv,person_id`,
+      `${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${authUser.id}&select=role,can_edit_vet_calendar,can_edit_all_asv,can_edit_asv_calendar,person_id`,
       { headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` } }
     );
     const profiles = await profRes.json();
@@ -106,7 +107,20 @@ Deno.serve(async (req) => {
     const currentRows = await currentRes.json();
     const currentSlots: SlotsRecord = currentRows?.[0]?.data ?? {};
 
-    if (!hasFullAccess(profile)) {
+    if (profile.role === 'vet_employe') {
+      // Vétérinaire salarié : périmètre = lignes du calendrier vétérinaire.
+      // La liste vient de la table partagée vet_roster (lue en service_role) —
+      // pas d'une constante dupliquée qui pourrait diverger de config.js.
+      const rosterRes = await fetch(`${SUPABASE_URL}/rest/v1/vet_roster?select=id`, {
+        headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
+      });
+      if (!rosterRes.ok) return json({ error: 'Roster vétérinaire illisible — écriture refusée.' }, 503);
+      const rosterRows: Array<{ id: string }> = await rosterRes.json();
+      const vetIds = new Set((rosterRows ?? []).map((r) => r.id));
+      const changedKeys = findChangedKeys(currentSlots, slots);
+      const authError = validateVetEmployeWrite(changedKeys, vetIds, profile.can_edit_asv_calendar === true);
+      if (authError) return json({ error: authError }, 403);
+    } else if (!hasFullAccess(profile)) {
       const changedKeys = findChangedKeys(currentSlots, slots);
       const authError = validateAsvWrite(changedKeys, profile.person_id);
       if (authError) return json({ error: authError }, 403);
