@@ -42,7 +42,7 @@ serve(async (req) => {
     // --- LIST ---
     if (action === 'list') {
       const [{ data: profiles }, { data: authData }] = await Promise.all([
-        adminClient.from('user_profiles').select('id,role,person_id,display_name,can_edit_vet_calendar,can_edit_all_asv'),
+        adminClient.from('user_profiles').select('id,role,person_id,display_name,can_edit_vet_calendar,can_edit_all_asv,can_edit_asv_calendar'),
         adminClient.auth.admin.listUsers({ perPage: 1000 }),
       ]);
 
@@ -99,7 +99,8 @@ serve(async (req) => {
 
     // --- UPDATE ---
     if (action === 'update') {
-      const { user_id, email, display_name, role, person_id, can_edit_vet_calendar, can_edit_all_asv } = body;
+      const { user_id, email, display_name, role, person_id, can_edit_vet_calendar, can_edit_all_asv, can_edit_asv_calendar } =
+        body;
       if (!user_id) return new Response(JSON.stringify({ error: 'user_id requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
       if (email !== undefined) {
@@ -113,6 +114,7 @@ serve(async (req) => {
       if ('person_id' in body) profileUpdates.person_id = person_id || null;
       if (can_edit_vet_calendar !== undefined) profileUpdates.can_edit_vet_calendar = can_edit_vet_calendar;
       if (can_edit_all_asv !== undefined) profileUpdates.can_edit_all_asv = can_edit_all_asv;
+      if (can_edit_asv_calendar !== undefined) profileUpdates.can_edit_asv_calendar = can_edit_asv_calendar;
 
       if (Object.keys(profileUpdates).length > 0) {
         const { error: profileError } = await adminClient.from('user_profiles').update(profileUpdates).eq('id', user_id);

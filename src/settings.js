@@ -13,8 +13,14 @@ import { escapeHTML, slugifyName, colorRejectReason, fmtISO, formatHHMM, formatN
 import { store } from './store.js';
 import { showToast, applyPersonColorVars, openConfirmModal } from './ui.js';
 import { supabaseHeaders, getAuthSession, authUpdatePassword } from './auth.js';
-import { reindexPresentShades, saveASVRoster, savePersonColors } from './state.js';
-import { pushDataToSupabase } from './api.js';
+import {
+  reindexPresentShades,
+  saveASVRoster,
+  savePersonColors,
+  reindexVetPresentShades,
+  saveVetRosterCache,
+} from './state.js';
+import { pushDataToSupabase, apiUpsertVetPerson } from './api.js';
 import { openNotificationSettingsModal } from './pwa.js';
 import { renderLoginScreen } from './login.js';
 import { renderCalendarView } from './calendar.js';
@@ -99,6 +105,49 @@ function addASVPerson(name, lastName = '') {
   ASV_PEOPLE.push(person);
   reindexPresentShades();
   saveASVRoster();
+  savePersonColors();
+  applyPersonColorVars();
+  return person;
+}
+
+function uniqueVetId(base) {
+  let id = base,
+    n = 2;
+  while (PEOPLE.some((p) => p.id === id) || ASV_PEOPLE.some((p) => p.id === id)) {
+    id = `${base}-${n}`;
+    n++;
+  }
+  return id;
+}
+
+/**
+ * Crée un vétérinaire salarié dans le roster partagé (partner: false), puis
+ * l'ajoute en local. Renvoie null si l'écriture distante échoue : mieux vaut
+ * une invitation sans person_id qu'une ligne visible seulement sur ce poste.
+ */
+async function addVetEmployePerson(name) {
+  name = (name || '').trim();
+  if (!name) return null;
+  const person = {
+    id: uniqueVetId(slugifyName(name)),
+    name,
+    short: name,
+    initial: name.slice(0, 2).toUpperCase(),
+    color: pickDefaultASVColor(),
+    present: null,
+    partner: false,
+    archived: false,
+    sortOrder: PEOPLE.length,
+  };
+  try {
+    await apiUpsertVetPerson(person);
+  } catch (e) {
+    showToast(`Création du vétérinaire impossible : ${e.message}`, '⚠️');
+    return null;
+  }
+  PEOPLE.push(person);
+  reindexVetPresentShades();
+  saveVetRosterCache();
   savePersonColors();
   applyPersonColorVars();
   return person;
@@ -331,7 +380,8 @@ function openManageUsersModal() {
           <input type="text" id="invite-name" placeholder="Prénom (affiché)" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
           <input type="email" id="invite-email" placeholder="Email" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
           <select id="invite-role" style="padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
-            <option value="vet">Vétérinaire</option>
+            <option value="vet">Vétérinaire associé</option>
+            <option value="vet_employe">Vétérinaire salarié</option>
             <option value="asv">ASV</option>
             <option value="admin">Admin</option>
           </select>
@@ -555,6 +605,14 @@ function openManageUsersModal() {
               // Vétérinaire : chercher dans PEOPLE par nom
               const vetLocal = PEOPLE.find((p) => name.trim().toLowerCase().includes(p.short.toLowerCase()));
               personId = vetLocal?.id || null;
+            } else if (role === 'vet_employe') {
+              // Vétérinaire salarié : réutiliser la ligne existante si le nom
+              // correspond, sinon en créer une dans le roster partagé — sans quoi
+              // il n'aurait pas de ligne de calendrier et ne pourrait pas poser
+              // de congé (tout le flux est indexé sur person_id).
+              const existingVet = PEOPLE.find((p) => p.short.trim().toLowerCase() === name.trim().toLowerCase());
+              const vetPerson = existingVet || (await addVetEmployePerson(name));
+              personId = vetPerson?.id || null;
             } else if (role === 'asv') {
               const inviteLastName = (box.querySelector('#invite-lastname')?.value || '').trim();
               const existing = ASV_PEOPLE.find(
@@ -749,7 +807,8 @@ function openEditUserModal(userId, users, onBack) {
       <div>
         <label class="text-muted" style="font-size:12px;display:block;margin-bottom:4px;">Rôle</label>
         <select id="edit-role" style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
-          <option value="vet" ${user.role === 'vet' ? 'selected' : ''}>Vétérinaire</option>
+          <option value="vet" ${user.role === 'vet' ? 'selected' : ''}>Vétérinaire associé</option>
+          <option value="vet_employe" ${user.role === 'vet_employe' ? 'selected' : ''}>Vétérinaire salarié</option>
           <option value="asv" ${user.role === 'asv' ? 'selected' : ''}>ASV</option>
           <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
         </select>
