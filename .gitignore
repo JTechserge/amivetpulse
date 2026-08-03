@@ -16,3 +16,6 @@ backup-*/
 
 # doublons de synchronisation iCloud (« fichier 2.js », « fichier 3.js »…)
 * ?.*
+
+# prompts de travail (specs de chantier) — locaux uniquement
+docs/PROMPT-*.md
