@@ -17,7 +17,8 @@ import { escapeHTML, fmtISO, daysInMonth, isoWeekday, isSunday, holidayName, get
 import { getAuthSession, saveAuthSession, supabaseHeaders } from './auth.js';
 import { loadASVRoster, loadVetRosterCache, applyVetRosterRows } from './state.js';
 import { showToast, showSavedToast, openConfirmModal, loadPersonColors, applyPersonColorVars } from './ui.js';
-import { pushDataToSupabase, syncFromSupabase, fetchVetRoster } from './api.js';
+import { pushChangesToSupabase, syncFromSupabase, fetchVetRoster } from './api.js';
+import { buildPatch, applyPatch } from './lib/planning-auth.js';
 import { store } from './store.js';
 import { setupLogin, renderLoginScreen, renderSetPasswordScreen } from './login.js';
 import { initServiceWorker, showIOSInstallTip, updatePwaOfflineBanner } from './pwa.js';
@@ -357,6 +358,7 @@ function saveData(showToast = true) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
   updateDashboardNavBadge();
   _hasDirtyLocalData = true;
+  _editSeq++;
   scheduleSupabasePush();
   if (showToast) showSavedToast();
 }
@@ -365,14 +367,30 @@ function saveData(showToast = true) {
 // localStorage ne sert que de cache instantané pour le premier affichage et le hors-ligne.
 let _supabasePushTimer = null;
 let _hasDirtyLocalData = false; // true tant que localStorage est en avance sur Supabase
+let _editSeq = 0; // incrémenté à chaque saveData — détecte les modifications faites pendant un envoi
+// Dernier état connu du serveur. Sert de référence pour ne transmettre que les
+// clés que CE poste a modifiées : sans lui, envoyer le document entier écrasait
+// les modifications enregistrées entre-temps par quelqu'un d'autre.
+let _lastSyncedSlots = {};
+
 function scheduleSupabasePush() {
   clearTimeout(_supabasePushTimer);
   // Attend une courte pause après la dernière modification (ex. fin d'un glisser-peindre)
   // pour grouper les écritures plutôt que d'envoyer une requête à chaque case cochée.
   _supabasePushTimer = setTimeout(async () => {
-    try {
-      await pushDataToSupabase(store.DATA.slots);
+    const pushedSnapshot = { ...store.DATA.slots };
+    const changes = buildPatch(_lastSyncedSlots, pushedSnapshot);
+    if (Object.keys(changes).length === 0) {
       _hasDirtyLocalData = false;
+      return;
+    }
+    const seqAtPush = _editSeq;
+    try {
+      await pushChangesToSupabase(changes);
+      _lastSyncedSlots = pushedSnapshot;
+      // Ne lever le drapeau que si rien n'a été modifié pendant l'envoi.
+      if (_editSeq === seqAtPush) _hasDirtyLocalData = false;
+      else scheduleSupabasePush();
     } catch (e) {
       console.warn('Synchronisation Supabase impossible, données conservées en local.', e);
     }
@@ -877,22 +895,42 @@ document.addEventListener('DOMContentLoaded', init);
    ================================================================ */
 
 function refreshData() {
-  if (!_hasDirtyLocalData) {
-    syncFromSupabase().then((remoteSlots) => {
-      if (remoteSlots !== null) {
-        store.DATA = { version: 2, slots: remoteSlots };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
-        renderCurrentView();
-        updateDashboardNavBadge();
-      }
-    });
-  }
+  pullRemotePlanning();
   loadVetRoster();
   loadSignatures();
   loadForecastSignatures();
   loadInterviews();
   loadAnnouncements();
 }
+
+// Récupère l'état distant et le fusionne avec les modifications locales non
+// encore envoyées, au lieu de les écraser. C'est ce qui permet de rafraîchir
+// même quand une sauvegarde est en attente : les modifications de l'autre poste
+// arrivent sans faire disparaître les nôtres.
+function pullRemotePlanning() {
+  return syncFromSupabase().then((remoteSlots) => {
+    if (remoteSlots === null) return false;
+    const localChanges = buildPatch(_lastSyncedSlots, store.DATA.slots);
+    _lastSyncedSlots = { ...remoteSlots };
+    const merged = Object.keys(localChanges).length ? applyPatch(remoteSlots, localChanges) : remoteSlots;
+    const changedSinceRender = JSON.stringify(merged) !== JSON.stringify(store.DATA.slots);
+    store.DATA = { version: 2, slots: merged };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
+    if (changedSinceRender) {
+      renderCurrentView();
+      updateDashboardNavBadge();
+    }
+    return changedSinceRender;
+  });
+}
+
+// Rafraîchissement périodique : sans lui, deux personnes avec leurs onglets
+// ouverts côte à côte ne voient jamais les modifications de l'autre. On ne
+// sollicite le serveur que si l'onglet est visible.
+const REMOTE_POLL_MS = 25_000;
+setInterval(() => {
+  if (document.visibilityState === 'visible' && store.currentUser) pullRemotePlanning();
+}, REMOTE_POLL_MS);
 
 // Le roster vétérinaire est partagé (table vet_roster) : on le rafraîchit à
 // chaque cycle de données pour qu'une embauche saisie sur un poste apparaisse

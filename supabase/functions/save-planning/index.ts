@@ -7,7 +7,10 @@ import {
   hasFullAccess,
   validateAsvWrite,
   validateVetEmployeWrite,
+  applyPatch,
+  patchToChangedKeys,
   type SlotsRecord,
+  type SlotsPatch,
 } from '../_shared/planning-auth.ts';
 
 // Vétérinaires éligibles au push CalDAV (ceux dont les credentials peuvent être configurés).
@@ -88,15 +91,25 @@ Deno.serve(async (req) => {
     if (!profile) return json({ error: 'Profil utilisateur introuvable.' }, 403);
 
     // ── 3. Payload ───────────────────────────────────────────────────────────
-    let body: { slots?: SlotsRecord };
+    // Deux formats acceptés :
+    //  - { changes } : correctif (clés modifiées seulement) — format courant,
+    //    seul à préserver les modifications concurrentes.
+    //  - { slots }   : document complet — ancien format, conservé pour les
+    //    onglets ouverts avant le déploiement. Écrase tout, comme avant.
+    let body: { slots?: SlotsRecord; changes?: SlotsPatch };
     try {
       body = await req.json();
     } catch {
       return json({ error: 'Corps JSON invalide.' }, 400);
     }
-    const { slots } = body;
-    if (!slots || typeof slots !== 'object' || Array.isArray(slots)) {
-      return json({ error: 'Le champ "slots" est requis et doit être un objet.' }, 400);
+    const { slots, changes } = body;
+    const isPatchMode = changes !== undefined;
+    if (isPatchMode) {
+      if (!changes || typeof changes !== 'object' || Array.isArray(changes)) {
+        return json({ error: 'Le champ "changes" doit être un objet.' }, 400);
+      }
+    } else if (!slots || typeof slots !== 'object' || Array.isArray(slots)) {
+      return json({ error: 'Le champ "slots" ou "changes" est requis et doit être un objet.' }, 400);
     }
 
     // ── 4. État actuel (diff droits ASV + diff CalDAV push) ─────────────────
@@ -106,6 +119,11 @@ Deno.serve(async (req) => {
     if (!currentRes.ok) throw new Error(`Lecture planning_data impossible (HTTP ${currentRes.status}).`);
     const currentRows = await currentRes.json();
     const currentSlots: SlotsRecord = currentRows?.[0]?.data ?? {};
+
+    // État à écrire : en mode correctif, l'état FRAIS du serveur augmenté des
+    // seules clés modifiées par ce client — les modifications faites entre-temps
+    // par quelqu'un d'autre sont donc conservées.
+    const nextSlots: SlotsRecord = isPatchMode ? applyPatch(currentSlots, changes!) : slots!;
 
     if (profile.role === 'vet_employe') {
       // Vétérinaire salarié : périmètre = lignes du calendrier vétérinaire.
@@ -117,11 +135,15 @@ Deno.serve(async (req) => {
       if (!rosterRes.ok) return json({ error: 'Roster vétérinaire illisible — écriture refusée.' }, 503);
       const rosterRows: Array<{ id: string }> = await rosterRes.json();
       const vetIds = new Set((rosterRows ?? []).map((r) => r.id));
-      const changedKeys = findChangedKeys(currentSlots, slots);
+      const changedKeys = isPatchMode
+        ? patchToChangedKeys(changes!, currentSlots)
+        : findChangedKeys(currentSlots, slots!);
       const authError = validateVetEmployeWrite(changedKeys, vetIds, profile.can_edit_asv_calendar === true);
       if (authError) return json({ error: authError }, 403);
     } else if (!hasFullAccess(profile)) {
-      const changedKeys = findChangedKeys(currentSlots, slots);
+      const changedKeys = isPatchMode
+        ? patchToChangedKeys(changes!, currentSlots)
+        : findChangedKeys(currentSlots, slots!);
       const authError = validateAsvWrite(changedKeys, profile.person_id);
       if (authError) return json({ error: authError }, 403);
     }
@@ -136,7 +158,7 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates,return=minimal',
       },
-      body: JSON.stringify({ id: 'singleton', data: slots, updated_at: new Date().toISOString() }),
+      body: JSON.stringify({ id: 'singleton', data: nextSlots, updated_at: new Date().toISOString() }),
     });
     if (!writeRes.ok) {
       const errText = await writeRes.text();
@@ -144,7 +166,7 @@ Deno.serve(async (req) => {
     }
 
     // ── 6. CalDAV push (fire-and-forget, non bloquant) ──────────────────────
-    const affectedPersons = buildCaldavAffectedPersons(currentSlots, slots);
+    const affectedPersons = buildCaldavAffectedPersons(currentSlots, nextSlots);
     if (affectedPersons.length > 0) {
       EdgeRuntime.waitUntil(
         fetch(`${SUPABASE_URL}/functions/v1/caldav-push`, {

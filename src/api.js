@@ -10,14 +10,16 @@ import { supabaseHeaders } from './auth.js';
 // Planning data (planning_data table — singleton JSON)
 // ----------------------------------------------------------------
 
-// Envoie les slots vers l'Edge Function save-planning (vérification des droits côté serveur).
+// Envoie UNIQUEMENT les clés modifiées vers l'Edge Function save-planning, qui les
+// applique sur l'état frais du serveur. Envoyer le document entier faisait que la
+// sauvegarde du dernier écrasait celle de l'autre, même sur des cases différentes.
 // La RLS de planning_data bloque les PATCH directs authenticated depuis la migration 20260714.
 // Lève une exception si l'Edge Function répond avec un statut non-2xx ou en cas d'erreur réseau.
-export async function pushDataToSupabase(slots) {
+export async function pushChangesToSupabase(changes) {
   const res = await fetch(`${SUPABASE_FUNCTIONS_URL}save-planning`, {
     method: 'POST',
     headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ slots }),
+    body: JSON.stringify({ changes }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

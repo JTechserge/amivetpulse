@@ -45,6 +45,69 @@ export function findChangedKeys(oldSlots, newSlots) {
   return changed;
 }
 
+/* ================================================================
+   Sauvegarde par correctif (patch)
+   ----------------------------------------------------------------
+   Le planning est un document JSON unique partagé. Envoyer le document
+   entier à chaque sauvegarde fait que le dernier écrivain écrase les
+   modifications de l'autre, même si elles portent sur des cases
+   différentes. On envoie donc uniquement les clés modifiées depuis le
+   dernier état synchronisé, et le serveur les applique sur l'état frais.
+
+   Convention : dans un patch, `null` signifie « supprimer cette clé ».
+   Les valeurs de planning sont toujours des chaînes ou des nombres,
+   jamais null — la convention est donc sans ambiguïté.
+   ================================================================ */
+
+/**
+ * Construit le correctif entre l'état de référence (dernier état connu du
+ * serveur) et l'état local courant.
+ * @param {Record<string,unknown>} baseSlots état synchronisé de référence
+ * @param {Record<string,unknown>} currentSlots état local courant
+ * @returns {Record<string,unknown>} clés modifiées ; null = suppression
+ */
+export function buildPatch(baseSlots, currentSlots) {
+  const base = baseSlots ?? {};
+  const current = currentSlots ?? {};
+  const patch = {};
+  for (const { key, newValue } of findChangedKeys(base, current)) {
+    patch[key] = newValue === undefined ? null : newValue;
+  }
+  return patch;
+}
+
+/**
+ * Applique un correctif sur un état, sans modifier l'objet source.
+ * @param {Record<string,unknown>} slots
+ * @param {Record<string,unknown>} patch
+ * @returns {Record<string,unknown>} nouvel état
+ */
+export function applyPatch(slots, patch) {
+  const result = { ...(slots ?? {}) };
+  for (const [key, value] of Object.entries(patch ?? {})) {
+    if (value === null) delete result[key];
+    else result[key] = value;
+  }
+  return result;
+}
+
+/**
+ * Traduit un correctif en couples ancienne/nouvelle valeur, pour que les
+ * contrôles de droits (validateAsvWrite, validateVetEmployeWrite) s'appliquent
+ * à l'identique, que le client envoie un patch ou un document complet.
+ * @param {Record<string,unknown>} patch
+ * @param {Record<string,unknown>} currentSlots état serveur courant
+ * @returns {Array<{key:string, oldValue:unknown, newValue:unknown}>}
+ */
+export function patchToChangedKeys(patch, currentSlots) {
+  const current = currentSlots ?? {};
+  return Object.entries(patch ?? {}).map(([key, value]) => ({
+    key,
+    oldValue: current[key],
+    newValue: value === null ? undefined : value,
+  }));
+}
+
 /**
  * Renvoie true si le profil a accès complet en écriture (diff inutile).
  * Cas couverts :

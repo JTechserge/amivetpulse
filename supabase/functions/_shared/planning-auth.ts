@@ -50,6 +50,53 @@ export function findChangedKeys(oldSlots: SlotsRecord, newSlots: SlotsRecord): C
   return changed;
 }
 
+/* ================================================================
+   Sauvegarde par correctif (patch)
+   ----------------------------------------------------------------
+   Le planning est un document JSON unique partagé. Envoyer le document
+   entier à chaque sauvegarde fait que le dernier écrivain écrase les
+   modifications de l'autre, même si elles portent sur des cases
+   différentes. On envoie donc uniquement les clés modifiées depuis le
+   dernier état synchronisé, et le serveur les applique sur l'état frais.
+
+   Convention : dans un patch, `null` signifie « supprimer cette clé ».
+   ================================================================ */
+
+export type SlotsPatch = Record<string, unknown>;
+
+/** Construit le correctif entre l'état de référence et l'état local courant. */
+export function buildPatch(baseSlots: SlotsRecord, currentSlots: SlotsRecord): SlotsPatch {
+  const patch: SlotsPatch = {};
+  for (const { key, newValue } of findChangedKeys(baseSlots ?? {}, currentSlots ?? {})) {
+    patch[key] = newValue === undefined ? null : newValue;
+  }
+  return patch;
+}
+
+/** Applique un correctif sur un état, sans modifier l'objet source. */
+export function applyPatch(slots: SlotsRecord, patch: SlotsPatch): SlotsRecord {
+  const result: SlotsRecord = { ...(slots ?? {}) };
+  for (const [key, value] of Object.entries(patch ?? {})) {
+    if (value === null) delete result[key];
+    else result[key] = value;
+  }
+  return result;
+}
+
+/**
+ * Traduit un correctif en couples ancienne/nouvelle valeur, pour que les
+ * contrôles de droits s'appliquent à l'identique, que le client envoie un
+ * patch ou un document complet.
+ */
+export function patchToChangedKeys(patch: SlotsPatch, currentSlots: SlotsRecord): ChangedKey[] {
+  const current = currentSlots ?? {};
+  return Object.entries(patch ?? {}).map(([key, value]) => ({
+    key,
+    oldValue: current[key],
+    newValue: value === null ? undefined : value,
+  }));
+}
+
 /** Renvoie true si le profil a accès complet en écriture. */
 export function hasFullAccess(profile: UserProfile): boolean {
   // Le vétérinaire salarié n'a JAMAIS l'accès complet : il passe toujours par

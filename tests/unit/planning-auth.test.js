@@ -5,6 +5,9 @@ import {
   hasFullAccess,
   validateAsvWrite,
   validateVetEmployeWrite,
+  buildPatch,
+  applyPatch,
+  patchToChangedKeys,
 } from '../../src/lib/planning-auth.js';
 
 // ─── extractPersonIdFromKey ───────────────────────────────────────────────────
@@ -386,5 +389,106 @@ describe('validateAsvWrite — cas refusés (403)', () => {
       { key: '2026-07-14_julie_AM', oldValue: 'empty', newValue: 'absent' }, // interdit
     ];
     expect(validateAsvWrite(changed, 'marie')).toMatch(/julie/);
+  });
+});
+
+// ─── Sauvegarde par correctif (patch) ────────────────────────────────────────
+//
+// Contexte : le planning est un document JSON unique. Envoyer le document
+// entier fait que la sauvegarde du dernier écrase celle de l'autre. On envoie
+// désormais uniquement les clés modifiées, appliquées sur l'état frais du
+// serveur. `null` dans un patch signifie « supprimer cette clé ».
+
+describe('buildPatch', () => {
+  it('ne renvoie rien si rien n\'a changé', () => {
+    const base = { '2026-07-14_marie_M': 'present' };
+    expect(buildPatch(base, { ...base })).toEqual({});
+  });
+
+  it('capture une valeur modifiée', () => {
+    const base = { '2026-07-14_marie_M': 'empty' };
+    const now = { '2026-07-14_marie_M': 'present' };
+    expect(buildPatch(base, now)).toEqual({ '2026-07-14_marie_M': 'present' });
+  });
+
+  it('capture une clé ajoutée', () => {
+    expect(buildPatch({}, { '2026-07-14_marie_M': 'absent' })).toEqual({ '2026-07-14_marie_M': 'absent' });
+  });
+
+  it('représente une suppression par null', () => {
+    const base = { '2026-07-14_marie_M': 'absent' };
+    expect(buildPatch(base, {})).toEqual({ '2026-07-14_marie_M': null });
+  });
+
+  it('ignore les clés inchangées quand d\'autres bougent', () => {
+    const base = { a: '1', b: '2', c: '3' };
+    const now = { a: '1', b: 'X', c: '3', d: '4' };
+    expect(buildPatch(base, now)).toEqual({ b: 'X', d: '4' });
+  });
+
+  it('tolère des entrées nulles', () => {
+    expect(buildPatch(null, null)).toEqual({});
+    expect(buildPatch(null, { a: '1' })).toEqual({ a: '1' });
+  });
+});
+
+describe('applyPatch', () => {
+  it('applique ajouts, modifications et suppressions', () => {
+    const slots = { a: '1', b: '2' };
+    const result = applyPatch(slots, { b: 'X', c: '3', a: null });
+    expect(result).toEqual({ b: 'X', c: '3' });
+  });
+
+  it('ne modifie pas l\'objet source', () => {
+    const slots = { a: '1' };
+    applyPatch(slots, { a: null, b: '2' });
+    expect(slots).toEqual({ a: '1' });
+  });
+
+  it('un patch vide laisse l\'état intact', () => {
+    const slots = { a: '1' };
+    expect(applyPatch(slots, {})).toEqual({ a: '1' });
+  });
+
+  it('LE CŒUR DU CORRECTIF — deux sauvegardes concurrentes ne s\'écrasent plus', () => {
+    // État commun chargé par les deux personnes
+    const S0 = { '2026-07-14_david_M': 'present' };
+
+    // Chacune modifie une case différente, sans voir l'autre
+    const patchA = buildPatch(S0, { ...S0, '2026-07-14_david_AM': 'absent' });
+    const patchB = buildPatch(S0, { ...S0, '2026-07-15_stephane_M': 'present' });
+
+    // Le serveur les applique l'une après l'autre sur l'état courant
+    const afterA = applyPatch(S0, patchA);
+    const afterB = applyPatch(afterA, patchB);
+
+    // Les deux modifications survivent — c'est ce qui était perdu avant.
+    expect(afterB['2026-07-14_david_AM']).toBe('absent');
+    expect(afterB['2026-07-15_stephane_M']).toBe('present');
+    expect(afterB['2026-07-14_david_M']).toBe('present');
+  });
+});
+
+describe('patchToChangedKeys', () => {
+  it('reconstruit les couples ancienne/nouvelle valeur pour le contrôle des droits', () => {
+    const current = { '2026-07-14_marie_M_decision': 'pending' };
+    const patch = { '2026-07-14_marie_M_decision': 'approved' };
+    expect(patchToChangedKeys(patch, current)).toEqual([
+      { key: '2026-07-14_marie_M_decision', oldValue: 'pending', newValue: 'approved' },
+    ]);
+  });
+
+  it('traduit null en suppression (newValue undefined)', () => {
+    const current = { '2026-07-14_marie_M': 'absent' };
+    expect(patchToChangedKeys({ '2026-07-14_marie_M': null }, current)).toEqual([
+      { key: '2026-07-14_marie_M', oldValue: 'absent', newValue: undefined },
+    ]);
+  });
+
+  it('permet de refuser une auto-approbation envoyée en patch', () => {
+    // Le contrôle de droits doit fonctionner à l'identique sur un patch.
+    const current = { '2026-07-14_marie_M_decision': 'pending' };
+    const changed = patchToChangedKeys({ '2026-07-14_marie_M_decision': 'approved' }, current);
+    expect(validateAsvWrite(changed, 'marie')).toMatch(/admin/);
   });
 });

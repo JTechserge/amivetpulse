@@ -6,7 +6,6 @@ import {
   SUPABASE_URL,
   SUPABASE_FUNCTIONS_URL,
   CALENDAR_FEED_URL,
-  STORAGE_KEY,
   personOf,
 } from './config.js';
 import { escapeHTML, slugifyName, colorRejectReason, fmtISO, formatHHMM, formatNum } from './utils.js';
@@ -20,7 +19,7 @@ import {
   reindexVetPresentShades,
   saveVetRosterCache,
 } from './state.js';
-import { pushDataToSupabase, apiUpsertVetPerson } from './api.js';
+import { apiUpsertVetPerson } from './api.js';
 import { openNotificationSettingsModal } from './pwa.js';
 import { renderLoginScreen } from './login.js';
 import { renderCalendarView } from './calendar.js';
@@ -513,8 +512,7 @@ function openManageUsersModal() {
                   Object.keys(store.DATA.slots)
                     .filter((k) => k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
                     .forEach((k) => delete store.DATA.slots[k]);
-                  localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
-                  pushDataToSupabase();
+                  _saveData(false);
                 }
                 // 2. Retirer de l'effectif ASV si présent
                 const asvIdx = ASV_PEOPLE.findIndex((p) => p.id === personId);
@@ -569,8 +567,7 @@ function openManageUsersModal() {
               Object.keys(store.DATA.slots)
                 .filter((k) => k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
                 .forEach((k) => delete store.DATA.slots[k]);
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
-              pushDataToSupabase();
+              _saveData(false);
               const asvIdx = ASV_PEOPLE.findIndex((p) => p.id === personId);
               if (asvIdx !== -1) {
                 ASV_PEOPLE.splice(asvIdx, 1);
