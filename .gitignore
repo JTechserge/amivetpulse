@@ -10,3 +10,9 @@ test-results/
 _legacy/
 *.pptx
 backup-*/
+
+# fichiers de travail hors code (prompts, maquettes, présentations) — locaux uniquement
+/_travail/
+
+# doublons de synchronisation iCloud (« fichier 2.js », « fichier 3.js »…)
+* ?.*

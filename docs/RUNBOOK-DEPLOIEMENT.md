@@ -172,7 +172,7 @@ La branche `hardening/2026-07-phase7` contient 5 commits au-dessus de `main` (fa
 - Lot 1 : `save-planning` Edge Function + migration lock planning
 - Lot 2 : suppression `openConfirmModalHtml` + module `asv-hours` partagé + tests de contrat
 - Lot 3 : découpage `dashboard.js` → `dashboard-stats.js` + `leave-requests.js`
-- Lot 4 : `SECURITE.md` + `supabase/README.md` + `README.md`
+- Lot 4 : `SECURITE.md` + `../supabase/README.md` + `../README.md`
 - Lot 5 : ce runbook
 
 ```bash

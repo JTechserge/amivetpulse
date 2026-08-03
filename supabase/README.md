@@ -134,7 +134,7 @@ HTML et composants communs (boutons, couleurs, wrapper) pour les emails envoyés
 | `20260714000001_lock_planning_writes.sql` | ✅ Déployé (corrigé Phase 8) | Verrouillage PATCH direct sur `planning_data` — toutes les écritures via `save-planning` |
 | `20260714000002_fix_calendar_hash_functions.sql` | ✅ Déployé | Corrige `get_calendar_feed_access` + `get_calendar_sync_status` + `generate/revoke` pour `token_hash` |
 
-> Toutes les migrations Phase 6–8 sont déployées. Voir [RUNBOOK-DEPLOIEMENT.md](../RUNBOOK-DEPLOIEMENT.md).
+> Toutes les migrations Phase 6–8 sont déployées. Voir [RUNBOOK-DEPLOIEMENT.md](../docs/RUNBOOK-DEPLOIEMENT.md).
 
 #### Fichiers auxiliaires de `20260713000002` (ne pas rejouer sur une base vierge)
 

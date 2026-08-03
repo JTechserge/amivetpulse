@@ -27,6 +27,9 @@ npm test           # Playwright (tests E2E)
 
 ## Documentation
 
-- [SECURITE.md](SECURITE.md) — Architecture de défense, règles immuables, actions manuelles requises
+- [docs/SECURITE.md](docs/SECURITE.md) — Architecture de défense, règles immuables, actions manuelles requises
+- [docs/EXPLOITATION.md](docs/EXPLOITATION.md) — Guide opérationnel courant
+- [docs/SAUVEGARDES.md](docs/SAUVEGARDES.md) — Sauvegardes et procédure de restauration
+- [docs/RUNBOOK-DEPLOIEMENT.md](docs/RUNBOOK-DEPLOIEMENT.md) — Déploiement pas à pas
 - [supabase/README.md](supabase/README.md) — Edge Functions, migrations, variables d'environnement
 - [supabase/migrations/README.md](supabase/migrations/README.md) — Ordre d'application des migrations
