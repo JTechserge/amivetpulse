@@ -16,6 +16,7 @@ import { PEOPLE, ASV_PEOPLE, isVetPerson, isPartnerVet, isNonPartnerVet } from '
 import { store } from '../../src/store.js';
 import { requiresLeaveApproval, isASVPerson, setSlotState, getLeaveDecision } from '../../src/slots.js';
 import { collectAllLeaveGroups, getCPTakenDays } from '../../src/leave-requests.js';
+import { buildRecapTable } from '../../src/dashboard-stats.js';
 
 // getCurrentYear() lit localStorage, absent de l'environnement Node.
 const memoryStore = {};
@@ -203,5 +204,44 @@ describe('getCPTakenDays', () => {
     absent(`${YEAR}-07-06`, 'david', 'M', 'Formation');
     absent(`${YEAR}-07-06`, 'david', 'AM', 'Congé');
     expect(getCPTakenDays('david', START, END)).toBe(1);
+  });
+});
+
+// ─── Récapitulatif mensuel du tableau de bord ────────────────────────────────
+
+describe('buildRecapTable', () => {
+  it('inclut une colonne jours et samedis pour le vétérinaire salarié', () => {
+    const html = buildRecapTable(YEAR);
+    expect(html).toContain('Salarié (j)');
+    expect(html).toContain('Samedis Salarié');
+    // Les associés restent présents, à leur place.
+    expect(html).toContain('David (j)');
+    expect(html).toContain('Stéphane (j)');
+  });
+
+  it("garde l'écart entre les deux associés seulement", () => {
+    // L'écart mesure l'équilibrage entre associés : l'ajout d'un salarié ne
+    // doit ni le supprimer ni le fausser.
+    const html = buildRecapTable(YEAR);
+    expect(html).toContain('<th>Écart</th>');
+    expect(html).not.toContain('Salarié</td>'); // jamais nommé dans une cellule d'écart
+  });
+
+  it("masque l'écart s'il n'y a pas exactement deux associés", () => {
+    useRoster([{ ...SALARIE }]);
+    const html = buildRecapTable(YEAR);
+    expect(html).toContain('Salarié (j)');
+    expect(html).not.toContain('<th>Écart</th>');
+  });
+
+  it('compte les demi-journées travaillées du salarié', () => {
+    // 2 demi-journées présentes en mars = 1 jour.
+    store.DATA.slots[`${YEAR}-03-10_salarie_M`] = 'present';
+    store.DATA.slots[`${YEAR}-03-10_salarie_AM`] = 'present';
+    const html = buildRecapTable(YEAR);
+    // La ligne de mars doit porter un 1 pour le salarié.
+    const marsRow = html.split('<tr>').find((r) => r.includes('Mars'));
+    expect(marsRow).toBeDefined();
+    expect(marsRow).toContain('<td>1</td>');
   });
 });

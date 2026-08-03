@@ -1,5 +1,6 @@
 import {
   PEOPLE,
+  isVetPerson,
   ASV_PEOPLE,
   SLOTS,
   SLOT_LABELS,
@@ -235,6 +236,18 @@ function buildCalendarToolbar(viewKey) {
     : '';
   const hasASV = cfg.people && cfg.people.some((p) => isASVPerson(p.id));
   const isCurrentUserASV = store.currentUser?.role === 'asv';
+  // Barre d'outils sur le calendrier vétérinaire : réservée au vétérinaire
+  // salarié. Les associés gardent la vue inchangée (clic cyclique vide →
+  // présent → absent), d'où la condition sur le rôle et non sur la vue.
+  const isVetEmployeToolbar = !hasASV && store.currentUser?.role === 'vet_employe';
+  // « Vider le mois » efface le mois de TOUTES les personnes affichées : réservé
+  // aux associés et à l'admin. Un salarié ne doit pas pouvoir purger le planning
+  // de la clinique, sur aucun des deux onglets.
+  const canClearMonth = !isCurrentUserASV && store.currentUser?.role !== 'vet_employe';
+  if (isVetEmployeToolbar && !VET_EMPLOYE_PAINT_MODES.includes(store.calMonthPaintMode)) {
+    // Le mode par défaut ('opening') n'existe pas dans son jeu d'outils réduit.
+    store.calMonthPaintMode = 'presence';
+  }
   const isCurrentUserVetAdmin = store.currentUser?.role === 'admin' || store.currentUser?.role === 'vet';
   const monthClosed = hasASV && isMonthClosed(cfg.year, cfg.navState.month);
   const paintBar = hasASV
@@ -249,7 +262,17 @@ function buildCalendarToolbar(viewKey) {
       <button class="paint-tool${store.calMonthPaintMode === 'accident' ? ' active' : ''}" data-paint="accident" title="Accident du travail (direct, sans approbation)">🤕 Accident</button>
       <button class="paint-tool paint-tool-erase${store.calMonthPaintMode === 'erase' ? ' active' : ''}" data-paint="erase" title="Gomme — efface la case">🧹 Gomme</button>
     </div>`
-    : '';
+    : isVetEmployeToolbar
+      ? `
+    <div class="cal-paint-bar" id="cal-paint-bar-${viewKey}">
+      <span style="font-size:11px;font-weight:600;color:var(--color-text-muted);">Outil :</span>
+      <button class="paint-tool${store.calMonthPaintMode === 'presence' ? ' active' : ''}" data-paint="presence" title="Jour travaillé — une case vide vaut repos">✅ Présence</button>
+      <button class="paint-tool${store.calMonthPaintMode === 'conge' ? ' active' : ''}" data-paint="conge" title="Demande de congé (validation des associés)">🔵 Congé</button>
+      <button class="paint-tool${store.calMonthPaintMode === 'maladie' ? ' active' : ''}" data-paint="maladie" title="Arrêt maladie (direct, sans approbation)">🤒 Maladie</button>
+      <button class="paint-tool${store.calMonthPaintMode === 'accident' ? ' active' : ''}" data-paint="accident" title="Accident du travail (direct, sans approbation)">🤕 Accident</button>
+      <button class="paint-tool paint-tool-erase${store.calMonthPaintMode === 'erase' ? ' active' : ''}" data-paint="erase" title="Gomme — efface la case (retour au repos)">🧹 Gomme</button>
+    </div>`
+      : '';
   return `
     <div class="cal-toolbar">
       <div class="cal-month-nav">
@@ -260,7 +283,7 @@ function buildCalendarToolbar(viewKey) {
       </div>
       <div class="cal-toolbar-actions">
         <button class="btn-icon undo-btn" id="cal-undo-${viewKey}" aria-label="Annuler la dernière action" title="Annuler la dernière action (Cmd/Ctrl+Z)" ${store.UNDO_STACK.length === 0 ? 'disabled' : ''}>↩️</button>
-        ${!isCurrentUserASV ? `<button class="btn btn-sm btn-danger" id="cal-clear-month-${viewKey}" aria-label="Vider le mois affiché">🗑️ Vider le mois</button>` : ''}
+        ${canClearMonth ? `<button class="btn btn-sm btn-danger" id="cal-clear-month-${viewKey}" aria-label="Vider le mois affiché">🗑️ Vider le mois</button>` : ''}
         ${hasASV && isCurrentUserVetAdmin ? `<button class="btn btn-sm${monthClosed ? ' btn-success' : ''}" id="cal-lock-month-${viewKey}" title="${monthClosed ? 'Réouvrir le mois pour les ASV' : 'Clôturer le mois — bloque les modifications ASV'}">${monthClosed ? '🔓 Réouvrir' : '🔒 Clôturer'}</button>` : ''}
         ${cfg.printable ? `<button class="btn btn-sm" id="cal-print-${viewKey}" title="Imprimer les fiches mensuelles ASV">🖨️ Imprimer</button>` : ''}
       </div>
@@ -1327,11 +1350,20 @@ function cycleCellAndSave(cell) {
 }
 
 let dragCtx = null;
+// Jeu d'outils réduit du vétérinaire salarié (pas de postes O/F/D : le
+// calendrier vétérinaire ne fait pas de suivi horaire).
+const VET_EMPLOYE_PAINT_MODES = ['presence', 'conge', 'maladie', 'accident', 'erase'];
+
 let mergedLPCtx = null; // long-press sur blocs fusionnés (VET overlay ou ASV pstrip)
 
 function startDrag(cell) {
   const { date: iso, person: personId, slot } = cell.dataset;
   const isASVDrag = _getCurrentView() === 'asv' && isASVPerson(personId);
+  // Le vétérinaire salarié peint sur le calendrier vétérinaire avec son jeu
+  // d'outils réduit. Pour tous les autres rôles, le comportement est inchangé.
+  const isVetEmployeDrag =
+    store.currentUser?.role === 'vet_employe' && _getCurrentView() === 'vets' && isVetPerson(personId);
+  const isToolDrag = isASVDrag || isVetEmployeDrag;
   // Lot 6 : bloquer les modifications ASV sur un mois clôturé
   if (isASVDrag) {
     const [isoYear, isoMo] = iso.split('-').map(Number);
@@ -1343,20 +1375,21 @@ function startDrag(cell) {
   _snapshotBeforeChange();
   let paintValue;
   if (
-    isASVDrag &&
+    isToolDrag &&
     (store.calMonthPaintMode === 'opening' ||
       store.calMonthPaintMode === 'closing' ||
-      store.calMonthPaintMode === 'demi')
+      store.calMonthPaintMode === 'demi' ||
+      store.calMonthPaintMode === 'presence')
   ) {
     paintValue = 'present';
   } else if (
-    isASVDrag &&
+    isToolDrag &&
     (store.calMonthPaintMode === 'conge' ||
       store.calMonthPaintMode === 'maladie' ||
       store.calMonthPaintMode === 'accident')
   ) {
     paintValue = 'absent';
-  } else if (isASVDrag && store.calMonthPaintMode === 'erase') {
+  } else if (isToolDrag && store.calMonthPaintMode === 'erase') {
     paintValue = 'empty';
   } else {
     paintValue = cycleState(getSlotState(iso, personId, slot));
@@ -1369,7 +1402,7 @@ function startDrag(cell) {
     cancelled: false,
     touched: new Set(),
     viewKey: calViewKeyOfEventTarget(cell),
-    paintMode: isASVDrag || store.calMonthPaintMode === 'erase' ? store.calMonthPaintMode : null,
+    paintMode: isToolDrag || store.calMonthPaintMode === 'erase' ? store.calMonthPaintMode : null,
     longPressTimer: setTimeout(() => {
       if (dragCtx && !dragCtx.moved) {
         dragCtx.cancelled = true;
@@ -1406,6 +1439,10 @@ function applyPaint(cell, value) {
   } else if (dragCtx.paintMode === 'demi') {
     setSlotState(iso, personId, slot, 'present');
     setSlotShiftType(iso, personId, slot, 'D');
+  } else if (dragCtx.paintMode === 'presence') {
+    // Vétérinaire salarié : simple jour travaillé, sans type de poste — le
+    // calendrier vétérinaire ne fait pas de suivi horaire. Case vide = repos.
+    setSlotState(iso, personId, slot, 'present');
   } else if (dragCtx.paintMode === 'maladie') {
     setSlotState(iso, personId, slot, 'absent');
     setSlotLabel(iso, personId, slot, 'Arrêt maladie');

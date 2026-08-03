@@ -174,37 +174,58 @@ export function buildBarChartSVG(year) {
   return `<svg viewBox="0 0 ${viewW} ${height}" width="100%" height="${height}" role="img" aria-label="Comparaison des jours travaillés par mois, ${year}">${rows}</svg>`;
 }
 
+// Récapitulatif mensuel du calendrier vétérinaire — construit sur le roster :
+// une colonne « jours » et une colonne « samedis » par vétérinaire actif.
+// La colonne Écart reste un indicateur d'équilibrage ENTRE ASSOCIÉS : elle
+// n'apparaît que s'il y en a exactement deux, et ignore les salariés.
 export function buildRecapTable(year) {
   const stats = computeYearStats(year);
-  let totalD = 0,
-    totalS = 0,
-    totalSatD = 0,
-    totalSatS = 0,
-    rows = '';
+  const vets = PEOPLE.filter((p) => !p.archived);
+  const partners = vets.filter((p) => p.partner !== false);
+  const showDiff = partners.length === 2;
+  const [pA, pB] = partners;
+
+  const daysOf = (p, m) => (stats[p.id]?.halfDaysByMonth[m] ?? 0) / 2;
+  const satOf = (p, m) => stats[p.id]?.saturdaysByMonth[m] ?? 0;
+
+  const totalDays = Object.fromEntries(vets.map((p) => [p.id, 0]));
+  const totalSat = Object.fromEntries(vets.map((p) => [p.id, 0]));
+
+  const diffCell = (a, b) => {
+    const diff = a - b;
+    const cls = diff > 0 ? 'ecart-david' : diff < 0 ? 'ecart-stephane' : 'ecart-equilibre';
+    const txt =
+      diff === 0 ? 'Équilibre' : `+${formatNum(Math.abs(diff))} ${escapeHTML(diff > 0 ? pA.short : pB.short)}`;
+    return `<td class="${cls}">${txt}</td>`;
+  };
+
+  let rows = '';
   for (let m = 0; m < 12; m++) {
-    const dDays = stats.david.halfDaysByMonth[m] / 2;
-    const sDays = stats.stephane.halfDaysByMonth[m] / 2;
-    const satD = stats.david.saturdaysByMonth[m];
-    const satS = stats.stephane.saturdaysByMonth[m];
-    totalD += dDays;
-    totalS += sDays;
-    totalSatD += satD;
-    totalSatS += satS;
-    const diff = dDays - sDays;
-    const diffClass = diff > 0 ? 'ecart-david' : diff < 0 ? 'ecart-stephane' : 'ecart-equilibre';
-    const diffTxt = diff === 0 ? 'Équilibre' : `+${formatNum(Math.abs(diff))} ${diff > 0 ? 'David' : 'Stéphane'}`;
-    rows += `<tr><td>${MONTH_NAMES[m]}</td><td>${formatNum(dDays)}</td><td>${formatNum(sDays)}</td><td>${satD}</td><td>${satS}</td><td class="${diffClass}">${diffTxt}</td></tr>`;
+    vets.forEach((p) => {
+      totalDays[p.id] += daysOf(p, m);
+      totalSat[p.id] += satOf(p, m);
+    });
+    const dayCells = vets.map((p) => `<td>${formatNum(daysOf(p, m))}</td>`).join('');
+    const satCells = vets.map((p) => `<td>${satOf(p, m)}</td>`).join('');
+    const diff = showDiff ? diffCell(daysOf(pA, m), daysOf(pB, m)) : '';
+    rows += `<tr><td>${MONTH_NAMES[m]}</td>${dayCells}${satCells}${diff}</tr>`;
   }
-  const totalDiff = totalD - totalS;
-  const totalDiffClass = totalDiff > 0 ? 'ecart-david' : totalDiff < 0 ? 'ecart-stephane' : 'ecart-equilibre';
-  const totalDiffTxt =
-    totalDiff === 0 ? 'Équilibre' : `+${formatNum(Math.abs(totalDiff))} ${totalDiff > 0 ? 'David' : 'Stéphane'}`;
+
+  const head = `<tr><th>Mois</th>${vets.map((p) => `<th>${escapeHTML(p.short)} (j)</th>`).join('')}${vets
+    .map((p) => `<th>Samedis ${escapeHTML(p.short)}</th>`)
+    .join('')}${showDiff ? '<th>Écart</th>' : ''}</tr>`;
+
+  const footDiff = showDiff ? diffCell(totalDays[pA.id], totalDays[pB.id]) : '';
+  const foot = `<tr><td>Total</td>${vets.map((p) => `<td>${formatNum(totalDays[p.id])}</td>`).join('')}${vets
+    .map((p) => `<td>${totalSat[p.id]}</td>`)
+    .join('')}${footDiff}</tr>`;
+
   return `
     <div class="recap-table-scroll">
     <table class="recap-table">
-      <thead><tr><th>Mois</th><th>David (j)</th><th>Stéphane (j)</th><th>Samedis David</th><th>Samedis Stéphane</th><th>Écart</th></tr></thead>
+      <thead>${head}</thead>
       <tbody>${rows}</tbody>
-      <tfoot><tr><td>Total</td><td>${formatNum(totalD)}</td><td>${formatNum(totalS)}</td><td>${totalSatD}</td><td>${totalSatS}</td><td class="${totalDiffClass}">${totalDiffTxt}</td></tr></tfoot>
+      <tfoot>${foot}</tfoot>
     </table>
     </div>
   `;
