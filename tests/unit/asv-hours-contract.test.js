@@ -9,6 +9,7 @@ import {
   getDayDeficitH,
   getLegacyOtH,
 } from '../../src/lib/asv-hours.js';
+import { ASV_STD_SAT_CARLA } from '../../src/config.js';
 
 // Tests de contrat : vérifient les valeurs que le module partagé doit produire
 // pour que le front (src/lib/asv-hours.js) et la Edge Function
@@ -84,8 +85,11 @@ describe('getSlotNominalH', () => {
   it('Demi-j. A-m. → 4.0h', () => {
     expect(getSlotNominalH(s(ISO_MON, 'alice', 'AM_shift', 'D'), ISO_MON, 'alice', 'AM', 1)).toBe(4.0);
   });
-  it('Carla samedi Mat. → 7.25h', () => {
-    expect(getSlotNominalH({}, ISO_SAT, 'carla', 'M', 6)).toBe(7.25);
+  it('Carla samedi Mat. → valeur contractuelle de config.js', () => {
+    // Assertion contre la SOURCE DE VÉRITÉ, jamais contre un littéral : c'est un
+    // 7.25 recopié ici qui avait entériné 10 min d'écart par samedi entre le
+    // tableau de bord et la feuille signée.
+    expect(getSlotNominalH({}, ISO_SAT, 'carla', 'M', 6)).toBeCloseTo(ASV_STD_SAT_CARLA, 10);
   });
   it('autre ASV samedi Mat. → 7.0h', () => {
     expect(getSlotNominalH({}, ISO_SAT, 'alice', 'M', 6)).toBe(7.0);
@@ -115,8 +119,11 @@ describe('getDayNominalH — modèle presence-aware (Lot 2)', () => {
     const slots = { ...present(ISO_MON, 'alice', 'AM'), ...s(ISO_MON, 'alice', 'AM_shift', 'F') };
     expect(getDayNominalH(slots, ISO_MON, 'alice', 1)).toBe(4.25);
   });
-  it('Carla samedi Mat. présent → 7.25h (contrat)', () => {
-    expect(getDayNominalH(present(ISO_SAT, 'carla', 'M'), ISO_SAT, 'carla', 6)).toBe(7.25);
+  it('Carla samedi Mat. présent → valeur contractuelle de config.js', () => {
+    expect(getDayNominalH(present(ISO_SAT, 'carla', 'M'), ISO_SAT, 'carla', 6)).toBeCloseTo(
+      ASV_STD_SAT_CARLA,
+      10
+    );
   });
   it('autre ASV samedi Mat. présent → 7.0h', () => {
     expect(getDayNominalH(present(ISO_SAT, 'alice', 'M'), ISO_SAT, 'alice', 6)).toBe(7.0);
@@ -153,5 +160,23 @@ describe('getLegacyOtH', () => {
   });
   it('lit la clé _overtime', () => {
     expect(getLegacyOtH(s(ISO_MON, 'alice', 'overtime', '1.5'), ISO_MON, 'alice')).toBe(1.5);
+  });
+});
+
+// ─── Garde-fou : 7h25 n'est pas 7,25 h ───────────────────────────────────────
+
+describe('cohérence de l\'heure du samedi de Carla', () => {
+  it('vaut 7 h 25 min, et surtout PAS 7,25 h', () => {
+    // Le piège qui a produit la divergence : « 7h25 » lu comme un décimal.
+    // 7.25 h = 7 h 15 min, soit 10 minutes de moins par samedi.
+    expect(ASV_STD_SAT_CARLA).toBeCloseTo(7 + 25 / 60, 10);
+    expect(ASV_STD_SAT_CARLA).not.toBeCloseTo(7.25, 4);
+    expect(Math.round((ASV_STD_SAT_CARLA - 7) * 60)).toBe(25);
+  });
+
+  it('le module partagé et config.js donnent la même heure', () => {
+    // Si ce test casse, le miroir Deno a divergé de la source de vérité :
+    // le tableau de bord et la feuille signée ne comptent plus pareil.
+    expect(getSlotNominalH({}, ISO_SAT, 'carla', 'M', 6)).toBeCloseTo(ASV_STD_SAT_CARLA, 10);
   });
 });

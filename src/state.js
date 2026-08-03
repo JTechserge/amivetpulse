@@ -10,6 +10,7 @@ import {
   ASV_ROSTER_KEY,
   VET_ROSTER_KEY,
   PERSON_COLORS_KEY,
+  ASV_STD_SAT_CARLA,
   allPeople,
 } from './config.js';
 
@@ -73,7 +74,9 @@ export function loadASVRoster() {
             color: '#0EA5E9',
             initial: 'Ca',
             present: null,
-            timeFraction: 7.25 / 35,
+            // Dérivé de la constante, jamais recopié : 7h25 s'écrit 7 + 25/60,
+            // et un 7.25 recopié ici fausserait la proratisation de ses CP.
+            timeFraction: ASV_STD_SAT_CARLA / 35,
             saturdayOnly: true,
           });
           saveASVRoster();

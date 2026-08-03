@@ -70,7 +70,7 @@ test.describe('Effectif ASV — localStorage après init', () => {
   test('Carla a une timeFraction cohérente avec 7h25/semaine (≈ 0.207)', async ({ page }) => {
     const roster = await getRoster(page);
     const carla = roster.find((p: AsvPerson) => p.id === 'carla');
-    // 7.25 / 35 ≈ 0.2071
+    // (7 + 25/60) / 35 ≈ 0.2119  — 7h25, pas 7,25 h
     expect(carla?.timeFraction).toBeGreaterThan(0.2);
     expect(carla?.timeFraction).toBeLessThan(0.22);
   });

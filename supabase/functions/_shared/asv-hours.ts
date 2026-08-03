@@ -5,14 +5,19 @@
 //
 // Divergence corrigée par rapport à l'implémentation initiale inline dans request-signature :
 // - getDayNominalH retournait 7.0h pour tous les samedis.
-// - Carla (saturdayOnly) a un contrat de 7.25h le samedi (ASV_STD_SAT_CARLA = 7.25 côté front).
+// - Carla (saturdayOnly) a un contrat de 7 h 25 min le samedi (ASV_STD_SAT_CARLA côté front).
 
 export type SlotsRecord = Record<string, string>;
 
 // Doit rester synchronisé avec ASV_STD_SAT_CARLA dans src/config.js
 // et avec SATURDAY_HOURS_BY_PID dans src/lib/asv-hours.js.
+//
+// ATTENTION — 7h25 s'écrit `7 + 25 / 60`, PAS `7.25`.
+// La valeur contractuelle de Carla est 7 h 25 min (8:30–16:45 moins ~50 min de
+// pause). `7.25` vaut 7 h 15 min, soit 10 minutes de moins par samedi : c'était
+// l'écart entre le tableau de bord et cette feuille de présence signée.
 const SATURDAY_HOURS_BY_PID: Record<string, number> = {
-  carla: 7.25,
+  carla: 7 + 25 / 60,
 };
 
 // Heures par demi-journée selon type de poste (Lot 2)
