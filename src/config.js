@@ -162,6 +162,11 @@ export const YEARS = [2026, 2027]; // années éditables
 // Clés de stockage local
 // ----------------------------------------------------------------
 export const STORAGE_KEY = 'amivet_planning_data';
+// Dernier état de planning confirmé par le serveur. Persisté à côté du cache
+// qu'il décrit : c'est la référence qui distingue une modification locale en
+// attente d'une valeur simplement lue à la session précédente (voir
+// resolveSyncBaseline dans lib/planning-auth.js).
+export const SYNC_BASELINE_KEY = 'amivet_sync_baseline';
 export const PERSON_COLORS_KEY = 'amivet_person_colors';
 export const VIEW_STATE_KEY = 'amivet_view_state';
 export const AUTH_SESSION_KEY = 'amivet_auth_session';

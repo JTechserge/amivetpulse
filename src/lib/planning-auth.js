@@ -109,6 +109,33 @@ export function patchToChangedKeys(patch, currentSlots) {
 }
 
 /**
+ * Détermine l'état de référence (dernier état connu du serveur) au démarrage.
+ *
+ * Cette référence doit survivre aux rechargements de page, au même titre que le
+ * cache qu'elle décrit : c'est elle qui distingue une modification locale en
+ * attente d'une valeur simplement lue lors de la session précédente. Repartir
+ * d'un objet vide fait passer TOUT le cache localStorage pour des modifications
+ * en attente, réappliquées ensuite par-dessus l'état distant — le poste réimpose
+ * indéfiniment sa version et ne voit jamais celle des autres.
+ *
+ * À défaut de référence persistée (premier lancement, ou cache écrit par une
+ * version antérieure), le cache local est considéré comme déjà synchronisé : on
+ * ne revendique aucune modification et le serveur fait foi.
+ *
+ * Sans équivalent dans le miroir Deno : la référence est propre au client.
+ *
+ * @param {unknown} storedBaseline référence persistée, si disponible
+ * @param {Record<string,unknown>} cachedSlots cache local courant
+ * @returns {Record<string,unknown>} état de référence
+ */
+export function resolveSyncBaseline(storedBaseline, cachedSlots) {
+  if (storedBaseline && typeof storedBaseline === 'object' && !Array.isArray(storedBaseline)) {
+    return { ...storedBaseline };
+  }
+  return { ...(cachedSlots ?? {}) };
+}
+
+/**
  * Renvoie true si le profil a accès complet en écriture (diff inutile).
  * Cas couverts :
  *  - admin : gestion totale du planning et des comptes

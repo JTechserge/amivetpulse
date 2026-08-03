@@ -4,6 +4,7 @@ import {
   isVetPerson,
   SLOTS,
   STORAGE_KEY,
+  SYNC_BASELINE_KEY,
   VIEW_STATE_KEY,
   AUTH_SESSION_KEY,
   SUPABASE_URL,
@@ -18,7 +19,7 @@ import { getAuthSession, saveAuthSession, supabaseHeaders } from './auth.js';
 import { loadASVRoster, loadVetRosterCache, applyVetRosterRows } from './state.js';
 import { showToast, showSavedToast, openConfirmModal, loadPersonColors, applyPersonColorVars } from './ui.js';
 import { pushChangesToSupabase, syncFromSupabase, fetchVetRoster } from './api.js';
-import { buildPatch, applyPatch } from './lib/planning-auth.js';
+import { buildPatch, applyPatch, resolveSyncBaseline } from './lib/planning-auth.js';
 import { store } from './store.js';
 import { setupLogin, renderLoginScreen, renderSetPasswordScreen } from './login.js';
 import { initServiceWorker, showIOSInstallTip, updatePwaOfflineBanner } from './pwa.js';
@@ -346,6 +347,7 @@ function loadData() {
       const parsed = JSON.parse(raw);
       if (parsed && parsed.slots) {
         store.DATA = parsed;
+        restoreSyncBaseline(store.DATA.slots);
         return;
       }
     }
@@ -353,6 +355,7 @@ function loadData() {
     console.warn('Lecture localStorage impossible, ré-initialisation.', e);
   }
   store.DATA = { version: 2, slots: {} };
+  setSyncBaseline({});
 }
 function saveData(showToast = true) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
@@ -373,6 +376,33 @@ let _editSeq = 0; // incrémenté à chaque saveData — détecte les modificati
 // les modifications enregistrées entre-temps par quelqu'un d'autre.
 let _lastSyncedSlots = {};
 
+// La référence doit survivre au rechargement, comme le cache qu'elle décrit.
+// Repartir de {} à chaque chargement faisait passer TOUT le cache local pour des
+// modifications en attente : elles étaient réappliquées par-dessus l'état
+// distant à chaque pull, puis repoussées au serveur — le poste réimposait
+// indéfiniment sa version et ne voyait jamais celle des autres.
+function setSyncBaseline(slots) {
+  _lastSyncedSlots = slots;
+  try {
+    localStorage.setItem(SYNC_BASELINE_KEY, JSON.stringify(slots));
+  } catch (e) {
+    console.warn('Référence de synchronisation non persistée.', e);
+  }
+}
+
+function restoreSyncBaseline(cachedSlots) {
+  let stored = null;
+  try {
+    const raw = localStorage.getItem(SYNC_BASELINE_KEY);
+    if (raw) stored = JSON.parse(raw);
+  } catch (e) {
+    console.warn('Référence de synchronisation illisible, reprise du cache local.', e);
+  }
+  // Sans référence exploitable, le cache local est réputé déjà synchronisé :
+  // on ne revendique aucune modification et le serveur fait foi.
+  setSyncBaseline(resolveSyncBaseline(stored, cachedSlots));
+}
+
 function scheduleSupabasePush() {
   clearTimeout(_supabasePushTimer);
   // Attend une courte pause après la dernière modification (ex. fin d'un glisser-peindre)
@@ -387,7 +417,7 @@ function scheduleSupabasePush() {
     const seqAtPush = _editSeq;
     try {
       await pushChangesToSupabase(changes);
-      _lastSyncedSlots = pushedSnapshot;
+      setSyncBaseline(pushedSnapshot);
       // Ne lever le drapeau que si rien n'a été modifié pendant l'envoi.
       if (_editSeq === seqAtPush) _hasDirtyLocalData = false;
       else scheduleSupabasePush();
@@ -911,7 +941,7 @@ function pullRemotePlanning() {
   return syncFromSupabase().then((remoteSlots) => {
     if (remoteSlots === null) return false;
     const localChanges = buildPatch(_lastSyncedSlots, store.DATA.slots);
-    _lastSyncedSlots = { ...remoteSlots };
+    setSyncBaseline({ ...remoteSlots });
     const merged = Object.keys(localChanges).length ? applyPatch(remoteSlots, localChanges) : remoteSlots;
     const changedSinceRender = JSON.stringify(merged) !== JSON.stringify(store.DATA.slots);
     store.DATA = { version: 2, slots: merged };

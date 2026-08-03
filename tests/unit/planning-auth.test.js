@@ -8,6 +8,7 @@ import {
   buildPatch,
   applyPatch,
   patchToChangedKeys,
+  resolveSyncBaseline,
 } from '../../src/lib/planning-auth.js';
 
 // ─── extractPersonIdFromKey ───────────────────────────────────────────────────
@@ -400,7 +401,7 @@ describe('validateAsvWrite — cas refusés (403)', () => {
 // serveur. `null` dans un patch signifie « supprimer cette clé ».
 
 describe('buildPatch', () => {
-  it('ne renvoie rien si rien n\'a changé', () => {
+  it("ne renvoie rien si rien n'a changé", () => {
     const base = { '2026-07-14_marie_M': 'present' };
     expect(buildPatch(base, { ...base })).toEqual({});
   });
@@ -420,7 +421,7 @@ describe('buildPatch', () => {
     expect(buildPatch(base, {})).toEqual({ '2026-07-14_marie_M': null });
   });
 
-  it('ignore les clés inchangées quand d\'autres bougent', () => {
+  it("ignore les clés inchangées quand d'autres bougent", () => {
     const base = { a: '1', b: '2', c: '3' };
     const now = { a: '1', b: 'X', c: '3', d: '4' };
     expect(buildPatch(base, now)).toEqual({ b: 'X', d: '4' });
@@ -439,18 +440,18 @@ describe('applyPatch', () => {
     expect(result).toEqual({ b: 'X', c: '3' });
   });
 
-  it('ne modifie pas l\'objet source', () => {
+  it("ne modifie pas l'objet source", () => {
     const slots = { a: '1' };
     applyPatch(slots, { a: null, b: '2' });
     expect(slots).toEqual({ a: '1' });
   });
 
-  it('un patch vide laisse l\'état intact', () => {
+  it("un patch vide laisse l'état intact", () => {
     const slots = { a: '1' };
     expect(applyPatch(slots, {})).toEqual({ a: '1' });
   });
 
-  it('LE CŒUR DU CORRECTIF — deux sauvegardes concurrentes ne s\'écrasent plus', () => {
+  it("LE CŒUR DU CORRECTIF — deux sauvegardes concurrentes ne s'écrasent plus", () => {
     // État commun chargé par les deux personnes
     const S0 = { '2026-07-14_david_M': 'present' };
 
@@ -466,6 +467,72 @@ describe('applyPatch', () => {
     expect(afterB['2026-07-14_david_AM']).toBe('absent');
     expect(afterB['2026-07-15_stephane_M']).toBe('present');
     expect(afterB['2026-07-14_david_M']).toBe('present');
+  });
+});
+
+// ─── resolveSyncBaseline ──────────────────────────────────────────────────────
+// La référence de synchronisation (dernier état connu du serveur) sert à
+// distinguer « modification locale en attente » de « valeur simplement lue au
+// dernier chargement ». Sans elle, tout le cache localStorage passe pour des
+// modifications en attente et écrase l'état distant à chaque rechargement.
+
+describe('resolveSyncBaseline', () => {
+  it('reprend la référence persistée quand elle existe', () => {
+    const stored = { '2026-08-04_vet_M': 'present' };
+    expect(resolveSyncBaseline(stored, { '2026-08-04_vet_M': 'absent' })).toEqual(stored);
+  });
+
+  it('ne renvoie pas la référence persistée elle-même (copie défensive)', () => {
+    const stored = { '2026-08-04_vet_M': 'present' };
+    expect(resolveSyncBaseline(stored, {})).not.toBe(stored);
+  });
+
+  it('à défaut de référence, considère le cache local comme déjà synchronisé', () => {
+    // Premier lancement sur ce poste, ou cache écrit par une version antérieure :
+    // on ne sait rien du serveur, donc on ne revendique aucune modification.
+    const cache = { '2026-08-04_vet_M': 'present' };
+    expect(resolveSyncBaseline(null, cache)).toEqual(cache);
+    expect(resolveSyncBaseline(undefined, cache)).toEqual(cache);
+  });
+
+  it('tolère une référence persistée illisible', () => {
+    const cache = { '2026-08-04_vet_M': 'present' };
+    expect(resolveSyncBaseline('pas un objet', cache)).toEqual(cache);
+    expect(resolveSyncBaseline([], cache)).toEqual(cache);
+  });
+
+  it('renvoie un état vide quand il n’y a ni référence ni cache', () => {
+    expect(resolveSyncBaseline(null, null)).toEqual({});
+  });
+});
+
+describe('rechargement de page — le cache local ne doit pas écraser le serveur', () => {
+  it("RÉGRESSION — un cache périmé n'écrase plus la modification d'un autre utilisateur", () => {
+    // Onglet du vétérinaire, chargé avant l'intervention de l'admin.
+    const cacheLocal = { '2026-08-04_vet_M': 'present', '2026-08-04_vet_AM': 'present' };
+    // Entre-temps l'admin a posé un congé sur les deux créneaux.
+    const remote = { '2026-08-04_vet_M': 'conge', '2026-08-04_vet_AM': 'conge' };
+
+    // Au rechargement, la référence a été persistée en même temps que le cache.
+    const baseline = resolveSyncBaseline(cacheLocal, cacheLocal);
+    const localChanges = buildPatch(baseline, cacheLocal);
+
+    expect(localChanges).toEqual({}); // rien en attente : le poste n'a rien modifié
+    expect(applyPatch(remote, localChanges)).toEqual(remote); // le serveur fait foi
+  });
+
+  it('conserve les modifications hors ligne réellement en attente', () => {
+    const baseline = { '2026-08-04_vet_M': 'present' }; // dernier état confirmé par le serveur
+    const cacheLocal = { '2026-08-04_vet_M': 'present', '2026-08-05_vet_M': 'present' }; // édité hors ligne
+    const remote = { '2026-08-04_vet_M': 'conge' }; // l'admin a modifié le 4 pendant ce temps
+
+    const localChanges = buildPatch(resolveSyncBaseline(baseline, cacheLocal), cacheLocal);
+
+    expect(localChanges).toEqual({ '2026-08-05_vet_M': 'present' });
+    expect(applyPatch(remote, localChanges)).toEqual({
+      '2026-08-04_vet_M': 'conge', // modification de l'admin conservée
+      '2026-08-05_vet_M': 'present', // édition hors ligne conservée
+    });
   });
 });
 
