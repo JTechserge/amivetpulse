@@ -1,6 +1,7 @@
 import {
   PEOPLE,
   ASV_PEOPLE,
+  isVetPerson,
   SLOTS,
   STORAGE_KEY,
   VIEW_STATE_KEY,
@@ -285,6 +286,7 @@ async function loadCurrentUser() {
     display_name: p.display_name,
     can_edit_vet_calendar: p.can_edit_vet_calendar,
     can_edit_all_asv: p.can_edit_all_asv,
+    can_edit_asv_calendar: p.can_edit_asv_calendar,
   };
   return store.currentUser;
 }
@@ -297,6 +299,9 @@ function effectiveRole() {
   if (store.currentUser.role === 'admin') return store.adminViewMode === 'asv' ? 'asv' : 'vet';
   return store.currentUser.role;
 }
+// Listes blanches : tout rôle non énuméré (dont 'vet_employe') est exclu par
+// construction. Un vétérinaire salarié n'accède ni au tableau de bord ni aux
+// réglages, exactement comme une ASV.
 function canAccessDashboard() {
   const r = effectiveRole();
   return r === 'vet' || r === 'admin';
@@ -308,8 +313,16 @@ function canEditSlot(personId) {
   if (!store.currentUser) return false;
   const asvPerson = ASV_PEOPLE.find((p) => p.id === personId);
   if (asvPerson?.archived) return false;
+  const vetPerson = PEOPLE.find((p) => p.id === personId);
+  if (vetPerson?.archived) return false;
   const role = effectiveRole();
   if (role === 'vet') return true;
+  if (role === 'vet_employe') {
+    // Calendrier vétérinaire uniquement. Le planning ASV reste fermé tant que
+    // can_edit_asv_calendar n'est pas activé (flag prévu pour plus tard).
+    if (isASVPerson(personId)) return store.currentUser.can_edit_asv_calendar === true;
+    return isVetPerson(personId);
+  }
   if (role === 'asv') {
     const isImpersonating = store.currentUser.role === 'admin' && store.adminViewMode === 'asv';
     const myId = isImpersonating ? store.adminImpersonatedPersonId : store.currentUser.person_id;
@@ -725,6 +738,9 @@ function renderImpersonationBanner() {
 function applyRoleToDOM() {
   document.body.classList.toggle('role-asv', effectiveRole() === 'asv');
   document.body.classList.toggle('role-vet', effectiveRole() !== 'asv');
+  // Masquage du tableau de bord piloté par la permission plutôt que par le rôle :
+  // couvre l'ASV, l'admin en vue ASV et le vétérinaire salarié d'une seule règle.
+  document.body.classList.toggle('no-dashboard', !canAccessDashboard());
   renderImpersonationBanner();
 }
 
