@@ -7,7 +7,7 @@ export const store = {
   DATA: { version: 2, slots: {} },
 
   // Auth
-  currentUser: null, // { id, email, role, person_id, display_name, can_edit_vet_calendar, can_edit_all_asv }
+  currentUser: null, // { id, email, role, person_id, display_name, can_edit_vet_calendar, can_edit_all_asv, can_edit_asv_calendar }
   adminViewMode: 'vet', // 'vet' | 'asv' — admin only
   adminImpersonatedPersonId: null,
 

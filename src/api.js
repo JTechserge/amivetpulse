@@ -42,6 +42,62 @@ export async function syncFromSupabase() {
 }
 
 // ----------------------------------------------------------------
+// Roster vétérinaire (vet_roster table)
+// ----------------------------------------------------------------
+
+// Lecture ouverte à tout compte authentifié : un ASV doit pouvoir afficher le
+// calendrier vétérinaire. Retourne null en cas d'erreur → le cache local prend le relais.
+export async function fetchVetRoster() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}vet_roster?select=*&order=sort_order.asc`, {
+      headers: supabaseHeaders(),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    console.warn('Roster vétérinaire inaccessible (hors ligne ?), cache local conservé.', e);
+    return null;
+  }
+}
+
+// Création / mise à jour d'une ligne. La RLS réserve l'écriture à vet et admin.
+export async function apiUpsertVetPerson(person) {
+  const res = await fetch(`${SUPABASE_URL}vet_roster`, {
+    method: 'POST',
+    headers: supabaseHeaders({
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal,resolution=merge-duplicates',
+    }),
+    body: JSON.stringify({
+      id: person.id,
+      name: person.name,
+      short: person.short,
+      initial: person.initial,
+      color: person.color,
+      partner: person.partner !== false,
+      archived: person.archived ?? false,
+      sort_order: person.sortOrder ?? 0,
+      updated_at: new Date().toISOString(),
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `HTTP ${res.status}`);
+  }
+}
+
+// Archivage / désarchivage. On ne supprime jamais : les clés de planning
+// historiques référencent le person_id et doivent rester lisibles.
+export async function apiSetVetArchived(personId, archived) {
+  const res = await fetch(`${SUPABASE_URL}vet_roster?id=eq.${encodeURIComponent(personId)}`, {
+    method: 'PATCH',
+    headers: supabaseHeaders({ 'Content-Type': 'application/json', Prefer: 'return=minimal' }),
+    body: JSON.stringify({ archived, updated_at: new Date().toISOString() }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+// ----------------------------------------------------------------
 // Signatures électroniques (monthly_signatures table)
 // ----------------------------------------------------------------
 

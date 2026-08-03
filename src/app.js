@@ -1,6 +1,7 @@
 import {
   PEOPLE,
   ASV_PEOPLE,
+  isVetPerson,
   SLOTS,
   STORAGE_KEY,
   VIEW_STATE_KEY,
@@ -14,9 +15,9 @@ import {
 } from './config.js';
 import { escapeHTML, fmtISO, daysInMonth, isoWeekday, isSunday, holidayName, getWeekMondayDate } from './utils.js';
 import { getAuthSession, saveAuthSession, supabaseHeaders } from './auth.js';
-import { loadASVRoster } from './state.js';
-import { showToast, showSavedToast, openConfirmModal, loadPersonColors } from './ui.js';
-import { pushDataToSupabase, syncFromSupabase } from './api.js';
+import { loadASVRoster, loadVetRosterCache, applyVetRosterRows } from './state.js';
+import { showToast, showSavedToast, openConfirmModal, loadPersonColors, applyPersonColorVars } from './ui.js';
+import { pushDataToSupabase, syncFromSupabase, fetchVetRoster } from './api.js';
 import { store } from './store.js';
 import { setupLogin, renderLoginScreen, renderSetPasswordScreen } from './login.js';
 import { initServiceWorker, showIOSInstallTip, updatePwaOfflineBanner } from './pwa.js';
@@ -285,6 +286,7 @@ async function loadCurrentUser() {
     display_name: p.display_name,
     can_edit_vet_calendar: p.can_edit_vet_calendar,
     can_edit_all_asv: p.can_edit_all_asv,
+    can_edit_asv_calendar: p.can_edit_asv_calendar,
   };
   return store.currentUser;
 }
@@ -297,6 +299,9 @@ function effectiveRole() {
   if (store.currentUser.role === 'admin') return store.adminViewMode === 'asv' ? 'asv' : 'vet';
   return store.currentUser.role;
 }
+// Listes blanches : tout rôle non énuméré (dont 'vet_employe') est exclu par
+// construction. Un vétérinaire salarié n'accède ni au tableau de bord ni aux
+// réglages, exactement comme une ASV.
 function canAccessDashboard() {
   const r = effectiveRole();
   return r === 'vet' || r === 'admin';
@@ -308,8 +313,16 @@ function canEditSlot(personId) {
   if (!store.currentUser) return false;
   const asvPerson = ASV_PEOPLE.find((p) => p.id === personId);
   if (asvPerson?.archived) return false;
+  const vetPerson = PEOPLE.find((p) => p.id === personId);
+  if (vetPerson?.archived) return false;
   const role = effectiveRole();
   if (role === 'vet') return true;
+  if (role === 'vet_employe') {
+    // Calendrier vétérinaire uniquement. Le planning ASV reste fermé tant que
+    // can_edit_asv_calendar n'est pas activé (flag prévu pour plus tard).
+    if (isASVPerson(personId)) return store.currentUser.can_edit_asv_calendar === true;
+    return isVetPerson(personId);
+  }
   if (role === 'asv') {
     const isImpersonating = store.currentUser.role === 'admin' && store.adminViewMode === 'asv';
     const myId = isImpersonating ? store.adminImpersonatedPersonId : store.currentUser.person_id;
@@ -725,6 +738,9 @@ function renderImpersonationBanner() {
 function applyRoleToDOM() {
   document.body.classList.toggle('role-asv', effectiveRole() === 'asv');
   document.body.classList.toggle('role-vet', effectiveRole() !== 'asv');
+  // Masquage du tableau de bord piloté par la permission plutôt que par le rôle :
+  // couvre l'ASV, l'admin en vue ASV et le vétérinaire salarié d'une seule règle.
+  document.body.classList.toggle('no-dashboard', !canAccessDashboard());
   renderImpersonationBanner();
 }
 
@@ -773,6 +789,7 @@ function initApp() {
   store.weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
   applyRoleToDOM();
   loadASVRoster();
+  loadVetRosterCache();
   loadPersonColors();
   // Rafraîchir le token toutes les 45 min pour éviter les 401 après expiration
   setInterval(() => authRefreshSession(), 45 * 60 * 1000);
@@ -804,10 +821,11 @@ function initApp() {
 }
 
 async function init() {
-  // Charger l'effectif ASV dès le démarrage (indépendant de l'auth) : garantit que
-  // localStorage est peuplé même sur l'écran de connexion, et que le roster est prêt
-  // quel que soit le chemin d'entrée (login, recovery, invite).
+  // Charger les effectifs dès le démarrage (indépendant de l'auth) : garantit que
+  // localStorage est peuplé même sur l'écran de connexion, et que les rosters sont
+  // prêts quel que soit le chemin d'entrée (login, recovery, invite).
   loadASVRoster();
+  loadVetRosterCache();
   // Callback de réinitialisation de mot de passe : Supabase envoie le token dans le hash URL
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   const query = new URLSearchParams(window.location.search);
@@ -869,10 +887,23 @@ function refreshData() {
       }
     });
   }
+  loadVetRoster();
   loadSignatures();
   loadForecastSignatures();
   loadInterviews();
   loadAnnouncements();
+}
+
+// Le roster vétérinaire est partagé (table vet_roster) : on le rafraîchit à
+// chaque cycle de données pour qu'une embauche saisie sur un poste apparaisse
+// sur les autres. En cas d'échec réseau, le cache local reste en place.
+function loadVetRoster() {
+  fetchVetRoster().then((rows) => {
+    if (rows && applyVetRosterRows(rows)) {
+      applyPersonColorVars();
+      renderCurrentView();
+    }
+  });
 }
 function refreshAllPwaData() {
   refreshData();

@@ -3,7 +3,7 @@ import { computeLeaveBlocks } from './leave-blocks.js';
 import { escapeHTML, daysInMonth, fmtISO, isoWeekday, holidayName, formatFR } from './utils.js';
 import { store } from './store.js';
 import {
-  isASVPerson,
+  requiresLeaveApproval,
   getSlotState,
   getSlotLabel,
   getLeaveDecision,
@@ -38,7 +38,7 @@ export function stateLabel(iso, personId, slot) {
   if (state === 'present') return 'Présent';
   if (state === 'absent') {
     const l = getSlotLabel(iso, personId, slot);
-    if (isASVPerson(personId)) {
+    if (requiresLeaveApproval(personId)) {
       const decision = getLeaveDecision(iso, personId, slot) || 'pending';
       if (decision === 'pending') return `Demande de congé en attente${l ? ' (' + escapeHTML(l) + ')' : ''}`;
       if (decision === 'rejected') return 'Congé refusé — voir un vétérinaire';
@@ -57,7 +57,7 @@ export function heatmapSlotColor(person, iso, slot) {
   const state = getSlotState(iso, person.id, slot);
   if (state === 'present') return '#6EE7A0';
   if (state === 'absent') {
-    if (isASVPerson(person.id)) {
+    if (requiresLeaveApproval(person.id)) {
       const decision = getLeaveDecision(iso, person.id, slot) || 'pending';
       if (decision === 'pending') return 'var(--color-leave-pending)';
       if (decision === 'rejected') return 'var(--color-leave-rejected)';
@@ -96,7 +96,7 @@ export function buildHeatmap(year, people = PEOPLE) {
 
     // Lignes par personne
     people.forEach((person) => {
-      const isPersonASV = isASVPerson(person.id);
+      const isPersonASV = requiresLeaveApproval(person.id);
 
       // Retourne vrai si le jour dd est un jour ouvré absent (sam/dim brisent les runs — vétérinaires)
       const isAbsDay = (dd) => {
@@ -349,7 +349,6 @@ export function openAnnualDayDetail(iso, people, viewKey) {
   };
 }
 
-
 // Sous-page "Vue annuelle" d'un onglet groupé — factorisée pour vétérinaires et ASV.
 export function renderAnnualViewForGroup(group) {
   const g = _GROUP_VIEWS[group];
@@ -365,12 +364,13 @@ export function renderAnnualViewForGroup(group) {
   const effectiveViewKey = effectiveMode === 'current' ? g.calendarViewKey : g.forecastViewKey;
   const effectiveCfg = store.CAL_VIEWS[effectiveViewKey];
 
-  const yearToggle = group === 'vets'
-    ? `<div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
+  const yearToggle =
+    group === 'vets'
+      ? `<div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
         <button data-mode="current" class="${effectiveMode === 'current' ? 'active' : ''}">${store.CAL_VIEWS[g.calendarViewKey].year}</button>
         <button data-mode="forecast" class="${effectiveMode === 'forecast' ? 'active' : ''}">${store.CAL_VIEWS[g.forecastViewKey].year}</button>
       </div>`
-    : `<div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
+      : `<div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
         <button data-mode="current" class="active">${store.CAL_VIEWS[g.calendarViewKey].year} — Réalisé</button>
       </div>`;
 

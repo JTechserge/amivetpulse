@@ -57,12 +57,62 @@ export function findChangedKeys(oldSlots, newSlots) {
  */
 export function hasFullAccess(profile) {
   if (!profile) return false;
+  // Le vétérinaire salarié n'a JAMAIS l'accès complet : il passe toujours par
+  // validateVetEmployeWrite. Test placé avant les flags, sinon un
+  // can_edit_vet_calendar posé par erreur sur son profil lui ouvrirait l'ASV.
+  if (profile.role === 'vet_employe') return false;
   return (
     profile.role === 'admin' ||
     profile.role === 'vet' ||
     profile.can_edit_vet_calendar === true ||
     profile.can_edit_all_asv === true
   );
+}
+
+/**
+ * Valide les écritures d'un vétérinaire non associé (salarié).
+ *
+ * Règles :
+ *  1. Il édite l'ensemble du calendrier vétérinaire (toutes les lignes du roster),
+ *     pas seulement la sienne — c'est ce qui le distingue d'un ASV.
+ *  2. Les lignes ASV lui sont fermées tant que can_edit_asv_calendar est false.
+ *  3. Clés _decision : il peut soumettre (`pending`) ou annuler une demande en
+ *     attente, jamais approuver ni rejeter, ni toucher une décision déjà arrêtée.
+ *     L'arbitrage appartient aux associés.
+ *
+ * @param {Array<{key:string, oldValue:unknown, newValue:unknown}>} changedKeys
+ * @param {Set<string>|Array<string>} vetPersonIds person_id des lignes du calendrier vétérinaire
+ * @param {boolean} canEditAsvCalendar flag user_profiles.can_edit_asv_calendar
+ * @returns {string|null} message d'erreur ou null si autorisé
+ */
+export function validateVetEmployeWrite(changedKeys, vetPersonIds, canEditAsvCalendar) {
+  const vetIds = vetPersonIds instanceof Set ? vetPersonIds : new Set(vetPersonIds || []);
+  // Fail-closed : sans roster connu, impossible de distinguer une ligne vét d'une
+  // ligne ASV — on refuse plutôt que d'autoriser trop large.
+  if (!vetIds.size) return 'Roster vétérinaire indisponible — écriture impossible.';
+
+  for (const { key, oldValue, newValue } of changedKeys) {
+    const keyPersonId = extractPersonIdFromKey(key);
+
+    // Règles 1 & 2 — périmètre des lignes autorisées
+    if (!keyPersonId) {
+      return `Permission refusée : clé de planning non reconnue ("${key}").`;
+    }
+    if (!vetIds.has(keyPersonId) && canEditAsvCalendar !== true) {
+      return `Permission refusée : la clé "${key}" ne relève pas du calendrier vétérinaire.`;
+    }
+
+    // Règle 3 — clés de décision de congé
+    if (key.endsWith('_decision')) {
+      if (oldValue === 'approved' || oldValue === 'rejected') {
+        return `Seul un associé peut modifier une décision déjà approuvée ou rejetée (clé "${key}").`;
+      }
+      if (newValue !== undefined && newValue !== 'pending') {
+        return `Seul un associé peut définir une décision autre que "pending" (clé "${key}").`;
+      }
+    }
+  }
+  return null;
 }
 
 /**

@@ -1160,8 +1160,9 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .login-form input:focus{outline:2px solid var(--color-primary);border-color:var(--color-primary);}
 .login-error{color:#B91C1C;font-size:12.5px;margin:0 0 10px;}
 .login-footer{margin-top:14px;text-align:center;}
-/* Masque le bouton tableau de bord pour les utilisateurs ASV */
-body.role-asv [data-view="dashboard"]{display:none;}
+/* Masque le bouton tableau de bord pour qui n'y a pas accès
+   (ASV, admin en vue ASV, vétérinaire salarié) */
+body.no-dashboard [data-view="dashboard"]{display:none;}
 /* Bannière d'impersonation admin → ASV */
 #impersonation-banner{
   display:flex;align-items:center;gap:12px;flex-wrap:wrap;
@@ -1244,7 +1245,7 @@ body.role-asv [data-view="dashboard"]{display:none;}
     transition:left 0.22s cubic-bezier(0.4,0,0.2,1),right 0.22s cubic-bezier(0.4,0,0.2,1);
   }
   .mb-tab.active::before { left:20%; right:20%; }
-  body.role-asv .mb-tab[data-view="dashboard"] { display:none; }
+  body.no-dashboard .mb-tab[data-view="dashboard"] { display:none; }
 
   /* ── Padding-bottom de l'app pour ne pas être caché sous la tab bar ── */
   .app-main { padding-bottom:calc(56px + env(safe-area-inset-bottom) + 16px); }

@@ -29,6 +29,7 @@ import { triggerPushNotification } from './pwa.js';
 import { isMonthSigned, getSignatureDetail, openSigningLinkModal } from './signatures.js';
 import {
   isASVPerson,
+  requiresLeaveApproval,
   isWithinNextTwoWeeks,
   isPersonWorkingDay,
   getSlotState,
@@ -100,7 +101,7 @@ function cellRenderInfo(iso, personId, slot) {
   const state = getSlotState(iso, personId, slot);
   const label = state === 'absent' ? getSlotLabel(iso, personId, slot) : '';
   const decision =
-    state === 'absent' && isASVPerson(personId) ? getLeaveDecision(iso, personId, slot) || 'pending' : null;
+    state === 'absent' && requiresLeaveApproval(personId) ? getLeaveDecision(iso, personId, slot) || 'pending' : null;
   const changeDecision = isASVPerson(personId) ? getChangeDecision(iso, personId, slot) : null;
   let style = '';
   let html = '';
@@ -587,7 +588,7 @@ function buildWeekGrid(year, month, people) {
       const isSick = lc === 'maladie' || lc === 'arrêt maladie' || lc === 'arrêt';
       const isRepos = lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé';
       const decision =
-        !isRepos && !isSick && isASVPerson(pid)
+        !isRepos && !isSick && requiresLeaveApproval(pid)
           ? getLeaveDecision(runDays[0], pid, 'M') || getLeaveDecision(runDays[0], pid, 'AM') || 'pending'
           : null;
       const leaveType = isSick ? 'sick' : isRepos ? 'repos' : decision === 'pending' ? 'pending' : 'conge';
@@ -630,7 +631,8 @@ function buildWeekGrid(year, month, people) {
       if (lbl === 'repos' || lbl === 'repos planifié' || lbl === 'non travaillé') return 'repos';
       if (lbl === 'maladie' || lbl === 'arrêt maladie' || lbl === 'arrêt') return 'sick';
       if (lbl && lbl !== 'congé') return 'lbl:' + lbl;
-      if (isASVPerson(pid)) return getLeaveDecision(iso, pid, 'M') || getLeaveDecision(iso, pid, 'AM') || 'pending';
+      if (requiresLeaveApproval(pid))
+        return getLeaveDecision(iso, pid, 'M') || getLeaveDecision(iso, pid, 'AM') || 'pending';
       return 'conge';
     };
     people.forEach((p) => {
@@ -1497,7 +1499,7 @@ function openAbsenceLabelPopover(cell, forceAbsent) {
     _saveData(false);
   }
   const currentLabel = getSlotLabel(iso, personId, slot);
-  const isASV = isASVPerson(personId);
+  const isASV = requiresLeaveApproval(personId);
   const backdrop = document.getElementById('popover-backdrop');
   const box = document.getElementById('popover-box');
   const quickTags = ['Vacances', 'Formation', 'Congrès', 'Maladie', 'RTT', 'Rendez-vous médical'];
@@ -1579,7 +1581,7 @@ function openAbsenceLabelPopover(cell, forceAbsent) {
 
 function openAbsenceRangePopover(slots, personId, viewKey) {
   const person = personOf(personId);
-  const isASV = isASVPerson(personId);
+  const isASV = requiresLeaveApproval(personId);
   const currentLabel = getSlotLabel(slots[0].iso, personId, slots[0].slot);
   const backdrop = document.getElementById('popover-backdrop');
   const box = document.getElementById('popover-box');
@@ -1773,7 +1775,7 @@ function openOvertimeDayPopover(iso, people, viewKey) {
 }
 
 function sidebarPersonBlock(iso, person) {
-  const isASV = isASVPerson(person.id);
+  const isASV = requiresLeaveApproval(person.id);
   const [sy, sm] = iso.split('-').map(Number);
   if (isASV && isMonthSigned(person.id, sy, sm - 1)) {
     return `

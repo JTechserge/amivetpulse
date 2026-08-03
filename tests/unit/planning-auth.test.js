@@ -4,6 +4,7 @@ import {
   findChangedKeys,
   hasFullAccess,
   validateAsvWrite,
+  validateVetEmployeWrite,
 } from '../../src/lib/planning-auth.js';
 
 // ─── extractPersonIdFromKey ───────────────────────────────────────────────────
@@ -44,9 +45,9 @@ describe('extractPersonIdFromKey', () => {
   });
 
   it('renvoie null pour des clés sans préfixe date valide', () => {
-    expect(extractPersonIdFromKey('marie_M')).toBeNull();        // pas de date
+    expect(extractPersonIdFromKey('marie_M')).toBeNull(); // pas de date
     expect(extractPersonIdFromKey('nodate_marie_M')).toBeNull(); // format quelconque
-    expect(extractPersonIdFromKey('2026-07-14')).toBeNull();     // date seule, pas de _person_id
+    expect(extractPersonIdFromKey('2026-07-14')).toBeNull(); // date seule, pas de _person_id
     expect(extractPersonIdFromKey('26-07-14_marie_M')).toBeNull(); // année tronquée
   });
 
@@ -112,14 +113,14 @@ describe('findChangedKeys', () => {
       '2026-07-14_marie_AM': 'empty',
     };
     const new_ = {
-      '2026-07-14_marie_M': 'present',   // modifié
-      '2026-07-14_david_M': 'present',   // inchangé
-      '2026-07-14_marie_AM': 'present',  // modifié
+      '2026-07-14_marie_M': 'present', // modifié
+      '2026-07-14_david_M': 'present', // inchangé
+      '2026-07-14_marie_AM': 'present', // modifié
       '2026-07-14_marie_overtime': '2', // ajouté
     };
     const result = findChangedKeys(old, new_);
     expect(result).toHaveLength(3);
-    const keys = result.map(r => r.key);
+    const keys = result.map((r) => r.key);
     expect(keys).toContain('2026-07-14_marie_M');
     expect(keys).toContain('2026-07-14_marie_AM');
     expect(keys).toContain('2026-07-14_marie_overtime');
@@ -152,13 +153,126 @@ describe('hasFullAccess', () => {
     expect(hasFullAccess({ role: 'asv', can_edit_vet_calendar: false, can_edit_all_asv: true })).toBe(true);
   });
 
-  it('ASV basique → pas d\'accès complet (diff requis)', () => {
+  it("ASV basique → pas d'accès complet (diff requis)", () => {
     expect(hasFullAccess({ role: 'asv', can_edit_vet_calendar: false, can_edit_all_asv: false })).toBe(false);
   });
 
-  it('profil null/undefined → pas d\'accès', () => {
+  it("profil null/undefined → pas d'accès", () => {
     expect(hasFullAccess(null)).toBe(false);
     expect(hasFullAccess(undefined)).toBe(false);
+  });
+
+  it("vétérinaire salarié → jamais d'accès complet", () => {
+    expect(hasFullAccess({ role: 'vet_employe', can_edit_vet_calendar: false, can_edit_all_asv: false })).toBe(false);
+  });
+
+  it("vétérinaire salarié → les flags ASV ne lui ouvrent pas l'accès complet", () => {
+    // Garde-fou : un can_edit_vet_calendar posé par erreur sur son profil ne doit
+    // pas court-circuiter validateVetEmployeWrite et lui ouvrir le planning ASV.
+    expect(hasFullAccess({ role: 'vet_employe', can_edit_vet_calendar: true, can_edit_all_asv: false })).toBe(false);
+    expect(hasFullAccess({ role: 'vet_employe', can_edit_vet_calendar: false, can_edit_all_asv: true })).toBe(false);
+  });
+});
+
+// ─── validateVetEmployeWrite ─────────────────────────────────────────────────
+
+// Roster vétérinaire de test : 2 associés + 1 salarié.
+const VETS = new Set(['david', 'stephane', 'salarie']);
+
+describe('validateVetEmployeWrite — cas autorisés', () => {
+  it('aucun changement (push idempotent) → autorisé', () => {
+    expect(validateVetEmployeWrite([], VETS, false)).toBeNull();
+  });
+
+  it('édite sa propre ligne du calendrier vétérinaire', () => {
+    const changed = [{ key: '2026-07-14_salarie_M', oldValue: 'empty', newValue: 'present' }];
+    expect(validateVetEmployeWrite(changed, VETS, false)).toBeNull();
+  });
+
+  it("édite la ligne d'un associé — il gère tout le calendrier vétérinaire", () => {
+    // C'est ce qui le distingue d'un ASV, cantonné à sa seule ligne.
+    const changed = [{ key: '2026-07-14_david_AM', oldValue: 'empty', newValue: 'present' }];
+    expect(validateVetEmployeWrite(changed, VETS, false)).toBeNull();
+  });
+
+  it('soumet une demande de congé sur sa ligne (decision → pending)', () => {
+    const changed = [{ key: '2026-07-14_salarie_M_decision', oldValue: undefined, newValue: 'pending' }];
+    expect(validateVetEmployeWrite(changed, VETS, false)).toBeNull();
+  });
+
+  it('annule sa demande en attente (pending → supprimée)', () => {
+    const changed = [{ key: '2026-07-14_salarie_M_decision', oldValue: 'pending', newValue: undefined }];
+    expect(validateVetEmployeWrite(changed, VETS, false)).toBeNull();
+  });
+
+  it("pose un libellé d'absence sur une ligne vétérinaire", () => {
+    const changed = [{ key: '2026-07-14_salarie_M_label', oldValue: '', newValue: 'Congé' }];
+    expect(validateVetEmployeWrite(changed, VETS, false)).toBeNull();
+  });
+
+  it('édite une ligne ASV une fois can_edit_asv_calendar activé', () => {
+    const changed = [{ key: '2026-07-14_marie_M', oldValue: 'empty', newValue: 'present' }];
+    expect(validateVetEmployeWrite(changed, VETS, true)).toBeNull();
+  });
+});
+
+describe('validateVetEmployeWrite — cas refusés (403)', () => {
+  it('refuse une ligne ASV tant que can_edit_asv_calendar est false', () => {
+    const changed = [{ key: '2026-07-14_marie_M', oldValue: 'empty', newValue: 'present' }];
+    expect(validateVetEmployeWrite(changed, VETS, false)).toMatch(/calendrier vétérinaire/);
+  });
+
+  it('refuse une personne inconnue du roster', () => {
+    const changed = [{ key: '2026-07-14_ghost_M', oldValue: 'empty', newValue: 'present' }];
+    expect(validateVetEmployeWrite(changed, VETS, false)).toMatch(/calendrier vétérinaire/);
+  });
+
+  it('refuse une clé de format invalide', () => {
+    const changed = [{ key: 'salarie_M', oldValue: undefined, newValue: 'present' }];
+    expect(validateVetEmployeWrite(changed, VETS, false)).toMatch(/non reconnue/);
+  });
+
+  it("ne peut pas s'auto-approuver", () => {
+    const changed = [{ key: '2026-07-14_salarie_M_decision', oldValue: 'pending', newValue: 'approved' }];
+    expect(validateVetEmployeWrite(changed, VETS, false)).toMatch(/associé/);
+  });
+
+  it("ne peut pas approuver la demande d'un autre vétérinaire salarié", () => {
+    const vets = new Set(['david', 'salarie', 'salarie2']);
+    const changed = [{ key: '2026-07-14_salarie2_AM_decision', oldValue: 'pending', newValue: 'approved' }];
+    expect(validateVetEmployeWrite(changed, vets, false)).toMatch(/associé/);
+  });
+
+  it('ne peut pas rejeter une demande', () => {
+    const changed = [{ key: '2026-07-14_salarie_M_decision', oldValue: 'pending', newValue: 'rejected' }];
+    expect(validateVetEmployeWrite(changed, VETS, false)).toMatch(/associé/);
+  });
+
+  it('ne peut pas revenir sur une décision déjà arrêtée', () => {
+    const approved = [{ key: '2026-07-14_salarie_M_decision', oldValue: 'approved', newValue: undefined }];
+    expect(validateVetEmployeWrite(approved, VETS, false)).toMatch(/approuvée|rejetée/);
+    const rejected = [{ key: '2026-07-14_salarie_M_decision', oldValue: 'rejected', newValue: 'pending' }];
+    expect(validateVetEmployeWrite(rejected, VETS, false)).toMatch(/approuvée|rejetée/);
+  });
+
+  it('refuse tout le push si une seule clé est hors périmètre', () => {
+    const changed = [
+      { key: '2026-07-14_salarie_M', oldValue: 'empty', newValue: 'present' }, // ok
+      { key: '2026-07-14_julie_AM', oldValue: 'empty', newValue: 'absent' }, // ASV → interdit
+    ];
+    expect(validateVetEmployeWrite(changed, VETS, false)).toMatch(/calendrier vétérinaire/);
+  });
+
+  it('roster vide → refus systématique (fail-closed)', () => {
+    // Sans roster, impossible de distinguer une ligne vét d'une ligne ASV.
+    const changed = [{ key: '2026-07-14_salarie_M', oldValue: 'empty', newValue: 'present' }];
+    expect(validateVetEmployeWrite(changed, new Set(), false)).toMatch(/Roster/);
+    expect(validateVetEmployeWrite(changed, [], true)).toMatch(/Roster/);
+  });
+
+  it('accepte un tableau comme un Set pour la liste des vétérinaires', () => {
+    const changed = [{ key: '2026-07-14_david_M', oldValue: 'empty', newValue: 'present' }];
+    expect(validateVetEmployeWrite(changed, ['david', 'stephane'], false)).toBeNull();
   });
 });
 
@@ -215,12 +329,12 @@ describe('validateAsvWrite — cas autorisés', () => {
 });
 
 describe('validateAsvWrite — cas refusés (403)', () => {
-  it('ASV modifie le slot d\'une autre ASV', () => {
+  it("ASV modifie le slot d'une autre ASV", () => {
     const changed = [{ key: '2026-07-14_johanna_M', oldValue: 'empty', newValue: 'present' }];
     expect(validateAsvWrite(changed, 'marie')).toMatch(/johanna/);
   });
 
-  it('ASV supprime la présence d\'une autre ASV (clé étrangère, newValue = undefined)', () => {
+  it("ASV supprime la présence d'une autre ASV (clé étrangère, newValue = undefined)", () => {
     const changed = [{ key: '2026-07-14_johanna_M', oldValue: 'present', newValue: undefined }];
     expect(validateAsvWrite(changed, 'marie')).toMatch(/johanna/);
   });
@@ -235,22 +349,22 @@ describe('validateAsvWrite — cas refusés (403)', () => {
     expect(validateAsvWrite(changed, 'marie')).toMatch(/ghost/);
   });
 
-  it('ASV modifie le slot d\'un vet', () => {
+  it("ASV modifie le slot d'un vet", () => {
     const changed = [{ key: '2026-07-14_david_M', oldValue: 'present', newValue: 'absent' }];
     expect(validateAsvWrite(changed, 'marie')).toMatch(/david/);
   });
 
-  it('ASV tente de s\'auto-approuver (decision → approved)', () => {
+  it("ASV tente de s'auto-approuver (decision → approved)", () => {
     const changed = [{ key: '2026-07-14_marie_M_decision', oldValue: 'pending', newValue: 'approved' }];
     expect(validateAsvWrite(changed, 'marie')).toMatch(/admin/);
   });
 
-  it('ASV tente de s\'auto-rejeter (decision → rejected)', () => {
+  it("ASV tente de s'auto-rejeter (decision → rejected)", () => {
     const changed = [{ key: '2026-07-14_marie_M_decision', oldValue: 'pending', newValue: 'rejected' }];
     expect(validateAsvWrite(changed, 'marie')).toMatch(/admin/);
   });
 
-  it('ASV tente d\'annuler une décision déjà approuvée', () => {
+  it("ASV tente d'annuler une décision déjà approuvée", () => {
     const changed = [{ key: '2026-07-14_marie_M_decision', oldValue: 'approved', newValue: undefined }];
     expect(validateAsvWrite(changed, 'marie')).toMatch(/approuvée|rejetée/);
   });
@@ -268,8 +382,8 @@ describe('validateAsvWrite — cas refusés (403)', () => {
 
   it('ASV modifie ses propres slots ET un slot étranger dans le même push', () => {
     const changed = [
-      { key: '2026-07-14_marie_M', oldValue: 'empty', newValue: 'present' },  // ok
-      { key: '2026-07-14_julie_AM', oldValue: 'empty', newValue: 'absent' },  // interdit
+      { key: '2026-07-14_marie_M', oldValue: 'empty', newValue: 'present' }, // ok
+      { key: '2026-07-14_julie_AM', oldValue: 'empty', newValue: 'absent' }, // interdit
     ];
     expect(validateAsvWrite(changed, 'marie')).toMatch(/julie/);
   });

@@ -1,4 +1,4 @@
-import { ASV_PEOPLE, ASV_STD_SAT_CARLA, SLOTS, personOf } from './config.js';
+import { ASV_PEOPLE, ASV_STD_SAT_CARLA, SLOTS, personOf, isNonPartnerVet } from './config.js';
 import { store } from './store.js';
 
 /* ---------- Clés de stockage ---------- */
@@ -27,6 +27,19 @@ export function overtimeKey(isoDate, personId) {
 /* ---------- Helpers ---------- */
 export function isASVPerson(personId) {
   return ASV_PEOPLE.some((p) => p.id === personId);
+}
+
+/**
+ * true si les absences de cette personne suivent le cycle pending/approved/rejected.
+ *
+ * Concerne les ASV et les vétérinaires salariés — pas les associés, dont les
+ * congés ne sont soumis à personne. À utiliser partout où `isASVPerson` servait
+ * de « cette personne demande une validation » ; `isASVPerson` reste réservé à
+ * la logique métier propre aux ASV (heures, jours travaillés, postes O/F,
+ * demandes de modification urgente).
+ */
+export function requiresLeaveApproval(personId) {
+  return isASVPerson(personId) || isNonPartnerVet(personId);
 }
 
 // Retourne true si la date ISO est dans les 14 prochains jours (aujourd'hui inclus)
@@ -94,7 +107,7 @@ export function setSlotState(isoDate, personId, slot, state) {
     store.DATA.slots[key] = state;
     if (state !== 'absent') delete store.DATA.slots[labelKey(isoDate, personId, slot)];
   }
-  if (isASVPerson(personId)) {
+  if (requiresLeaveApproval(personId)) {
     if (state === 'absent' && !wasAbsent) {
       // Nouvelle absence : demande de congé créée en attente (sauf si une décision existait,
       // ex. ré-application du même état pendant un glisser-peindre).
@@ -300,7 +313,11 @@ export function forecastSigKey(pid, year) {
 }
 export function getForecastSig(pid, year) {
   const raw = store.DATA.slots[forecastSigKey(pid, year)];
-  try { return raw ? JSON.parse(raw) : null; } catch { return null; }
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
 }
 export function setForecastSig(pid, year, sig) {
   if (sig) store.DATA.slots[forecastSigKey(pid, year)] = JSON.stringify(sig);

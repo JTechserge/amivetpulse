@@ -14,8 +14,25 @@ export const PRESENT_SHADES = [
 
 // INVARIANT : les `id` sont utilisés comme person_id dans les clés de planning
 // ("YYYY-MM-DD_<id>_..."). Ne jamais utiliser `_`, `/` ou espace dans un id.
+//
+// `partner` : true = associé (ses absences ne passent par aucune validation),
+// false = vétérinaire salarié (ses absences suivent le cycle pending/approved,
+// comme les ASV). Champ absent = associé — défaut sûr, qui préserve le
+// comportement historique pour tout roster mis en cache avant l'ajout du champ.
+//
+// Tableau muté en place par le module roster (comme ASV_PEOPLE) : le contenu réel
+// vient de la table partagée `vet_roster` ; ces deux entrées sont l'effectif par
+// défaut, utilisé tant que le roster distant n'est pas chargé.
 export const PEOPLE = [
-  { id: 'david', name: 'Dr. David Pelois', short: 'David', color: '#2563EB', initial: 'D', present: PRESENT_SHADES[0] },
+  {
+    id: 'david',
+    name: 'Dr. David Pelois',
+    short: 'David',
+    color: '#2563EB',
+    initial: 'D',
+    present: PRESENT_SHADES[0],
+    partner: true,
+  },
   {
     id: 'stephane',
     name: 'Dr. Stéphane Maquinay',
@@ -23,6 +40,7 @@ export const PEOPLE = [
     color: '#7C3AED',
     initial: 'S',
     present: PRESENT_SHADES[1],
+    partner: true,
   },
 ];
 
@@ -75,6 +93,30 @@ export function allPeople() {
 }
 
 // ----------------------------------------------------------------
+// Statut des vétérinaires (associé / salarié)
+// ----------------------------------------------------------------
+// Ces prédicats portent sur la PERSONNE (ligne de calendrier), pas sur le rôle
+// du compte connecté : ils doivent être évaluables par n'importe quel
+// utilisateur, y compris un ASV qui n'a pas le droit de lire les autres profils.
+
+/** true si `id` correspond à une ligne du calendrier vétérinaire. */
+export function isVetPerson(id) {
+  return PEOPLE.some((p) => p.id === id);
+}
+
+/** true si `id` est un vétérinaire associé (absences sans validation). */
+export function isPartnerVet(id) {
+  const p = PEOPLE.find((x) => x.id === id);
+  return !!p && p.partner !== false;
+}
+
+/** true si `id` est un vétérinaire salarié (absences soumises à validation). */
+export function isNonPartnerVet(id) {
+  const p = PEOPLE.find((x) => x.id === id);
+  return !!p && p.partner === false;
+}
+
+// ----------------------------------------------------------------
 // Congés Payés
 // ----------------------------------------------------------------
 export const CP_DAYS_PER_MONTH = 2.5;
@@ -91,9 +133,13 @@ export const ANNONCE_CATEGORIES = {
 };
 
 // ----------------------------------------------------------------
-// Roster ASV dynamique
+// Rosters dynamiques
 // ----------------------------------------------------------------
 export const ASV_ROSTER_KEY = 'amivet_asv_roster';
+// Cache local du roster vétérinaire. La source de vérité est la table partagée
+// `vet_roster` (Supabase) ; le cache sert au démarrage et hors connexion, pour
+// que le calendrier s'affiche avant/sans la réponse réseau.
+export const VET_ROSTER_KEY = 'amivet_vet_roster';
 export const ASV_DEFAULT_COLOR_PALETTE = [
   '#DB2777',
   '#EA580C',

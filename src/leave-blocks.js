@@ -1,5 +1,5 @@
 import { SLOTS } from './config.js';
-import { isASVPerson, getSlotState, getSlotLabel, getLeaveDecision } from './slots.js';
+import { requiresLeaveApproval, getSlotState, getSlotLabel, getLeaveDecision } from './slots.js';
 import { fmtISO, daysInMonth, isoWeekday, isSunday } from './utils.js';
 
 // Clé de groupage : deux demi-journées de même typeKey peuvent appartenir au même bloc.
@@ -9,7 +9,7 @@ function halfTypeKey(iso, pid, slot) {
   if (lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé') return 'repos';
   if (lc === 'maladie' || lc === 'arrêt maladie' || lc === 'arrêt') return 'sick';
   if (lc === 'accident du travail' || lc === 'accident') return 'accident';
-  const dec = isASVPerson(pid) ? getLeaveDecision(iso, pid, slot) || 'pending' : 'conge';
+  const dec = requiresLeaveApproval(pid) ? getLeaveDecision(iso, pid, slot) || 'pending' : 'conge';
   return dec + (lbl ? ':' + lc : '');
 }
 
@@ -20,7 +20,7 @@ function halfVisualType(iso, pid, slot) {
   if (lc === 'repos' || lc === 'repos planifié' || lc === 'non travaillé') return 'repos';
   if (lc === 'maladie' || lc === 'arrêt maladie' || lc === 'arrêt') return 'sick';
   if (lc === 'accident du travail' || lc === 'accident') return 'accident';
-  if (!isASVPerson(pid)) return 'conge';
+  if (!requiresLeaveApproval(pid)) return 'conge';
   return getLeaveDecision(iso, pid, slot) || 'pending';
 }
 

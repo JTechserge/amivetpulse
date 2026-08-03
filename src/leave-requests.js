@@ -23,7 +23,7 @@ import {
   getChangeDecision,
   setChangeDecision,
   getShiftType,
-  isASVPerson,
+  requiresLeaveApproval,
 } from './slots.js';
 import { triggerPushNotification } from './pwa.js';
 
@@ -38,17 +38,27 @@ export function setupLeaveRequests({ snapshotBeforeChange, saveData, renderDashb
 }
 
 /* ================================================================
-   DEMANDES DE CONGÉ ASV
+   DEMANDES DE CONGÉ (ASV + vétérinaires salariés)
    ================================================================ */
 
 // Repos planifié ne nécessite pas d'approbation vétérinaire → exclu des demandes de congé.
 import { isReposLabel, isSickOrAccidentLabel } from './lib/leave-utils.js';
 export { isReposLabel, isSickOrAccidentLabel };
 
+/**
+ * Personnes dont les absences sont soumises à validation : ASV + vétérinaires
+ * salariés. Les associés en sont exclus — leurs congés ne dépendent de personne.
+ * Le statut s'attache à la PERSONNE, pas à l'auteur de la saisie : une absence
+ * posée par un associé sur la ligne d'un salarié reste une demande.
+ */
+function peopleRequiringApproval() {
+  return [...ASV_PEOPLE, ...PEOPLE.filter((p) => p.partner === false)];
+}
+
 export function collectAllLeaveGroups() {
   const groups = [];
   const years = [getCurrentYear(), getCurrentYear() + 1];
-  ASV_PEOPLE.forEach((person) => {
+  peopleRequiringApproval().forEach((person) => {
     let current = null;
     years.forEach((year) => {
       for (let month = 0; month < 12; month++) {
@@ -229,7 +239,7 @@ export function renderLeaveRequestsPage() {
     `
         : ''
     }
-    <p class="section-desc" style="margin-bottom:14px;">Demandes de congé ASV — ${getCurrentYear()} et ${getCurrentYear() + 1}.</p>
+    <p class="section-desc" style="margin-bottom:14px;">Demandes de congé — ${getCurrentYear()} et ${getCurrentYear() + 1}.</p>
     ${groups.length ? leaveRows : `<p class="text-muted">Aucune demande de congé pour le moment.</p>`}
   `;
 
@@ -356,7 +366,11 @@ export function getJoursFeries(year) {
 
 export function getCPTakenDays(personId, startISO, endISO) {
   let halfDays = 0;
-  const isASV = isASVPerson(personId);
+  // Décompte par libellé pour toute personne ayant un workflow de congé libellé
+  // (ASV et vétérinaires salariés) : sinon une Formation ou une Maladie
+  // mangerait leurs CP. Les associés conservent la règle historique
+  // « toute absence = CP », faute de libellé systématique.
+  const byLabel = requiresLeaveApproval(personId);
   const labelRe = /cp|cong[eé]/i;
   for (const key of Object.keys(store.DATA.slots)) {
     const m = key.match(/^(\d{4}-\d{2}-\d{2})_(.+)_(M|AM)$/);
@@ -365,13 +379,13 @@ export function getCPTakenDays(personId, startISO, endISO) {
     if (pid !== personId) continue;
     if (iso < startISO || iso > endISO) continue;
     if (store.DATA.slots[key] !== 'absent') continue;
-    if (isASV) {
-      // ASV : seules les absences avec motif CP/Congé comptent (les autres motifs
+    if (byLabel) {
+      // Seules les absences avec motif CP/Congé comptent (les autres motifs
       // comme Maladie ou Formation ne consomment pas de CP)
       const label = store.DATA.slots[key.replace(/_(M|AM)$/, '_$1_label')] || '';
       if (!labelRe.test(label)) continue;
     }
-    // Vétérinaires : toute absence = CP (pas de workflow de demande de congé)
+    // Associés : toute absence = CP (pas de workflow de demande de congé)
     halfDays++;
   }
   return Math.round((halfDays / 2) * 100) / 100;
@@ -608,7 +622,7 @@ export function getAbsenteeismRate(personId, year, month) {
       const key = `${iso}_${personId}_${slot}`;
       if (store.DATA.slots[key] === 'absent') {
         // For ASV: only count if decision is not 'rejected' (rejected means not absent)
-        if (isASVPerson(personId)) {
+        if (requiresLeaveApproval(personId)) {
           const dec = getLeaveDecision(iso, personId, slot);
           if (dec === 'rejected') continue;
         }
