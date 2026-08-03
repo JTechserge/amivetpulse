@@ -313,7 +313,11 @@ export function forecastSigKey(pid, year) {
 }
 export function getForecastSig(pid, year) {
   const raw = store.DATA.slots[forecastSigKey(pid, year)];
-  try { return raw ? JSON.parse(raw) : null; } catch { return null; }
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
 }
 export function setForecastSig(pid, year, sig) {
   if (sig) store.DATA.slots[forecastSigKey(pid, year)] = JSON.stringify(sig);

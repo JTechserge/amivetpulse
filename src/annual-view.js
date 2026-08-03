@@ -349,7 +349,6 @@ export function openAnnualDayDetail(iso, people, viewKey) {
   };
 }
 
-
 // Sous-page "Vue annuelle" d'un onglet groupé — factorisée pour vétérinaires et ASV.
 export function renderAnnualViewForGroup(group) {
   const g = _GROUP_VIEWS[group];
@@ -365,12 +364,13 @@ export function renderAnnualViewForGroup(group) {
   const effectiveViewKey = effectiveMode === 'current' ? g.calendarViewKey : g.forecastViewKey;
   const effectiveCfg = store.CAL_VIEWS[effectiveViewKey];
 
-  const yearToggle = group === 'vets'
-    ? `<div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
+  const yearToggle =
+    group === 'vets'
+      ? `<div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
         <button data-mode="current" class="${effectiveMode === 'current' ? 'active' : ''}">${store.CAL_VIEWS[g.calendarViewKey].year}</button>
         <button data-mode="forecast" class="${effectiveMode === 'forecast' ? 'active' : ''}">${store.CAL_VIEWS[g.forecastViewKey].year}</button>
       </div>`
-    : `<div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
+      : `<div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
         <button data-mode="current" class="active">${store.CAL_VIEWS[g.calendarViewKey].year} — Réalisé</button>
       </div>`;
 

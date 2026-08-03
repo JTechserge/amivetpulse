@@ -631,7 +631,8 @@ function buildWeekGrid(year, month, people) {
       if (lbl === 'repos' || lbl === 'repos planifié' || lbl === 'non travaillé') return 'repos';
       if (lbl === 'maladie' || lbl === 'arrêt maladie' || lbl === 'arrêt') return 'sick';
       if (lbl && lbl !== 'congé') return 'lbl:' + lbl;
-      if (requiresLeaveApproval(pid)) return getLeaveDecision(iso, pid, 'M') || getLeaveDecision(iso, pid, 'AM') || 'pending';
+      if (requiresLeaveApproval(pid))
+        return getLeaveDecision(iso, pid, 'M') || getLeaveDecision(iso, pid, 'AM') || 'pending';
       return 'conge';
     };
     people.forEach((p) => {
