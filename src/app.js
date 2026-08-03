@@ -19,7 +19,7 @@ import { getAuthSession, saveAuthSession, supabaseHeaders } from './auth.js';
 import { loadASVRoster, loadVetRosterCache, applyVetRosterRows } from './state.js';
 import { showToast, showSavedToast, openConfirmModal, loadPersonColors, applyPersonColorVars } from './ui.js';
 import { pushChangesToSupabase, syncFromSupabase, fetchVetRoster } from './api.js';
-import { buildPatch, applyPatch, resolveSyncBaseline } from './lib/planning-auth.js';
+import { buildPatch, applyPatch, resolveSyncBaseline, isPermanentRejection } from './lib/planning-auth.js';
 import { store } from './store.js';
 import { setupLogin, renderLoginScreen, renderSetPasswordScreen } from './login.js';
 import { initServiceWorker, showIOSInstallTip, updatePwaOfflineBanner } from './pwa.js';
@@ -422,7 +422,21 @@ function scheduleSupabasePush() {
       if (_editSeq === seqAtPush) _hasDirtyLocalData = false;
       else scheduleSupabasePush();
     } catch (e) {
-      console.warn('Synchronisation Supabase impossible, données conservées en local.', e);
+      if (isPermanentRejection(e?.status)) {
+        // Le serveur a refusé le patch ENTIER et n'a rien appliqué. Le garder en
+        // attente le ferait réessayer à chaque modification et réappliquer par
+        // dessus l'état distant à chaque pull : une seule clé refusée figeait
+        // toute la synchronisation de cet onglet, qui affichait alors un état
+        // que personne d'autre ne voyait. On abandonne le patch, on réaligne sur
+        // le serveur, et on le dit — l'échec était jusqu'ici silencieux alors
+        // que saveData avait déjà affiché « Sauvegardé ».
+        console.warn('Modification refusée par le serveur, réalignement.', e);
+        showToast(`Modification refusée : ${e.message}`, '⛔');
+        _hasDirtyLocalData = false;
+        await pullRemotePlanning({ discardLocal: true });
+      } else {
+        console.warn('Synchronisation Supabase impossible, données conservées en local.', e);
+      }
     }
   }, 900);
 }
@@ -937,10 +951,13 @@ function refreshData() {
 // encore envoyées, au lieu de les écraser. C'est ce qui permet de rafraîchir
 // même quand une sauvegarde est en attente : les modifications de l'autre poste
 // arrivent sans faire disparaître les nôtres.
-function pullRemotePlanning() {
+// discardLocal : après un refus définitif du serveur, les modifications locales
+// en attente n'ont aucune chance d'être acceptées — les conserver figerait cet
+// onglet sur un état qu'il ne pourra jamais enregistrer.
+function pullRemotePlanning({ discardLocal = false } = {}) {
   return syncFromSupabase().then((remoteSlots) => {
     if (remoteSlots === null) return false;
-    const localChanges = buildPatch(_lastSyncedSlots, store.DATA.slots);
+    const localChanges = discardLocal ? {} : buildPatch(_lastSyncedSlots, store.DATA.slots);
     setSyncBaseline({ ...remoteSlots });
     const merged = Object.keys(localChanges).length ? applyPatch(remoteSlots, localChanges) : remoteSlots;
     const changedSinceRender = JSON.stringify(merged) !== JSON.stringify(store.DATA.slots);

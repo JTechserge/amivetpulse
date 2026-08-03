@@ -23,7 +23,12 @@ export async function pushChangesToSupabase(changes) {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
+    // Le statut est porté par l'erreur : l'appelant doit distinguer un refus
+    // définitif (4xx — rien n'a été appliqué, inutile de réessayer) d'une panne
+    // transitoire (réseau, 5xx) qu'il faut au contraire retenter.
+    const err = new Error(body.error || `HTTP ${res.status}`);
+    err.status = res.status;
+    throw err;
   }
 }
 

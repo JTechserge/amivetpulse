@@ -128,6 +128,27 @@ export function patchToChangedKeys(patch, currentSlots) {
  * @param {Record<string,unknown>} cachedSlots cache local courant
  * @returns {Record<string,unknown>} état de référence
  */
+// 401 : jeton expiré, renouvelé automatiquement — abandonner les modifications
+// locales ici détruirait le travail en cours. 408/429 : délai et charge.
+const RETRYABLE_STATUSES = new Set([401, 408, 429]);
+
+/**
+ * Un rejet 4xx est définitif : le serveur a refusé le patch ENTIER et n'a rien
+ * appliqué. Le conserver en attente et le réessayer indéfiniment fige la
+ * synchronisation du poste — une seule clé refusée bloque alors toutes les
+ * autres modifications de cet onglet, qui continue d'afficher un état que
+ * personne d'autre ne verra jamais. Une erreur réseau ou 5xx, elle, est
+ * transitoire et doit être réessayée.
+ *
+ * @param {unknown} status statut HTTP, ou absent en cas d'erreur réseau
+ * @returns {boolean} true si la modification doit être abandonnée
+ */
+export function isPermanentRejection(status) {
+  if (!Number.isInteger(status)) return false; // erreur réseau : transitoire
+  if (status < 400 || status >= 500) return false; // 5xx : panne serveur
+  return !RETRYABLE_STATUSES.has(status);
+}
+
 export function resolveSyncBaseline(storedBaseline, cachedSlots) {
   if (storedBaseline && typeof storedBaseline === 'object' && !Array.isArray(storedBaseline)) {
     return { ...storedBaseline };

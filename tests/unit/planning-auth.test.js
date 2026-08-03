@@ -9,6 +9,7 @@ import {
   applyPatch,
   patchToChangedKeys,
   resolveSyncBaseline,
+  isPermanentRejection,
 } from '../../src/lib/planning-auth.js';
 
 // ─── extractPersonIdFromKey ───────────────────────────────────────────────────
@@ -503,6 +504,42 @@ describe('resolveSyncBaseline', () => {
 
   it('renvoie un état vide quand il n’y a ni référence ni cache', () => {
     expect(resolveSyncBaseline(null, null)).toEqual({});
+  });
+});
+
+// ─── isPermanentRejection ─────────────────────────────────────────────────────
+// Un patch refusé en 4xx n'a RIEN appliqué côté serveur. Le garder en attente et
+// le réessayer indéfiniment fige la synchronisation du poste : une seule clé
+// refusée bloque alors toutes les autres modifications de cet onglet.
+
+describe('isPermanentRejection', () => {
+  it('traite un refus de droits comme définitif', () => {
+    expect(isPermanentRejection(403)).toBe(true);
+    expect(isPermanentRejection(400)).toBe(true);
+    expect(isPermanentRejection(404)).toBe(true);
+    expect(isPermanentRejection(422)).toBe(true);
+  });
+
+  it('garde 401 réessayable — le jeton expiré est renouvelé, pas un refus', () => {
+    // Abandonner les modifications locales sur un 401 détruirait le travail en
+    // cours à chaque expiration de session.
+    expect(isPermanentRejection(401)).toBe(false);
+  });
+
+  it('garde réessayables les statuts de charge et de délai', () => {
+    expect(isPermanentRejection(408)).toBe(false);
+    expect(isPermanentRejection(429)).toBe(false);
+  });
+
+  it('traite une panne serveur comme transitoire', () => {
+    expect(isPermanentRejection(500)).toBe(false);
+    expect(isPermanentRejection(503)).toBe(false);
+  });
+
+  it('traite une erreur réseau (pas de statut) comme transitoire', () => {
+    expect(isPermanentRejection(undefined)).toBe(false);
+    expect(isPermanentRejection(null)).toBe(false);
+    expect(isPermanentRejection('403')).toBe(false);
   });
 });
 
