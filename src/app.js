@@ -14,9 +14,9 @@ import {
 } from './config.js';
 import { escapeHTML, fmtISO, daysInMonth, isoWeekday, isSunday, holidayName, getWeekMondayDate } from './utils.js';
 import { getAuthSession, saveAuthSession, supabaseHeaders } from './auth.js';
-import { loadASVRoster } from './state.js';
-import { showToast, showSavedToast, openConfirmModal, loadPersonColors } from './ui.js';
-import { pushDataToSupabase, syncFromSupabase } from './api.js';
+import { loadASVRoster, loadVetRosterCache, applyVetRosterRows } from './state.js';
+import { showToast, showSavedToast, openConfirmModal, loadPersonColors, applyPersonColorVars } from './ui.js';
+import { pushDataToSupabase, syncFromSupabase, fetchVetRoster } from './api.js';
 import { store } from './store.js';
 import { setupLogin, renderLoginScreen, renderSetPasswordScreen } from './login.js';
 import { initServiceWorker, showIOSInstallTip, updatePwaOfflineBanner } from './pwa.js';
@@ -773,6 +773,7 @@ function initApp() {
   store.weekNavState.mondayISO = fmtISO(getWeekMondayDate(today));
   applyRoleToDOM();
   loadASVRoster();
+  loadVetRosterCache();
   loadPersonColors();
   // Rafraîchir le token toutes les 45 min pour éviter les 401 après expiration
   setInterval(() => authRefreshSession(), 45 * 60 * 1000);
@@ -804,10 +805,11 @@ function initApp() {
 }
 
 async function init() {
-  // Charger l'effectif ASV dès le démarrage (indépendant de l'auth) : garantit que
-  // localStorage est peuplé même sur l'écran de connexion, et que le roster est prêt
-  // quel que soit le chemin d'entrée (login, recovery, invite).
+  // Charger les effectifs dès le démarrage (indépendant de l'auth) : garantit que
+  // localStorage est peuplé même sur l'écran de connexion, et que les rosters sont
+  // prêts quel que soit le chemin d'entrée (login, recovery, invite).
   loadASVRoster();
+  loadVetRosterCache();
   // Callback de réinitialisation de mot de passe : Supabase envoie le token dans le hash URL
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   const query = new URLSearchParams(window.location.search);
@@ -869,10 +871,23 @@ function refreshData() {
       }
     });
   }
+  loadVetRoster();
   loadSignatures();
   loadForecastSignatures();
   loadInterviews();
   loadAnnouncements();
+}
+
+// Le roster vétérinaire est partagé (table vet_roster) : on le rafraîchit à
+// chaque cycle de données pour qu'une embauche saisie sur un poste apparaisse
+// sur les autres. En cas d'échec réseau, le cache local reste en place.
+function loadVetRoster() {
+  fetchVetRoster().then((rows) => {
+    if (rows && applyVetRosterRows(rows)) {
+      applyPersonColorVars();
+      renderCurrentView();
+    }
+  });
 }
 function refreshAllPwaData() {
   refreshData();
