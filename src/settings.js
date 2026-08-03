@@ -302,7 +302,12 @@ function openManageUsersModal() {
     .then((data) => {
       if (!data.ok) throw new Error(data.error || 'Erreur');
       const users = data.users;
-      const roleLabels = { admin: 'Admin', vet: 'Vétérinaire', asv: 'ASV' };
+      const roleLabels = {
+        admin: 'Admin',
+        vet: 'Vétérinaire associé',
+        vet_employe: 'Vétérinaire salarié',
+        asv: 'ASV',
+      };
 
       const isAdmin = store.currentUser?.role === 'admin';
       const linkedPersonIds = new Set(users.map((u) => u.person_id).filter(Boolean));
@@ -317,7 +322,13 @@ function openManageUsersModal() {
           )
       );
       const localOnlyPeople = [
-        ...localOnlyVets.map((p) => ({ ...p, localRole: 'vet', roleLabel: 'Vétérinaire' })),
+        // Personne du roster sans compte : son statut vient du roster (partner),
+        // pas d'un rôle utilisateur — d'où le libellé calculé ici.
+        ...localOnlyVets.map((p) => ({
+          ...p,
+          localRole: p.partner === false ? 'vet_employe' : 'vet',
+          roleLabel: p.partner === false ? 'Vétérinaire salarié' : 'Vétérinaire associé',
+        })),
         ...localOnlyASV.map((p) => ({ ...p, localRole: 'asv', roleLabel: 'ASV' })),
       ];
 

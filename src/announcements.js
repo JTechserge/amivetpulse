@@ -30,7 +30,7 @@ export function getUnreadCount(){
   const role = store.currentUser?.role;
   const visible = store.announcementsCache.list.filter(a => {
     if(a.target_roles === 'all') return true;
-    if(a.target_roles === 'vet' && role === 'vet') return true;
+    if(a.target_roles === 'vet' && (role === 'vet' || role === 'vet_employe')) return true;
     if(a.target_roles === 'asv' && role === 'asv') return true;
     return role === 'admin';
   });
@@ -78,7 +78,7 @@ export function renderAnnounces(){
   const allList = store.announcementsCache.list;
   const active = allList.filter(a => {
     if(a.target_roles === 'vet' && role === 'asv') return false;
-    if(a.target_roles === 'asv' && (role === 'vet' || role === 'admin')) return false;
+    if(a.target_roles === 'asv' && (role === 'vet' || role === 'vet_employe' || role === 'admin')) return false;
     return true;
   });
   const filterCat = store.announcementsCache.filter;
