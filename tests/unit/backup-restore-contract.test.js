@@ -58,9 +58,7 @@ function migrationTables(dir) {
   const names = [];
   for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql'))) {
     const sql = stripComments(readFileSync(join(dir, file), 'utf8'), '--');
-    for (const [, name] of sql.matchAll(
-      /create\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?([a-z_]+)/gi
-    )) {
+    for (const [, name] of sql.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?([a-z_]+)/gi)) {
       names.push(name.toLowerCase());
     }
   }
@@ -70,9 +68,7 @@ function migrationTables(dir) {
 
 /** `[{ name: 'x', requiredMinRows: 1 }, …]` → `['x', …]` */
 const backupTables = () =>
-  [...tablesBlock(BACKUP_SRC, 'backup-supabase.mjs').matchAll(/\{\s*name:\s*'([a-z_]+)'/g)].map(
-    ([, t]) => t
-  );
+  [...tablesBlock(BACKUP_SRC, 'backup-supabase.mjs').matchAll(/\{\s*name:\s*'([a-z_]+)'/g)].map(([, t]) => t);
 
 /** `['x', …]` */
 const restoreTables = () =>
@@ -91,7 +87,7 @@ function purgedTables() {
 // décision, pas un oubli — et se justifie par ce qu'on perd à ne pas l'avoir.
 const EXEMPTIONS = {
   rate_limit_log:
-    "journal éphémère de limitation de débit : il ne décrit aucun état métier et se reconstitue seul. Le restaurer réinstallerait des compteurs périmés (décision du 16/08/2026).",
+    'journal éphémère de limitation de débit : il ne décrit aucun état métier et se reconstitue seul. Le restaurer réinstallerait des compteurs périmés (décision du 16/08/2026).',
 };
 
 const MIGRATION_TABLES = migrationTables(MIGRATIONS_DIR);
@@ -137,9 +133,7 @@ describe('sauvegarde / restauration — couverture du schéma', () => {
   });
 
   it('ne nomme dans aucun script une table qui n’existe pas', () => {
-    const fantomes = [...new Set([...BACKUP, ...RESTORE])].filter(
-      (t) => !MIGRATION_TABLES.includes(t)
-    );
+    const fantomes = [...new Set([...BACKUP, ...RESTORE])].filter((t) => !MIGRATION_TABLES.includes(t));
     expect(fantomes).toEqual([]);
   });
 

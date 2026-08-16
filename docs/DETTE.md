@@ -143,9 +143,10 @@ compte orphelin ne se crée. Trois points complètent l'inversion :
   dont l'assertion d'origine — « le compte auth après l'effectif » — a été
   remplacée par son inverse strict, motivé en commentaire, et non assouplie.
 
-**Reste à faire côté exploitation.** La Edge Function doit être redéployée pour
-que la correction prenne effet : tant qu'elle ne l'est pas, la production
-exécute toujours l'ancien ordre.
+**Déployé le 16/08/2026.** `supabase functions deploy manage-users` sur le
+projet `ubowqtowyqmpraoxbaoo` : la production exécute le nouvel ordre. Vérifié
+au retour — la fonction répond `HTTP 200` et le CORS reste restreint à
+`https://jtechserge.github.io`.
 
 ## Limites acceptées (décision du 16/08/2026)
 
