@@ -47,6 +47,7 @@ Référence sur run vert : **344 tests unitaires / 12 fichiers + 30 Playwright**
 | Sécurité, RLS, secrets | `docs/SECURITE.md` |
 | Sauvegardes | `docs/SAUVEGARDES.md` |
 | Rôle vétérinaire non associé | `docs/PROMPT-ROLE-VET-NON-ASSOCIE.md` |
+| Dette ouverte, ce qui reste à corriger | `docs/DETTE.md` (par index, jamais en entier) |
 
 ## Attention particulière
 

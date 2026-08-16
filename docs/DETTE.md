@@ -1,0 +1,126 @@
+# Dette identifiée
+
+Journal de dette technique et fonctionnelle d'Amivet Pulse. Il se remplit
+chantier après chantier : on n'y déverse pas un audit du dépôt.
+
+Une dette y est écrite en quatre points — ce qui est faux, où, la conséquence
+concrète, le coût de la laisser. S'il en manque un, c'est un ressenti, pas une
+dette.
+
+Ce qui touche la **paie**, une **preuve juridique** ou la **fiscalité** n'est pas
+une dette : c'est un défaut bloquant, signalé comme tel.
+
+## Dette restante
+
+### Constatée par le chantier « suppression définitive d'un collaborateur » (2026-08-16)
+
+#### 🔴 Rien ne relie les listes de sauvegarde et de restauration aux migrations
+
+**Trou ponctuel bouché le 16/08/2026 ; la cause demeure.**
+
+**Ce qui est faux.** Trois listes de tables coexistent — celle de la sauvegarde,
+celle de la restauration, celle des migrations — sans qu'aucun mécanisme ne les
+tienne d'accord. Elles avaient déjà divergé sur trois points, chacun silencieux :
+
+- `forecast_signatures` (migration `20260730000001`) et `vet_roster` (migration
+  `20260803000001`) — les deux tables les plus récentes du schéma — n'étaient
+  **dans aucun des deux scripts** ;
+- `feedback` était sauvegardée depuis le 16/08 mais **absente de la
+  restauration** : une sauvegarde qu'on ne sait pas réinjecter.
+
+Le job passait au vert tous les jours à 2 h 59 en sauvegardant un schéma
+incomplet. Rien ne le signalait : une migration qui crée une table n'oblige à
+rien.
+
+**Où.** [scripts/backup-supabase.mjs:26-43](../scripts/backup-supabase.mjs#L26-L43)
+et [scripts/restore-supabase.mjs:34-52](../scripts/restore-supabase.mjs#L34-L52),
+confrontés à `supabase/migrations/`.
+
+**Conséquence.** `forecast_signatures` fait partie des 9 `PURGE_TARGETS` de la
+suppression définitive ([supabase/functions/manage-users/index.ts:24](../supabase/functions/manage-users/index.ts#L24)).
+Supprimer un collaborateur détruit donc ses signatures de prévisionnel alors
+qu'**aucune sauvegarde ne les contient**, et que le §6 de
+[NOTE-SUPPRESSION-COLLABORATEUR.md](NOTE-SUPPRESSION-COLLABORATEUR.md)
+exclut explicitement corbeille, undo et journal d'audit. La perte est
+définitive et silencieuse. Le §7 arbitre la perte de preuve en s'appuyant sur
+un second palier de confirmation ; cet arbitrage tient pour `monthly_signatures`,
+qui est sauvegardée, mais pas pour `forecast_signatures`, qui ne l'est pas.
+Pour `vet_roster`, la conséquence est moindre : un effectif perdu se ressaisit.
+
+**Ce qui a été fait le 16/08/2026.** Les trois manques sont comblés :
+`vet_roster` et `forecast_signatures` ajoutées aux deux scripts, `feedback`
+ajoutée à la restauration. C'est le trou, pas la cause.
+
+**Ce qui reste — le coût de le laisser.** Aucun verrou ne relie les listes aux
+migrations, donc la prochaine table créée rejouera exactement le même scénario,
+en silence, et ne se découvrira qu'au moment d'une restauration ratée. Le verrou
+manquant est un test de contrat sur le modèle de
+`tests/unit/collaborator-purge-contract.test.js` : lire les `CREATE TABLE` des
+migrations, exiger que chaque table figure dans les deux scripts ou soit
+exemptée par écrit. **Non fait — c'est un garde-fou que le chantier en cours n'a
+pas demandé, il se décide à part.**
+
+#### Un échec de suppression du compte auth laisse un compte orphelin inatteignable
+
+**Ce qui est faux.** La purge retire la ligne d'effectif **avant** de supprimer
+le compte auth. Le commentaire du code justifie cet ordre pour que la purge
+reste rejouable — mais ce raisonnement s'arrête à `vet_roster` et ne couvre pas
+les deux gestes qui le suivent. Si `deleteUser` échoue, l'effectif est déjà
+parti : plus aucun écran ne montre la personne, donc plus aucun bouton ne
+permet de relancer la purge.
+
+**Où.** [supabase/functions/manage-users/index.ts:348-357](../supabase/functions/manage-users/index.ts#L348-L357).
+
+**Conséquence.** Mesurée, mais réelle. Le compte peut encore s'authentifier
+auprès de Supabase et obtenir un JWT valide. L'application, elle, le rejette :
+`user_profiles` a disparu par cascade et le chargement du profil retourne `null`
+([src/app.js:281](../src/app.js#L281)), donc aucune session applicative ne s'ouvre.
+Reste un compte capable d'obtenir un jeton, qu'aucun écran ne signale et que
+seule une intervention en base peut retirer.
+
+**Coût de la laisser.** Faible tant que le cas ne se produit pas — il suppose
+un échec réseau ou une panne Supabase pile entre deux appels. Le jour où il
+survient, le diagnostic part de zéro : rien dans l'interface ne dit qu'un
+compte orphelin existe.
+
+#### La purge n'a pas de preuve d'effet
+
+**Ce qui est faux.** `tests/unit/collaborator-purge-contract.test.js` prouve que
+le code *demande* les 9 suppressions. Il ne prouve pas que Supabase les
+*exécute* : une policy RLS restrictive ou une contrainte peut en refuser une.
+
+**Où.** L'action `purge` de `supabase/functions/manage-users/index.ts`, face aux
+policies des 9 tables.
+
+**Conséquence.** Une purge peut échouer en production alors que le TNR est vert.
+Depuis le lot B l'échec est au moins bruyant — les erreurs sont lues et la purge
+s'interrompt avant l'effectif — mais l'écart entre « le code le demande » et
+« la base le fait » n'est levé par aucun test.
+
+**Coût de la laisser.** Il n'existe pas de compte de test Supabase (`CLAUDE.md`)
+et en créer un n'est pas une décision technique. En attendant, la preuve reste
+manuelle : `scripts/verif-purge-collaborateur.sql`, à rejouer après toute
+migration touchant une table purgée.
+
+## Limites acceptées (décision du 16/08/2026)
+
+Ce qui suit est assumé, pas oublié. Ne pas le reproposer comme dette sans
+élément nouveau.
+
+- **Aucune corbeille, aucun undo, aucun journal d'audit** des suppressions (§6
+  de la note). Le garde-fou est le double palier de confirmation quand un mois
+  est signé, plus la sauvegarde quotidienne — sous réserve de la dette 🔴
+  ci-dessus.
+- **Les chemins authentifiés ne sont couverts par aucun test automatisé.** Sans
+  compte de test Supabase, ni Playwright ni vitest ne peuvent franchir le login.
+  C'est la contrainte qui rend nécessaires les scripts de vérification manuelle.
+- **Le littéral `ancien-collaborateur` est dupliqué** entre le front
+  (`src/lib/collaborator-removal.js`) et la Edge Function Deno. Aucun import
+  n'est possible entre les deux ; le test de contrat compare les fichiers.
+- **La fenêtre de confirmation ne chiffre pas les données distantes** (visites
+  médicales, ajustements de CP, prévisionnel signé…) : les compter exigerait
+  autant de requêtes que de tables. Elle les nomme sans les compter.
+- **`feedback` n'est pas dans `PURGE_TARGETS`** : `reported_by` est en
+  `ON DELETE CASCADE` sur `auth.users`, la table part avec le compte. Le test de
+  contrat ne la voit pas — il ne connaît que `person_id`, `user_name` et
+  `author_id` — d'où le contrôle explicite dans le script de vérification.

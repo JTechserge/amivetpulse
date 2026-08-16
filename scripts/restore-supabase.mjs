@@ -34,6 +34,7 @@ const BACKUP_DIR = process.argv.find(a => !a.startsWith('-') && a !== process.ar
 const TABLES = [
   'planning_data',
   'user_profiles',
+  'vet_roster',
   'email_settings',
   'annual_interviews',
   'cp_adjustments',
@@ -41,10 +42,15 @@ const TABLES = [
   'announcements',
   'announcement_reads',
   'monthly_signatures',
+  'forecast_signatures',
   'signature_tokens',
   'calendar_sync_tokens',
   'push_subscriptions',
   'app_security',
+  // Sauvegardée depuis le 16/08 mais jamais restaurée : les deux listes avaient
+  // divergé. `reported_by` référence auth.users — une ligne dont le compte n'a
+  // pas été recréé sera refusée par la contrainte, ce qui est le comportement voulu.
+  'feedback',
 ];
 
 async function upsertTable(name, rows) {

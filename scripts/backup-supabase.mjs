@@ -26,7 +26,9 @@ const LIMIT = 10000; // largement au-dessus du volume attendu pour cette cliniqu
 const TABLES = [
   { name: 'planning_data',       requiredMinRows: 1 }, // singleton, doit toujours exister
   { name: 'user_profiles' },
+  { name: 'vet_roster' }, // effectif vétérinaire ; détruit par la purge de collaborateur
   { name: 'monthly_signatures' },
+  { name: 'forecast_signatures' }, // signatures du prévisionnel ; détruites par la purge
   { name: 'signature_tokens' },
   { name: 'email_settings' },
   { name: 'annual_interviews' },
