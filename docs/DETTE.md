@@ -72,6 +72,32 @@ sont couverts par aucun test automatisé » (§ Limites acceptées) : celle-ci p
 sur le bout en bout à travers le login, celle-là sur l'accord interne au front,
 qui est atteignable sans compte de test.
 
+#### Une fraction nulle déjà stockée reste invisible
+
+**Ce qui manque.** Le lot C3a pose une garde **en écriture** : les modales ne
+peuvent plus faire enregistrer une fraction ≤ 0. Elle ne regarde pas les données
+déjà en place. Un roster amorcé anciennement sur un poste qui porterait un zéro
+ne déclencherait toujours aucune alerte.
+
+**Où.** `src/dashboard-stats.js:666-673` — la projection de fin d'année et
+l'alerte « heures dépassant la modulation » sont toutes deux gardées par
+`target > 0`, donc s'éteignent en silence quand la cible est nulle. Et
+`src/state.js:61` : le repli `?? 1.0` en lecture ne rattrape qu'un champ
+**absent**, jamais un zéro stocké.
+
+**Conséquence.** Zéro CP acquis pour la personne concernée, sans aucun signe à
+l'écran. **Aucun cas connu aujourd'hui** : le relevé exhaustif du 16/08 donne
+`1`, `1`, `0,75` et la valeur de Carla réparée — il n'existe qu'un poste
+d'administration, et il est propre. C'est un risque résiduel, pas un défaut
+actif.
+
+**Coût de la laisser.** Faible et borné tant qu'un seul poste porte le roster. Il
+croîtrait avec le nombre de postes, mais l'échéance qui le referme est déjà au
+programme : la migration vers la table partagée donne une source unique, où un
+contrôle serveur remplace avantageusement un marqueur d'affichage. Les marqueurs
+ont été explicitement écartés du lot C3a pour cette raison — voir
+`docs/NOTE-ROSTER-ASV.md`, § « Ce qui ne sera pas fait ».
+
 #### L'interface ne sait pas saisir la fraction de Carla, ni corriger une fraction fausse
 
 **Ce qui manque.** Aucun chemin de l'écran « Temps de travail contractuel » ne

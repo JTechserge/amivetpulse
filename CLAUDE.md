@@ -20,7 +20,7 @@ npm run build           # vite build
 
 Les TNR des quatre projets tournent automatiquement à 7h45 (agent launchd `com.jeremie.tnr-daily`). Pour forcer un run : `echo "$(date)" > ~/Projets/.tnr-trigger`.
 
-Référence sur run vert : **344 tests unitaires / 12 fichiers + 30 Playwright**. Une chute sous cette valeur sans commit qui l'explique est une régression en soi.
+Référence sur run vert : **486 tests unitaires / 19 fichiers + 30 Playwright** (16/08/2026). Une chute sous cette valeur sans commit qui l'explique est une régression en soi.
 
 ## Invariants non négociables
 
@@ -48,6 +48,7 @@ Référence sur run vert : **344 tests unitaires / 12 fichiers + 30 Playwright**
 | Sauvegardes | `docs/SAUVEGARDES.md` |
 | Rôle vétérinaire non associé | `docs/PROMPT-ROLE-VET-NON-ASSOCIE.md` |
 | Dette ouverte, ce qui reste à corriger | `docs/DETTE.md` (par index, jamais en entier) |
+| Temps de travail ASV, roster, fraction de temps | `docs/NOTE-ROSTER-ASV.md` |
 
 ## Attention particulière
 
