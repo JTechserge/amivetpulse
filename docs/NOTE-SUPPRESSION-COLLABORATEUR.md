@@ -262,7 +262,11 @@ Deux points techniques se tranchent au moment du lot de migration, pas avant :
 
 Ce qu'il **ne** prouve pas : que Supabase exécute réellement ces suppressions. Sans compte de test (`CLAUDE.md`), la preuve d'effet reste la vérification manuelle en production.
 
-**Reste à faire, à la charge de Jérémie :** redéployer `manage-users` (`supabase functions deploy manage-users`) — le déploiement GitHub Pages ne couvre pas les Edge Functions — puis vérifier sur la ligne « test vétérinaire ».
+**Déployé le 16/08/2026.** `manage-users` redéployée à la main (`supabase functions deploy manage-users`, version **31**) — le déploiement GitHub Pages ne couvre pas les Edge Functions. La fonction part **avant** le front : la nouvelle fenêtre de confirmation annonce des suppressions que le serveur doit déjà savoir faire. Front en `amivet-v8`, CORS vérifié (`https://jtechserge.github.io`).
+
+Les 9 tables de `PURGE_TARGETS` ont été confrontées aux migrations avant le déploiement : toutes existent. Le point méritait d'être vérifié, parce que rendre les erreurs fatales transforme une table absente en purge entièrement bloquée, là où l'ancien code l'ignorait en silence.
+
+**Reste à faire, à la charge de Jérémie :** vérifier sur la ligne « test vétérinaire » que la purge vide bien les 9 tables et que l'annonce survit, signée « Ancien collaborateur ». C'est la seule preuve d'effet réel : sans compte de test Supabase (`CLAUDE.md`), aucun test automatisé ne peut l'établir.
 
 ## 13. Traces
 
