@@ -26,13 +26,7 @@ describe('statuts — source unique partagée avec le digest quotidien', () => {
   it('couvre exactement les statuts de la migration, sans trou', () => {
     // Un statut ajouté au SQL sans décision « ouvert ou soldé » tomberait
     // silencieusement du côté soldé et disparaîtrait du digest.
-    expect(STATUSES.slice().sort()).toEqual([
-      'corrige',
-      'decision_humaine',
-      'en_cours',
-      'nouveau',
-      'rejete',
-    ]);
+    expect(STATUSES.slice().sort()).toEqual(['corrige', 'decision_humaine', 'en_cours', 'nouveau', 'rejete']);
     const soldes = STATUSES.filter((s) => !OPEN_STATUSES.includes(s));
     expect(soldes.sort()).toEqual(['corrige', 'rejete']);
   });

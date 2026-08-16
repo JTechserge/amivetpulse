@@ -27,15 +27,11 @@ describe('isSensitive', () => {
   });
 
   it("regarde aussi l'écran, pas seulement le message", () => {
-    expect(
-      isSensitive(row({ message: 'colonne vide', screen: 'Tableau de bord › Feuilles signées' }))
-    ).toBe(true);
+    expect(isSensitive(row({ message: 'colonne vide', screen: 'Tableau de bord › Feuilles signées' }))).toBe(true);
   });
 
   it("laisse passer un signalement d'interface ordinaire", () => {
-    expect(isSensitive(row({ message: 'le menu se ferme trop vite', screen: 'Annonces' }))).toBe(
-      false
-    );
+    expect(isSensitive(row({ message: 'le menu se ferme trop vite', screen: 'Annonces' }))).toBe(false);
   });
 
   it('ne casse pas sur une ligne incomplète', () => {

@@ -185,6 +185,63 @@ describe('feedback — modification', () => {
   });
 });
 
+describe('feedback — rétention et purge', () => {
+  const PURGE_PATH = join(HERE, '../../supabase/migrations/20260816000002_feedback_invariants_purge.sql');
+  const PURGE_SQL = readFileSync(PURGE_PATH, 'utf8')
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('--'))
+    .join('\n');
+
+  it('retient 15 jours par défaut', () => {
+    // La durée est une décision de gouvernance (16/08/2026) : la changer sans
+    // le dire modifie une règle de conservation de données personnelles.
+    expect(flat(PURGE_SQL)).toContain('purge_old_feedback(retention_days INT DEFAULT 15)');
+  });
+
+  it('refuse une rétention nulle ou négative', () => {
+    // Sans cette garde, purge_old_feedback(0) viderait la table entière.
+    const body = flat(PURGE_SQL);
+    expect(body).toContain('retention_days IS NULL OR retention_days < 1');
+    expect(body).toContain('RAISE EXCEPTION');
+  });
+
+  it('supprime sur created_at, pas sur une colonne modifiable par l’admin', () => {
+    // resolved_at et status sont pilotés depuis la vue admin ; fonder la
+    // rétention dessus la rendrait contournable.
+    expect(flat(PURGE_SQL)).toContain(
+      'DELETE FROM feedback WHERE created_at < NOW() - make_interval(days => retention_days)'
+    );
+  });
+
+  it('réserve la purge au service_role', () => {
+    const body = flat(PURGE_SQL);
+    expect(body).toContain('REVOKE ALL ON FUNCTION purge_old_feedback(INT) FROM authenticated');
+    expect(body).toContain('REVOKE ALL ON FUNCTION purge_old_feedback(INT) FROM anon');
+    expect(body).toContain('GRANT EXECUTE ON FUNCTION purge_old_feedback(INT) TO service_role');
+  });
+
+  it('conserve les invariants de sécurité préexistants en ajoutant les siens', () => {
+    // La migration remplace verify_security_invariants() : en perdre un au
+    // passage désarmerait silencieusement scripts/verify-prod.mjs.
+    for (const invariant of [
+      'block direct writes (planning_data)',
+      'fonction check_rate_limit',
+      'fonction get_calendar_feed_access',
+      'calendar_sync_tokens.token = NULL partout',
+    ]) {
+      expect(PURGE_SQL).toContain(invariant);
+    }
+    for (const invariant of [
+      'feedback — RLS activée',
+      'feedback — aucune politique inconditionnelle',
+      'feedback — insertion liée à auth.uid() et au statut nouveau',
+      'feedback — purge réservée au service_role',
+    ]) {
+      expect(PURGE_SQL).toContain(invariant);
+    }
+  });
+});
+
 describe('feedback — récursion RLS', () => {
   it('passe par get_my_role() et ne lit jamais user_profiles directement', () => {
     // Référencer user_profiles dans une politique a déjà provoqué une récursion

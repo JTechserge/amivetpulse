@@ -26,6 +26,7 @@ Ces fichiers SQL sont à appliquer **manuellement** dans l'ordre croissant via
 | `20240715000001_push_notifications.sql` | Table `push_subscriptions` (abonnements push web) |
 | … | *(les migrations 2026 n'ont jamais été reportées dans ce tableau)* |
 | `20260816000001_feedback.sql` | Table `feedback` (signalements utilisateurs) + RLS par auteur |
+| `20260816000002_feedback_invariants_purge.sql` | Invariants `feedback` dans `verify_security_invariants()` + `purge_old_feedback()` (rétention 15 j) |
 
 ## Avertissement RLS
 
