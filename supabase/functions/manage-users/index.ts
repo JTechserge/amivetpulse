@@ -9,6 +9,38 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ── Suppression définitive : ce que l'action `purge` détruit ────────────────
+//
+// Cette liste fait autorité pour tout le projet : le front ne la duplique pas
+// (cf. l'en-tête de src/lib/collaborator-removal.js). Elle est verrouillée par
+// tests/unit/collaborator-purge-contract.test.js, qui lit ce fichier : ajouter
+// une table à la base sans l'ajouter ici fait tomber le TNR.
+//
+// L'ordre va du plus périphérique vers l'effectif. La ligne d'effectif
+// (vet_roster) et le compte auth sont traités séparément, APRÈS, et seulement
+// si tout ce qui précède a réussi : tant que l'effectif existe, une purge
+// interrompue laisse une personne visible, donc rejouable. L'inverse
+// laisserait des données orphelines qu'aucune ligne de l'interface n'atteint.
+const PURGE_TARGETS: Array<{ table: string; column: string }> = [
+  { table: 'push_subscriptions', column: 'user_name' }, // clé = person_id, colonne mal nommée
+  { table: 'announcement_reads', column: 'person_id' },
+  { table: 'medical_visits', column: 'person_id' },
+  { table: 'cp_adjustments', column: 'person_id' },
+  { table: 'forecast_signatures', column: 'person_id' },
+  { table: 'monthly_signatures', column: 'person_id' },
+  { table: 'signature_tokens', column: 'person_id' },
+  { table: 'annual_interviews', column: 'person_id' },
+  // Porte aussi les identifiants CalDAV (colonnes caldav_*, migration
+  // 20260721000001) : il n'existe pas de table caldav_credentials.
+  { table: 'calendar_sync_tokens', column: 'person_id' },
+];
+
+// Les annonces ne sont PAS supprimées : une consigne de service reste utile à
+// la clinique après le départ de son auteur. Seul l'auteur est anonymisé.
+// Ce littéral doit rester égal à REMOVED_AUTHOR_ID (src/lib/collaborator-removal.js) ;
+// le test de contrat compare les deux fichiers.
+const REMOVED_AUTHOR_ID = 'ancien-collaborateur';
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -283,14 +315,30 @@ serve(async (req) => {
         });
       }
 
-      // Supprimer toutes les données liées au person_id dans chaque table concernée
+      // Supprimer toutes les données liées au person_id dans chaque table concernée.
       if (person_id) {
-        await Promise.all([
-          adminClient.from('monthly_signatures').delete().eq('person_id', person_id),
-          adminClient.from('signature_tokens').delete().eq('person_id', person_id),
-          adminClient.from('annual_interviews').delete().eq('person_id', person_id),
-          adminClient.from('calendar_sync_tokens').delete().eq('person_id', person_id),
-        ]);
+        // Les erreurs sont LUES, table par table. La version précédente faisait
+        // un Promise.all sans regarder aucun résultat : une suppression refusée
+        // passait inaperçue et la fonction répondait quand même ok:true, en
+        // laissant des données derrière elle.
+        const results = await Promise.all(
+          PURGE_TARGETS.map(async ({ table, column }) => {
+            const { error } = await adminClient.from(table).delete().eq(column, person_id);
+            return error ? `${table} (${error.message})` : null;
+          })
+        );
+
+        // Les annonces survivent à leur auteur ; l'auteur, lui, est anonymisé.
+        const { error: authorError } = await adminClient
+          .from('announcements')
+          .update({ author_id: REMOVED_AUTHOR_ID })
+          .eq('author_id', person_id);
+        if (authorError) results.push(`announcements (${authorError.message})`);
+
+        // Un seul échec périphérique arrête tout AVANT l'effectif et le compte :
+        // la personne reste visible dans l'interface, donc la purge est rejouable.
+        const failed = results.filter((r): r is string => r !== null);
+        if (failed.length) throw new Error(`Purge incomplète — ${failed.join(', ')}`);
 
         // La ligne d'effectif part en DERNIER, et son échec est fatal.
         // Tant qu'elle existe, une purge interrompue laisse une personne visible

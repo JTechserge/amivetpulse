@@ -44,7 +44,7 @@ Le titre de la confirmation dit d'ailleurs « Retirer du planning », pas « sup
 | `announcement_reads` | `person_id` | accusés de lecture orphelins |
 | `announcements.author_id` | `person_id` | annonces signées d'un disparu |
 | `push_subscriptions` | `user_name` | notifications poussées vers un compte supprimé |
-| `caldav_credentials` | `person_id` | identifiants iCloud conservés |
+| ~~`caldav_credentials`~~ | — | **ligne fausse, corrigée au Lot B** : cette table n'existe pas. Les identifiants iCloud sont trois colonnes `caldav_*` de `calendar_sync_tokens` ([migration 20260721000001](supabase/migrations/20260721000001_caldav_credentials.sql#L6-L9)), déjà purgée depuis l'origine. Il restait donc **6** stockages à traiter, pas 7. |
 | roster ASV | `localStorage` | suppression **par appareil** : les autres postes gardent la ligne |
 
 ### Fichiers réellement concernés
@@ -248,7 +248,23 @@ Deux points techniques se tranchent au moment du lot de migration, pas avant :
 
 **Non testable automatiquement, à vérifier à la main :** l'enchaînement des deux fenêtres de confirmation exige une session admin authentifiée. Il n'existe pas de compte de test Supabase (`CLAUDE.md`), donc ni Playwright ni vitest ne peuvent le couvrir.
 
-## 12. Traces
+## 12. Lot B — ce qui a été fait
+
+**Périmètre réel : 6 stockages, pas 7.** `caldav_credentials` n'est pas une table (§2 corrigé).
+
+- **`supabase/functions/manage-users/index.ts`** : la liste des tables purgées devient une constante déclarative `PURGE_TARGETS` (9 couples table / colonne), du plus périphérique vers l'effectif. Six s'y ajoutent : `push_subscriptions` (clé `user_name`), `announcement_reads`, `medical_visits`, `cp_adjustments`, `forecast_signatures`, plus l'anonymisation des annonces.
+- **Les erreurs sont désormais lues.** La version précédente faisait un `Promise.all` sans regarder un seul résultat : une suppression refusée passait inaperçue et la fonction répondait quand même `ok: true`. C'était exactement le « purge partielle » du §7, en pire — silencieuse. Un échec périphérique interrompt maintenant la purge **avant** `vet_roster` et le compte auth : la personne reste visible dans l'interface, donc la purge est rejouable.
+- **Annonces : conservées, auteur anonymisé** (décision de Jérémie, 16/08). Une consigne de service reste utile à la clinique après un départ ; la détruire au motif que son auteur est parti ferait perdre de l'information collective. `announcements.author_id` passe à `ancien-collaborateur`, et `authorName()` ([announcements.js:92](src/announcements.js#L92)) affiche « Ancien collaborateur ». Un identifiant inconnu qui n'est **pas** ce marqueur continue de s'afficher tel quel : c'est un défaut de données, pas un départ, et le masquer le rendrait indiagnosticable.
+- **`src/lib/collaborator-removal.js`** : `REMOVED_AUTHOR_ID` / `REMOVED_AUTHOR_LABEL`. Le littéral est nécessairement dupliqué côté Deno (pas d'import possible entre front et Edge Function) — le test de contrat compare les deux fichiers.
+- **`src/settings.js`** : la fenêtre de confirmation nomme désormais les données distantes détruites (visites médicales, ajustements de CP, prévisionnel signé, accusés de lecture, notifications) et annonce que les annonces survivent. Ces lignes ne sont **pas** chiffrées : ces données ne vivent que côté serveur et les compter exigerait autant de requêtes que de tables. Les taire laisserait croire que la suppression s'arrête au planning.
+
+**`tests/unit/collaborator-purge-contract.test.js`** (nouveau) — le verrou qui manquait. Il lit la Edge Function *et* les migrations, et prouve quatre choses : la liste des tables purgées n'a pas rétréci ; **aucune table de la base portant `person_id`, `user_name` ou `author_id` n'échappe à la purge sans exemption écrite** ; un échec périphérique arrête tout avant l'effectif et le compte ; le marqueur d'anonymisation est identique des deux côtés de la frontière front / Deno. Deux exemptions, motivées dans le test : `user_profiles` (supprimée par `user_id` avec le compte) et `announcements` (anonymisée, pas supprimée).
+
+Ce qu'il **ne** prouve pas : que Supabase exécute réellement ces suppressions. Sans compte de test (`CLAUDE.md`), la preuve d'effet reste la vérification manuelle en production.
+
+**Reste à faire, à la charge de Jérémie :** redéployer `manage-users` (`supabase functions deploy manage-users`) — le déploiement GitHub Pages ne couvre pas les Edge Functions — puis vérifier sur la ligne « test vétérinaire ».
+
+## 13. Traces
 
 - Branche de travail : `feat/suppression-collaborateur`, créée le 16/08/2026. Merge sur `main` plus tard.
 - Note passée au contradicteur indépendant (skill AV, mode DOSSIER) le 16/08/2026 : trois objections retenues, toutes vérifiées dans le dépôt. Corrections intégrées aux §2, §3, §4, §7, §7 bis et §9.

@@ -13,6 +13,22 @@
 
 import { extractPersonIdFromKey } from './planning-auth.js';
 
+/**
+ * Auteur de remplacement des annonces d'une personne supprimée.
+ *
+ * Les annonces ne sont pas détruites avec leur auteur : une consigne de service
+ * reste utile à la clinique après un départ. Seul l'auteur est réécrit, par la
+ * Edge Function (action `purge`).
+ *
+ * Ce littéral est dupliqué dans supabase/functions/manage-users/index.ts — Deno
+ * ne peut pas importer un module du front. tests/unit/collaborator-purge-contract.test.js
+ * compare les deux fichiers pour que la divergence soit impossible en silence.
+ */
+export const REMOVED_AUTHOR_ID = 'ancien-collaborateur';
+
+/** Ce que l'interface affiche à la place du nom d'un auteur supprimé. */
+export const REMOVED_AUTHOR_LABEL = 'Ancien collaborateur';
+
 // Une demi-journée réellement saisie : "YYYY-MM-DD_<pid>_M" ou "…_AM".
 // Les clés dérivées (libellés, prévisionnel, signatures) sont comptées
 // dans planningKeys mais pas ici — sinon un libellé gonflerait le total

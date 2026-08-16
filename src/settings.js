@@ -24,6 +24,7 @@ import {
   countCollaboratorFootprint,
   requiresSecondConfirmation,
   removalSummaryLines,
+  REMOVED_AUTHOR_LABEL,
 } from './lib/collaborator-removal.js';
 import { openNotificationSettingsModal } from './pwa.js';
 import { openFeedbackModal } from './feedback.js';
@@ -382,9 +383,13 @@ function confirmAndRemoveCollaborator({ name, personId, userId }) {
 
   openConfirmModal({
     title: `⚠️ Suppression définitive de ${name} ?`,
+    // Les trois premières lignes sont chiffrées (comptées localement) ; la
+    // quatrième ne l'est pas : ces données vivent uniquement côté serveur et
+    // les compter exigerait autant de requêtes que de tables. Les taire
+    // reviendrait à laisser croire que la suppression s'arrête au planning.
     message: `Seront supprimés, sans retour possible :\n\n${summary}${
       userId ? '\n• Le compte de connexion' : ''
-    }\n• Sa ligne dans le planning et le tableau de bord`,
+    }\n• Sa ligne dans le planning et le tableau de bord\n• Ses visites médicales, ajustements de CP, prévisionnel signé, accusés de lecture et notifications\n\nSes annonces sont conservées, signées « ${REMOVED_AUTHOR_LABEL} ».`,
     confirmLabel: 'Supprimer définitivement',
     danger: true,
     // openConfirmModal exécute `onConfirm(); close();` (ui.js) : ouvrir le second
