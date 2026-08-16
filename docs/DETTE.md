@@ -94,11 +94,22 @@ valeur est positive, plausible, et l'interface ne l'affiche qu'arrondie à 21 %.
 La feuille de présence signée, elle, a bien été réparée par `5475ef0` — le dégât
 restant est borné aux CP acquis et à la cible de modulation.
 
+**Aucun préjudice réalisé à ce jour (tranché le 16/08/2026).** L'application est
+en **dry run côté ASV** — Jérémie en est le seul utilisateur, les ASV n'y ont
+encore rien saisi — et **aucune paie ASV n'a jamais été calculée depuis cet
+outil**. Le défaut n'a donc encore rien payé de faux : il est actif dans les
+données, mais son effet n'a jamais été encaissé. Ce qui le maintient en 🔴 n'est
+plus le préjudice, c'est l'**échéance** : il doit être réparé **avant la première
+paie ASV réelle**. Ce constat classe C3b comme correctif de fond et **non comme
+rattrapage** — il n'y a aucune période passée à recalculer.
+
 **Coût de la laisser.** Il s'accumule à chaque mois de CP acquis, et devient plus
 difficile à dater : une fois C1 déployé, l'archive du 16/08 est la seule pièce
 qui prouve que la valeur précédait le push. La réparation est triviale en
 elle-même — réécrire la fraction dérivée de la constante — mais elle relève du
-lot C3b (re-saisie après déploiement), pas d'une migration.
+lot C3b (re-saisie après déploiement), pas d'une migration. Le dry run offre une
+fenêtre de réparation sans coût ; elle se referme le jour où l'outil sert à
+payer.
 
 **Ne pas confondre** avec le défaut du lot C1 (`0,21`, fraction reconstruite
 depuis son affichage arrondi) : ici la valeur est `0,207`, elle vient d'un bug
