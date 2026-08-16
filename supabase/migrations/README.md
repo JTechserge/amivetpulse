@@ -24,6 +24,8 @@ Ces fichiers SQL sont à appliquer **manuellement** dans l'ordre croissant via
 | `20240615000001_medical_visits.sql` | Table `medical_visits` (visites médicales) |
 | `20240701000001_announcements.sql` | Table `announcements` + catégories |
 | `20240715000001_push_notifications.sql` | Table `push_subscriptions` (abonnements push web) |
+| … | *(les migrations 2026 n'ont jamais été reportées dans ce tableau)* |
+| `20260816000001_feedback.sql` | Table `feedback` (signalements utilisateurs) + RLS par auteur |
 
 ## Avertissement RLS
 
