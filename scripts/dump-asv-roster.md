@@ -93,6 +93,13 @@ Les deux expressions rationnelles reproduisent `extractPersonIdFromKey`
 (`src/lib/planning-auth.js:18-26`) — les formats `AAAA-MM-JJ_<pid>_…`,
 `forecast_<pid>_…` et `forecast_sig_<pid>_…`.
 
+**Les onze sources doivent y être.** Un recensement partiel ne ferme pas
+l'angle mort qu'il prétend fermer : une ASV connue de `cp_adjustments` seule —
+un ajustement de congés payés, donc un enjeu de paie — mais absente des cinq
+tables les plus évidentes passerait entre les mailles. La liste ci-dessous est
+celle des tables portant un `person_id`, relevée sur les migrations. Noter que
+`push_subscriptions` le nomme `user_name` (`20240715000001:5`).
+
 ```sql
 with cles as (
   select jsonb_object_keys(data) as k
@@ -106,25 +113,33 @@ recense as (
          ) as person_id,
          'planning_data' as source
   from cles
-  union all
-  select person_id, 'user_profiles'      from user_profiles      where person_id is not null
-  union all
-  select person_id, 'monthly_signatures' from monthly_signatures where person_id is not null
-  union all
-  select person_id, 'annual_interviews'  from annual_interviews  where person_id is not null
-  union all
-  select person_id, 'medical_visits'     from medical_visits     where person_id is not null
+  union all select person_id, 'user_profiles'        from user_profiles        where person_id is not null
+  union all select person_id, 'monthly_signatures'   from monthly_signatures   where person_id is not null
+  union all select person_id, 'forecast_signatures'  from forecast_signatures  where person_id is not null
+  union all select person_id, 'annual_interviews'    from annual_interviews    where person_id is not null
+  union all select person_id, 'medical_visits'       from medical_visits       where person_id is not null
+  union all select person_id, 'cp_adjustments'       from cp_adjustments       where person_id is not null
+  union all select person_id, 'signature_tokens'     from signature_tokens     where person_id is not null
+  union all select person_id, 'calendar_sync_tokens' from calendar_sync_tokens where person_id is not null
+  union all select person_id, 'announcement_reads'   from announcement_reads   where person_id is not null
+  union all select user_name, 'push_subscriptions'   from push_subscriptions   where user_name is not null
 )
-select person_id,
-       string_agg(distinct source, ', ' order by source) as vu_dans
-from recense
-where person_id is not null
-group by person_id
-order by person_id;
+select r.person_id,
+       case when v.id is null then 'ASV — à retrouver dans les JSON'
+            else 'vétérinaire (vet_roster)' end as type,
+       string_agg(distinct r.source, ', ' order by r.source) as vu_dans
+from recense r
+left join vet_roster v on v.id = r.person_id
+where r.person_id is not null
+group by r.person_id, v.id
+order by type, r.person_id;
 ```
 
-Le résultat mélange vétérinaires et ASV — `person_id` ne porte pas le type.
-Écarter à la lecture les identifiants du roster vétérinaire (`vet_roster`).
+La colonne `type` fait le tri : `person_id` ne porte pas le type, mais tout
+identifiant absent de `vet_roster` est à retrouver dans au moins un JSON relevé.
+Attention au cas limite — un vétérinaire supprimé de `vet_roster` par le 💣 mais
+laissant des traces ailleurs apparaîtra en « ASV ». Le vérifier avant de
+conclure qu'un poste a été manqué.
 
 ## Terminé quand
 
