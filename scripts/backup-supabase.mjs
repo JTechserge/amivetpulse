@@ -34,6 +34,7 @@ const TABLES = [
   { name: 'medical_visits' },
   { name: 'announcements' },
   { name: 'announcement_reads' },
+  { name: 'feedback' }, // pas de requiredMinRows : une table vide est un état normal
   { name: 'calendar_sync_tokens' },
   { name: 'push_subscriptions' },
   { name: 'app_security' },
