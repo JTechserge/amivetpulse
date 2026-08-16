@@ -335,25 +335,39 @@ serve(async (req) => {
           .eq('author_id', person_id);
         if (authorError) results.push(`announcements (${authorError.message})`);
 
-        // Un seul échec périphérique arrête tout AVANT l'effectif et le compte :
+        // Un seul échec périphérique arrête tout AVANT le compte et l'effectif :
         // la personne reste visible dans l'interface, donc la purge est rejouable.
         const failed = results.filter((r): r is string => r !== null);
         if (failed.length) throw new Error(`Purge incomplète — ${failed.join(', ')}`);
-
-        // La ligne d'effectif part en DERNIER, et son échec est fatal.
-        // Tant qu'elle existe, une purge interrompue laisse une personne visible
-        // mais vidée : état incohérent, mais réparable en relançant la purge.
-        // La supprimer d'abord laisserait des données orphelines que plus aucune
-        // ligne de l'interface ne permettrait d'atteindre.
-        const { error: rosterError } = await adminClient.from('vet_roster').delete().eq('id', person_id);
-        if (rosterError) throw new Error(`Effectif vétérinaire : ${rosterError.message}`);
       }
 
-      // Supprimer le profil et le compte auth
+      // Le compte auth part AVANT la ligne d'effectif, et son échec est fatal.
+      // L'ordre inverse — celui d'origine — laissait, quand deleteUser échouait,
+      // un compte encore capable d'obtenir un jeton alors que l'effectif était
+      // déjà parti : plus aucune ligne de l'interface ne permettait de relancer
+      // la purge, et seule une intervention en base pouvait le retirer.
+      //
+      // `user_profiles` est supprimé APRÈS le compte, jamais avant : la ligne
+      // part de toute façon par cascade (`id references auth.users on delete
+      // cascade`), et la retirer d'abord effacerait la personne de la liste des
+      // comptes — donc le bouton qui sert à rejouer la purge — sans avoir
+      // retiré le compte.
       if (user_id) {
-        await adminClient.from('user_profiles').delete().eq('id', user_id);
         const { error: delError } = await adminClient.auth.admin.deleteUser(user_id);
-        if (delError) throw new Error(delError.message);
+        // Un compte déjà absent est le résultat voulu, pas un échec : c'est ce
+        // qui rend la purge rejouable après une interruption.
+        if (delError && delError.status !== 404) throw new Error(delError.message);
+        await adminClient.from('user_profiles').delete().eq('id', user_id);
+      }
+
+      // La ligne d'effectif part en DERNIER, et son échec est fatal.
+      // Tant qu'elle existe, une purge interrompue laisse une personne visible
+      // mais vidée : état incohérent, mais réparable en relançant la purge.
+      // La supprimer d'abord laisserait des données orphelines que plus aucune
+      // ligne de l'interface ne permettrait d'atteindre.
+      if (person_id) {
+        const { error: rosterError } = await adminClient.from('vet_roster').delete().eq('id', person_id);
+        if (rosterError) throw new Error(`Effectif vétérinaire : ${rosterError.message}`);
       }
 
       return new Response(JSON.stringify({ ok: true }), {

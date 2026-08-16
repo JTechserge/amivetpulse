@@ -155,11 +155,41 @@ describe('purge — ordre et échecs', () => {
     expect(PURGE_BLOCK).toMatch(/const \{ error \} = await adminClient\.from\(table\)\.delete\(\)/);
   });
 
-  it('supprime le compte auth après les données, pas avant', () => {
-    const iRoster = PURGE_BLOCK.indexOf("from('vet_roster').delete()");
+  it('supprime le compte auth après les données périphériques', () => {
+    const iThrow = PURGE_BLOCK.indexOf('Purge incomplète');
     const iAuth = PURGE_BLOCK.indexOf('auth.admin.deleteUser(user_id)');
-    expect(iRoster).toBeGreaterThan(-1);
-    expect(iAuth).toBeGreaterThan(iRoster);
+    expect(iAuth).toBeGreaterThan(-1);
+    expect(iAuth).toBeGreaterThan(iThrow);
+  });
+
+  it('supprime le compte auth AVANT la ligne d’effectif', () => {
+    // Invariant inversé le 16/08/2026. L'ordre d'origine — effectif puis
+    // compte — laissait, quand deleteUser échouait, un compte capable
+    // d'obtenir un jeton alors que la personne avait déjà disparu de tous les
+    // écrans : plus aucun bouton pour rejouer la purge, seule une intervention
+    // en base pouvait le retirer. Tant que l'effectif survit à l'échec, la
+    // ligne reste visible et la purge reste relançable.
+    const iAuth = PURGE_BLOCK.indexOf('auth.admin.deleteUser(user_id)');
+    const iRoster = PURGE_BLOCK.indexOf("from('vet_roster').delete()");
+    expect(iAuth).toBeGreaterThan(-1);
+    expect(iRoster).toBeGreaterThan(iAuth);
+  });
+
+  it('ne retire le profil qu’après le compte, jamais avant', () => {
+    // `user_profiles` porte le bouton de purge des comptes. Le supprimer avant
+    // deleteUser ferait disparaître ce bouton même quand le compte, lui, est
+    // resté — exactement le cas que l'inversion ci-dessus corrige.
+    const iAuth = PURGE_BLOCK.indexOf('auth.admin.deleteUser(user_id)');
+    const iProfile = PURGE_BLOCK.indexOf("from('user_profiles').delete()");
+    expect(iProfile).toBeGreaterThan(-1);
+    expect(iProfile).toBeGreaterThan(iAuth);
+  });
+
+  it('traite un compte auth déjà absent comme un succès', () => {
+    // Sans cette tolérance, une purge interrompue après la suppression du
+    // compte ne peut plus être rejouée : le second passage échouerait sur un
+    // 404 et n'atteindrait jamais la ligne d'effectif restée en place.
+    expect(PURGE_BLOCK).toMatch(/delError\.status !== 404/);
   });
 });
 
