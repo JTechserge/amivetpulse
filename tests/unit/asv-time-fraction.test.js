@@ -157,3 +157,71 @@ describe('fractionFromDays — les durées viennent de config.js, pas de littér
     expect(fractionFromDays([]).fraction).toBe(0);
   });
 });
+
+/* ----------------------------------------------------------------
+   Le balisage rendu et le sélecteur qui le relit doivent s'accorder.
+
+   Défaut réel corrigé au lot C1 : la modale d'invitation rendait des
+   cases `invite-day-cb`, ses trois chemins de lecture interrogeaient
+   `edit-day-cb`. Aucune case trouvée → fraction 0 → CP acquis et
+   cible annuelle à zéro pour toute ASV invitée sur « Certains jours ».
+
+   Ces tests prennent le BALISAGE pour source de vérité et vérifient
+   que le sélecteur y correspond — pas l'inverse. vitest tourne en
+   environment 'node' (aucun DOM) et Playwright ne peut pas ouvrir la
+   modale d'invitation faute de compte de test Supabase ; c'est donc
+   le niveau de preuve atteignable sans ajouter de dépendance.
+   ---------------------------------------------------------------- */
+describe('cases « jours travaillés » — le balisage et son sélecteur', () => {
+  const SCOPES = ['invite', 'edit'];
+
+  /** Les classes réellement présentes sur les <input> du balisage rendu. */
+  const classesInMarkup = (html) => [...html.matchAll(/<input[^>]*\bclass="([^"]+)"/g)].map((m) => m[1]);
+
+  it.each(SCOPES)('scope %s : le sélecteur cible la classe que le balisage rend', (scope) => {
+    const rendered = [...new Set(classesInMarkup(dayCheckboxesHtml(scope)))];
+    expect(rendered).toHaveLength(1); // une seule classe de case par modale
+    expect(daySelector(scope)).toBe(`.${rendered[0]}`);
+    expect(checkedDaySelector(scope)).toBe(`.${rendered[0]}:checked`);
+  });
+
+  it.each(SCOPES)('scope %s : rend une case par jour travaillable', (scope) => {
+    expect(classesInMarkup(dayCheckboxesHtml(scope))).toHaveLength(DAY_LABELS.length);
+  });
+
+  it("le balisage d'une modale ne contient AUCUNE case de l'autre — la signature exacte du défaut", () => {
+    const inviteCls = classesInMarkup(dayCheckboxesHtml('invite'))[0];
+    const editCls = classesInMarkup(dayCheckboxesHtml('edit'))[0];
+    expect(inviteCls).not.toBe(editCls);
+    expect(dayCheckboxesHtml('invite')).not.toContain(editCls);
+    expect(dayCheckboxesHtml('edit')).not.toContain(inviteCls);
+  });
+
+  it('un scope absent ou inconnu JETTE, au lieu de rendre une liste vide', () => {
+    // C'est ce qui transforme la faute en panne bruyante : une lecture
+    // silencieusement vide, elle, s'enregistrait en fraction 0.
+    for (const bad of [undefined, null, '', 'editer', 'INVITE']) {
+      expect(() => checkedDaySelector(bad)).toThrow();
+      expect(() => daySelector(bad)).toThrow();
+      expect(() => dayCheckboxesHtml(bad)).toThrow();
+    }
+  });
+
+  it('les jours déjà travaillés ressortent cochés, les autres non', () => {
+    const html = dayCheckboxesHtml('edit', [1, 3]);
+    const checkedDays = [...html.matchAll(/data-day="(\d)" checked/g)].map((m) => Number(m[1]));
+    expect(checkedDays).toEqual([1, 3]);
+  });
+
+  it("sans jours fournis, aucune case n'est pré-cochée", () => {
+    expect(dayCheckboxesHtml('invite')).not.toContain('checked');
+    expect(dayCheckboxesHtml('edit', null)).not.toContain('checked');
+  });
+
+  it('les jours cochés relus donnent une fraction non nulle — le symptôme du défaut', () => {
+    // Une ASV invitée sur lundi-mardi-mercredi ne doit pas se retrouver à 0.
+    const html = dayCheckboxesHtml('invite', [1, 2, 3]);
+    const relus = [...html.matchAll(/data-day="(\d)" checked/g)].map((m) => Number(m[1]));
+    expect(fractionFromDays(relus).fraction).toBeGreaterThan(0);
+  });
+});
