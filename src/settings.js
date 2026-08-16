@@ -21,6 +21,7 @@ import {
 } from './state.js';
 import { apiUpsertVetPerson } from './api.js';
 import { openNotificationSettingsModal } from './pwa.js';
+import { openFeedbackModal } from './feedback.js';
 import { renderLoginScreen } from './login.js';
 import { renderCalendarView } from './calendar.js';
 
@@ -1443,6 +1444,7 @@ function buildSettingsMenuHtml() {
     <hr>
     <div class="settings-section-label">Aide</div>
     <button id="action-help" role="menuitem">❓ Guide utilisateur & FAQ</button>
+    <button id="action-feedback" role="menuitem">🚩 Signaler un problème</button>
     <hr>
     <div class="settings-section-label">Mon compte${userName ? ` — ${escapeHTML(userName)}` : ''}</div>
     <button id="action-change-password" role="menuitem">🔑 Changer mon mot de passe</button>
@@ -1595,6 +1597,16 @@ function initSettingsMenu() {
     () => {
       menu.classList.remove('open');
       openHelpModal();
+    },
+    { signal }
+  );
+  // Hors de tout garde-fou de rôle : une ASV et un vétérinaire salarié doivent
+  // pouvoir signaler, et ce sont eux qui rencontrent le plus de blocages.
+  document.getElementById('action-feedback').addEventListener(
+    'click',
+    () => {
+      menu.classList.remove('open');
+      openFeedbackModal();
     },
     { signal }
   );

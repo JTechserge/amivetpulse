@@ -25,7 +25,7 @@ Rien nommé `feedback` ou `signalement` n'existe dans `src/`, `supabase/`, `scri
 
 ## 3. Cinq corrections au cahier (à valider avant d'écrire une ligne)
 
-**a. Le bouton ne peut pas vivre dans le menu ⚙️.** `canAccessSettings()` (app.js:311) n'autorise que `admin` et `vet`. Une ASV et un vétérinaire salarié n'ouvrent **jamais** ce menu. Loger le bouton là le rendrait invisible à exactement les utilisateurs visés. → Point d'entrée retenu : un bouton `.btn-icon` dans `header-actions` (`src/index.html:62`), à gauche du ⚙️, sans garde de rôle.
+**a. ~~Le bouton ne peut pas vivre dans le menu ⚙️.~~ — CORRIGÉ au lot 3 : le cahier avait raison.** `canAccessSettings()` (app.js:311) ne conditionne que les *sections* internes du menu (personnalisation, synchronisation, données, collaborateurs). Le bouton ⚙️ et le menu lui-même sont rendus pour **tous** les rôles (`initSettingsMenu`, settings.js:1463), aucune CSS ne les masque, et la partie basse — Notifications, Guide/FAQ, Mon compte, déconnexion — est déjà visible par une ASV. → Point d'entrée retenu : entrée « 🚩 Signaler un problème » dans la section **Aide** du menu ⚙️, sous le guide utilisateur, hors de tout garde-fou de rôle.
 
 **b. « Réservé à l'admin » ne s'exprime pas avec `canAccessDashboard()`.** Cette garde s'appuie sur `effectiveRole()`, qui renvoie `vet` pour un associé : le tableau de bord est donc visible par les associés, pas seulement par Jérémie. Le sous-onglet Signalements doit se garder sur le **rôle réel** : `store.currentUser.role === 'admin'`. Effet de bord accepté : un admin passé en mode ASV perd la vue (le dashboard entier disparaît déjà dans ce mode) — cohérent.
 
