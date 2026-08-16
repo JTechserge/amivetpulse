@@ -1,7 +1,6 @@
 import {
   PEOPLE,
   isVetPerson,
-  ASV_PEOPLE,
   SLOTS,
   SLOT_LABELS,
   MONTH_NAMES,
@@ -1157,7 +1156,6 @@ async function adminRequestSignature(viewKey, personId) {
         year: cfg.year,
         month,
         person_id: personId,
-        time_fraction: ASV_PEOPLE.find((p) => p.id === personId)?.timeFraction ?? 1.0,
       }),
     });
     const data = await res.json();
@@ -1194,7 +1192,6 @@ async function requestSignatureEmail(viewKey, personId) {
       body: JSON.stringify({
         year: cfg.year,
         month,
-        time_fraction: ASV_PEOPLE.find((p) => p.id === personId)?.timeFraction ?? 1.0,
       }),
     });
     const data = await res.json();
