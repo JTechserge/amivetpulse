@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Gabarit — job quotidien des signalements Amivet PULSE.
+
+  Prerequis : ~/.amivet-feedback.env contenant SUPABASE_SERVICE_ROLE_KEY, en chmod 600.
+  Sans ce fichier le job echoue proprement et le dit dans son journal.
+
+  Installation :
+    cp scripts/com.jeremie.feedback-daily.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jeremie.feedback-daily.plist
+  Essai immediat :
+    launchctl kickstart -k gui/$(id -u)/com.jeremie.feedback-daily
+  Desinstallation :
+    launchctl bootout gui/$(id -u)/com.jeremie.feedback-daily
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jeremie.feedback-daily</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/jeremie/Projets/CalendrierAmivet/feedback-quotidien.command</string>
+    </array>
+
+    <!-- 8h05 : apres le TNR de 7h45, avant la journee de travail. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key><integer>8</integer>
+        <key>Minute</key><integer>5</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jeremie/Projets/.feedback/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/jeremie/Projets/.feedback/launchd.err.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!-- node vit dans ~/.local/node/bin : absent du PATH par defaut de launchd,
+             c'est exactement le piege qui ferait echouer le job en silence. -->
+        <key>PATH</key>
+        <string>/Users/jeremie/.local/node/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+</dict>
+</plist>
