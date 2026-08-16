@@ -26,6 +26,15 @@ import {
   removalSummaryLines,
   REMOVED_AUTHOR_LABEL,
 } from './lib/collaborator-removal.js';
+import {
+  checkedDaySelector,
+  dayCheckboxesHtml,
+  daySelector,
+  fractionFromDays,
+  percentForDisplay,
+  presetForFraction,
+  resolveTimeFraction,
+} from './lib/time-fraction.js';
 import { openNotificationSettingsModal } from './pwa.js';
 import { openFeedbackModal } from './feedback.js';
 import { renderLoginScreen } from './login.js';
@@ -526,7 +535,7 @@ function openManageUsersModal() {
             <button type="button" class="invite-tf-btn" data-tf="days" style="padding:5px 11px;border-radius:6px;border:1px solid var(--color-border);font-size:12.5px;cursor:pointer;background:var(--color-card);">Certains jours</button>
           </div>
           <div id="invite-tf-days" style="display:none;flex-wrap:wrap;gap:10px;margin-top:8px;">
-            ${['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'].map((l, i) => `<label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="invite-day-cb" data-day="${i + 1}"> ${l}</label>`).join('')}
+            ${dayCheckboxesHtml('invite')}
           </div>
           <p id="invite-tf-summary" class="text-muted" style="font-size:12px;margin:4px 0 0;">${_tfSummaryText(1.0)}</p>
         </div>
@@ -571,13 +580,13 @@ function openManageUsersModal() {
           const tf = btn.dataset.tf;
           box.querySelector('#invite-tf-days').style.display = tf === 'days' ? 'flex' : 'none';
           let fraction = { full: 1.0, three_quarter: 0.75, half: 0.5 }[tf];
-          if (tf === 'days') fraction = _computeTfFromDays(box).fraction;
+          if (tf === 'days') fraction = fractionFromDays(_checkedDays(box, 'invite')).fraction;
           if (inviteTfSummary) inviteTfSummary.textContent = _tfSummaryText(fraction || 1.0);
         });
       });
-      box.querySelectorAll('.invite-day-cb').forEach((cb) =>
+      box.querySelectorAll(daySelector('invite')).forEach((cb) =>
         cb.addEventListener('change', () => {
-          const r = _computeTfFromDays(box);
+          const r = fractionFromDays(_checkedDays(box, 'invite'));
           if (inviteTfSummary) inviteTfSummary.textContent = _tfSummaryText(r.fraction);
         })
       );
@@ -696,15 +705,12 @@ function openManageUsersModal() {
               if (asvPerson) {
                 const activeBtn = box.querySelector('.invite-tf-btn.active');
                 if (activeBtn) {
-                  const PRESET_VALUES = { full: 1.0, three_quarter: 0.75, half: 0.5 };
-                  const tf = activeBtn.dataset.tf;
-                  let tfResult;
-                  if (tf === 'days') {
-                    const r = _computeTfFromDays(box);
-                    tfResult = { fraction: r.fraction, workingDays: r.days };
-                  } else {
-                    tfResult = { fraction: PRESET_VALUES[tf] ?? 1.0, workingDays: null };
-                  }
+                  // Personne neuve : aucune valeur courante à préserver.
+                  // Scope 'invite' — lire les cases de l'ÉDITION ici écrirait 0.
+                  const tfResult = resolveTimeFraction({
+                    preset: activeBtn.dataset.tf,
+                    checkedDays: _checkedDays(box, 'invite'),
+                  });
                   asvPerson.timeFraction = tfResult.fraction;
                   asvPerson.workingDays = tfResult.workingDays;
                   saveASVRoster();
@@ -744,18 +750,11 @@ function buildTimeFractionUI(personId, forRole) {
   const p = personOf(personId);
   const cur = p?.timeFraction ?? 1.0;
   const workingDays = p?.workingDays || null;
-  const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
-  // Determine current preset
-  let preset = 'custom';
-  if (Math.abs(cur - 1.0) < 0.01) preset = 'full';
-  else if (Math.abs(cur - 0.75) < 0.01) preset = 'three_quarter';
-  else if (Math.abs(cur - 0.5) < 0.01) preset = 'half';
-  else if (workingDays) preset = 'days';
-  const dayChecks = DAY_LABELS.map((l, i) => {
-    const checked = workingDays ? workingDays.includes(i + 1) : false;
-    return `<label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="edit-day-cb" data-day="${i + 1}" ${checked ? 'checked' : ''}> ${l}</label>`;
-  }).join('');
-  const customPct = Math.round(cur * 100);
+  const preset = presetForFraction(cur, workingDays);
+  const dayChecks = dayCheckboxesHtml('edit', workingDays);
+  // Affichage seulement. La valeur enregistrée repasse par resolveTimeFraction,
+  // qui rend `cur` intacte si ce pourcentage arrondi n'a pas bougé.
+  const customPct = percentForDisplay(cur);
   return `
     <div id="edit-tf-block" style="border-top:1px solid var(--color-border);padding-top:12px;">
       <label class="text-muted" style="font-size:12px;display:block;margin-bottom:8px;">Temps de travail contractuel</label>
@@ -780,30 +779,21 @@ function _tfSummaryText(fraction) {
   return `→ ${formatHHMM(q.weekly)}/semaine · ${formatNum(q.annual)}h/an`;
 }
 
-function _computeTfFromDays(box) {
-  const checked = [...box.querySelectorAll('.edit-day-cb:checked')].map((cb) => parseInt(cb.dataset.day));
-  // Mon-Fri avg = (8.5+8.25)/2 = 8.375h, Sat = 7.0h
-  const weekly = checked.reduce((s, d) => s + (d === 6 ? 7.0 : 8.375), 0);
-  return { fraction: Math.round((weekly / 35) * 1000) / 1000, weekly, days: checked };
+/**
+ * Les jours cochés d'une modale. `scope` est OBLIGATOIRE ('invite' ou 'edit') :
+ * les deux modales ont des classes distinctes, et lire celles de l'autre ne rend
+ * jamais rien — donc une fraction de 0. Un scope absent ou faux jette.
+ */
+function _checkedDays(box, scope) {
+  return [...box.querySelectorAll(checkedDaySelector(scope))].map((cb) => parseInt(cb.dataset.day));
 }
 
-function wireTimeFractionUI(box, _personId) {
+function wireTimeFractionUI(box, personId) {
   if (!box.querySelector('#edit-tf-block')) return;
-  const PRESET_VALUES = { full: 1.0, three_quarter: 0.75, half: 0.5 };
   const updateSummary = () => {
-    const active = box.querySelector('.edit-tf-btn.active');
-    if (!active) return;
-    const tf = active.dataset.tf;
-    let fraction;
-    if (tf === 'days') {
-      const r = _computeTfFromDays(box);
-      fraction = r.fraction;
-    } else if (tf === 'custom') {
-      fraction = (parseInt(box.querySelector('#edit-tf-pct').value) || 100) / 100;
-    } else {
-      fraction = PRESET_VALUES[tf] || 1.0;
-    }
-    box.querySelector('#edit-tf-summary').textContent = _tfSummaryText(fraction);
+    const r = _readTimeFractionUI(box, personId);
+    if (!r) return;
+    box.querySelector('#edit-tf-summary').textContent = _tfSummaryText(r.fraction);
   };
   box.querySelectorAll('.edit-tf-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -823,23 +813,27 @@ function wireTimeFractionUI(box, _personId) {
       updateSummary();
     });
   });
-  box.querySelectorAll('.edit-day-cb').forEach((cb) => cb.addEventListener('change', updateSummary));
+  box.querySelectorAll(daySelector('edit')).forEach((cb) => cb.addEventListener('change', updateSummary));
   box.querySelector('#edit-tf-pct')?.addEventListener('input', updateSummary);
 }
 
-function getTimeFractionFromUI(box) {
+/**
+ * Lit le bloc « temps de travail » et rend { fraction, workingDays }, ou null si
+ * aucun preset n'est actif. Passe par resolveTimeFraction : la valeur courante de
+ * la personne est rendue INTACTE si l'écran n'a pas bougé, au lieu d'être
+ * réécrite depuis son affichage arrondi. Voir src/lib/time-fraction.js.
+ */
+function _readTimeFractionUI(box, personId) {
   const active = box.querySelector('.edit-tf-btn.active');
   if (!active) return null;
-  const tf = active.dataset.tf;
-  const PRESET_VALUES = { full: 1.0, three_quarter: 0.75, half: 0.5 };
-  if (tf === 'days') {
-    const r = _computeTfFromDays(box);
-    return { fraction: r.fraction, workingDays: r.days };
-  } else if (tf === 'custom') {
-    return { fraction: (parseInt(box.querySelector('#edit-tf-pct').value) || 100) / 100, workingDays: null };
-  } else {
-    return { fraction: PRESET_VALUES[tf] ?? 1.0, workingDays: null };
-  }
+  const p = personId ? personOf(personId) : null;
+  return resolveTimeFraction({
+    preset: active.dataset.tf,
+    percentValue: box.querySelector('#edit-tf-pct')?.value,
+    checkedDays: _checkedDays(box, 'edit'),
+    currentFraction: p?.timeFraction,
+    currentWorkingDays: p?.workingDays ?? null,
+  });
 }
 
 function openEditUserModal(userId, users, onBack) {
@@ -983,7 +977,7 @@ function openEditUserModal(userId, users, onBack) {
       // Mettre à jour le temps de travail contractuel en local (ASV uniquement)
       if (role === 'asv' && personId) {
         const lastNameInput = box.querySelector('#edit-lastname');
-        const tfResult = getTimeFractionFromUI(box);
+        const tfResult = _readTimeFractionUI(box, personId);
         const p = personOf(personId);
         if (p) {
           if (lastNameInput !== null) p.lastName = lastNameInput.value.trim() || undefined;

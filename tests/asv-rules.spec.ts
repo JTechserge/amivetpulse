@@ -70,9 +70,14 @@ test.describe('Effectif ASV — localStorage après init', () => {
   test('Carla a une timeFraction cohérente avec 7h25/semaine (≈ 0.207)', async ({ page }) => {
     const roster = await getRoster(page);
     const carla = roster.find((p: AsvPerson) => p.id === 'carla');
-    // (7 + 25/60) / 35 ≈ 0.2119  — 7h25, pas 7,25 h
-    expect(carla?.timeFraction).toBeGreaterThan(0.2);
-    expect(carla?.timeFraction).toBeLessThan(0.22);
+    // Bornes resserrées au lot C1. Les anciennes (> 0.2 et < 0.22) acceptaient
+    // AUSSI 0.21, la valeur canonisée par l'arrondi de la fiche collaborateur :
+    // le garde-fou était aveugle au défaut de paie qu'il était censé couvrir.
+    // La dérivation elle-même est verrouillée à 10 décimales par
+    // tests/unit/asv-time-fraction.test.js ; ici on vérifie la valeur réellement
+    // servie au navigateur, après loadASVRoster().
+    expect(carla?.timeFraction).toBeCloseTo((7 + 25 / 60) / 35, 6);
+    expect(carla?.timeFraction).not.toBeCloseTo(0.21, 6);
   });
 
   test("aucune ASV du roster n'est archivée par défaut", async ({ page }) => {

@@ -44,6 +44,13 @@ export const PEOPLE = [
   },
 ];
 
+// Déclarée ici, et non dans le bloc « Heures & plafonds légaux » plus bas, parce que
+// ASV_PEOPLE en dérive : une const déclarée après ne serait pas lisible à l'évaluation
+// du tableau. Le temps de travail de Carla doit être DÉRIVÉ de cette constante, jamais
+// recopié — un 7.25 écrit à la main au lieu de 7 + 25/60 fausserait ses CP proratisés
+// (c'est le bug corrigé par le commit 5475ef0).
+export const ASV_STD_SAT_CARLA = 7 + 25 / 60; // Carla : 8:30-16:45 avec ~50min pause → 7h25
+
 // Tableau muté en place par le module roster (ajout/retrait ASV depuis le tableau de bord).
 // ASV_PEOPLE est intentionnellement muté in-place plutôt que réassigné : tout le reste de
 // l'app garde la même référence et voit automatiquement les changements.
@@ -82,7 +89,8 @@ export const ASV_PEOPLE = [
     color: '#0EA5E9',
     initial: 'Ca',
     present: PRESENT_SHADES[3],
-    timeFraction: (7 + 25 / 60) / 35,
+    // Dérivé, jamais recopié. Voir le commentaire sur ASV_STD_SAT_CARLA ci-dessus.
+    timeFraction: ASV_STD_SAT_CARLA / 35,
     saturdayOnly: true,
   },
 ];
@@ -188,7 +196,7 @@ export const SUPABASE_ANON_KEY =
 export const ANNUAL_FULLTIME_HOURS = 1607; // référence légale France (loi Aubry 2000)
 export const HALFDAY_HOURS = 3.5; // 35h / 5j / 2 demi-journées
 export const WEEKLY_MAX_HOURS = 42;
-export const ASV_STD_SAT_CARLA = 7 + 25 / 60; // Carla : 8:30-16:45 avec ~50min pause → 7h25
+// ASV_STD_SAT_CARLA appartient à ce bloc, mais est déclarée plus haut : ASV_PEOPLE en dérive.
 export const ASV_STD_SAT_SECOND = 7.0; // 2e ASV samedi : 9:00-16:30
 export const ASV_STD_WEEKDAY_AVG = 8.375;
 export const CLINIC_HOURS = { mStart: '08:30', mEnd: '13:00', amStart: '15:00', amEnd: '20:00' };
