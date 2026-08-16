@@ -3,17 +3,73 @@ import {
   describeScreen,
   validateFeedbackMessage,
   buildFeedbackPayload,
+  isOpenStatus,
+  matchesStatusFilter,
+  resolvedAtFor,
+  OPEN_STATUSES,
+  STATUSES,
   MESSAGE_MAX,
 } from '../../src/lib/feedback-payload.js';
 
 const ASV = { id: 'u-asv-1', role: 'asv' };
 const ADMIN = { id: 'u-admin-1', role: 'admin' };
 
+describe('statuts — source unique partagée avec le digest quotidien', () => {
+  it('tient « à traiter » pour tout ce qui n’est pas soldé', () => {
+    expect(isOpenStatus('nouveau')).toBe(true);
+    expect(isOpenStatus('en_cours')).toBe(true);
+    expect(isOpenStatus('decision_humaine')).toBe(true);
+    expect(isOpenStatus('corrige')).toBe(false);
+    expect(isOpenStatus('rejete')).toBe(false);
+  });
+
+  it('couvre exactement les statuts de la migration, sans trou', () => {
+    // Un statut ajouté au SQL sans décision « ouvert ou soldé » tomberait
+    // silencieusement du côté soldé et disparaîtrait du digest.
+    expect(STATUSES.slice().sort()).toEqual([
+      'corrige',
+      'decision_humaine',
+      'en_cours',
+      'nouveau',
+      'rejete',
+    ]);
+    const soldes = STATUSES.filter((s) => !OPEN_STATUSES.includes(s));
+    expect(soldes.sort()).toEqual(['corrige', 'rejete']);
+  });
+
+  it('ne considère pas un statut inconnu ou absent comme à traiter', () => {
+    expect(isOpenStatus(undefined)).toBe(false);
+    expect(isOpenStatus('brouillon')).toBe(false);
+  });
+
+  it('filtre la liste admin selon le filtre choisi', () => {
+    const neuf = { status: 'nouveau' };
+    const solde = { status: 'corrige' };
+    expect(matchesStatusFilter(neuf, 'tous')).toBe(true);
+    expect(matchesStatusFilter(solde, 'tous')).toBe(true);
+    expect(matchesStatusFilter(neuf, 'ouverts')).toBe(true);
+    expect(matchesStatusFilter(solde, 'ouverts')).toBe(false);
+    expect(matchesStatusFilter(neuf, 'nouveau')).toBe(true);
+    expect(matchesStatusFilter(neuf, 'en_cours')).toBe(false);
+  });
+
+  it('horodate la clôture des seuls statuts soldés', () => {
+    const now = new Date('2026-08-16T08:00:00.000Z');
+    expect(resolvedAtFor('corrige', now)).toBe('2026-08-16T08:00:00.000Z');
+    expect(resolvedAtFor('rejete', now)).toBe('2026-08-16T08:00:00.000Z');
+  });
+
+  it('efface la clôture quand un signalement est rouvert', () => {
+    const now = new Date('2026-08-16T08:00:00.000Z');
+    expect(resolvedAtFor('en_cours', now)).toBeNull();
+    expect(resolvedAtFor('nouveau', now)).toBeNull();
+    expect(resolvedAtFor('decision_humaine', now)).toBeNull();
+  });
+});
+
 describe('describeScreen', () => {
   it('traduit vue et sous-onglet en libellés lisibles', () => {
-    expect(describeScreen({ view: 'dashboard', subTab: 'hours' })).toBe(
-      'Tableau de bord › Suivi ASV'
-    );
+    expect(describeScreen({ view: 'dashboard', subTab: 'hours' })).toBe('Tableau de bord › Suivi ASV');
     expect(describeScreen({ view: 'asv', subTab: 'week' })).toBe('ASV › Hebdomadaire');
   });
 
@@ -72,9 +128,7 @@ describe('buildFeedbackPayload', () => {
 
   it('refuse une session absente', () => {
     expect(() => buildFeedbackPayload({ ...base, user: null })).toThrow(/Session expirée/);
-    expect(() => buildFeedbackPayload({ ...base, user: { role: 'asv' } })).toThrow(
-      /Session expirée/
-    );
+    expect(() => buildFeedbackPayload({ ...base, user: { role: 'asv' } })).toThrow(/Session expirée/);
   });
 
   it('refuse un rôle hors des quatre connus', () => {
@@ -118,9 +172,7 @@ describe('buildFeedbackPayload', () => {
   });
 
   it('nettoie le message des espaces de bord', () => {
-    expect(buildFeedbackPayload({ ...base, message: '  souci de connexion  ' }).message).toBe(
-      'souci de connexion'
-    );
+    expect(buildFeedbackPayload({ ...base, message: '  souci de connexion  ' }).message).toBe('souci de connexion');
   });
 
   it('retombe sur « normal » pour une gravité absente ou inventée', () => {

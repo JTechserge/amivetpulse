@@ -9,6 +9,13 @@
 // à l'utilisateur un 400 illisible à la place d'un message clair.
 export const SEVERITIES = ['bloquant', 'normal', 'confort'];
 export const ROLES = ['admin', 'vet', 'vet_employe', 'asv'];
+export const STATUSES = ['nouveau', 'en_cours', 'corrige', 'rejete', 'decision_humaine'];
+
+// Statuts non soldés. Source unique pour la vue admin ET pour le digest
+// quotidien (scripts/feedback-digest.mjs) : s'ils divergeaient, un signalement
+// pourrait rester affiché « à traiter » sans jamais remonter dans le digest,
+// ou l'inverse.
+export const OPEN_STATUSES = ['nouveau', 'en_cours', 'decision_humaine'];
 export const MESSAGE_MIN = 5;
 export const MESSAGE_MAX = 2000;
 
@@ -33,6 +40,30 @@ const SUB_LABELS = {
   signatures: 'Feuilles signées',
   interviews: 'Entretiens annuels',
 };
+
+/** Un signalement encore à traiter. */
+export function isOpenStatus(status) {
+  return OPEN_STATUSES.includes(status);
+}
+
+/**
+ * Filtre de la liste admin. `ouverts` = tout ce qui n'est pas soldé, `tous` =
+ * tout, sinon le statut exact.
+ */
+export function matchesStatusFilter(row, filter) {
+  if (filter === 'tous') return true;
+  if (filter === 'ouverts') return isOpenStatus(row?.status);
+  return row?.status === filter;
+}
+
+/**
+ * Date de clôture à écrire pour un statut donné. Un signalement rouvert repart
+ * à null : sans ça le digest afficherait une date de clôture sur une ligne
+ * encore ouverte.
+ */
+export function resolvedAtFor(status, now = new Date()) {
+  return status === 'corrige' || status === 'rejete' ? now.toISOString() : null;
+}
 
 /**
  * Décrit l'écran où l'utilisateur se trouvait, en clair pour le triage.
@@ -78,14 +109,7 @@ export function validateFeedbackMessage(message) {
  * la politique d'insertion exige. Les envoyer ne pourrait que faire échouer
  * l'insertion.
  */
-export function buildFeedbackPayload({
-  user,
-  screen,
-  appVersion,
-  userAgent,
-  message,
-  severity,
-} = {}) {
+export function buildFeedbackPayload({ user, screen, appVersion, userAgent, message, severity } = {}) {
   if (!user?.id) {
     throw new Error('Session expirée : reconnectez-vous pour envoyer un signalement.');
   }

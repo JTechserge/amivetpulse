@@ -7,6 +7,7 @@ import { revokeSignature } from './signatures.js';
 import { getForecastSig, revokeForecastSig, loadForecastSignatures } from './forecast-signatures.js';
 import { fetchSignatureArchive, fetchSignedStorageUrl } from './api.js';
 import { triggerPushNotification } from './pwa.js';
+import { isFeedbackAdmin, loadFeedback, renderDashboardFeedback } from './feedback.js';
 
 import {
   buildPersonCard,
@@ -103,6 +104,7 @@ export function renderDashboard() {
         <button class="sub-tab ${store.dashSubState.tab === 'requests' ? 'active' : ''}" data-sub="requests">📋 Demandes de congé et de modification${pendingCount > 0 ? ` <span class="nav-badge">${pendingCount}</span>` : ''}</button>
         <button class="sub-tab ${store.dashSubState.tab === 'signatures' ? 'active' : ''}" data-sub="signatures">✍️ Feuilles signées</button>
         <button class="sub-tab ${store.dashSubState.tab === 'interviews' ? 'active' : ''}" data-sub="interviews">📝 Entretiens annuels</button>
+        ${isFeedbackAdmin() ? `<button class="sub-tab ${store.dashSubState.tab === 'feedback' ? 'active' : ''}" data-sub="feedback">🚩 Signalements</button>` : ''}
       </div>
     </div>
     <div id="dash-sub-stats" class="sub-page ${store.dashSubState.tab !== 'stats' ? 'hidden' : ''}"></div>
@@ -110,6 +112,7 @@ export function renderDashboard() {
     <div id="dash-sub-requests" class="sub-page ${store.dashSubState.tab !== 'requests' ? 'hidden' : ''}"></div>
     <div id="dash-sub-signatures" class="sub-page ${store.dashSubState.tab !== 'signatures' ? 'hidden' : ''}"></div>
     <div id="dash-sub-interviews" class="sub-page ${store.dashSubState.tab !== 'interviews' ? 'hidden' : ''}"></div>
+    ${isFeedbackAdmin() ? `<div id="dash-sub-feedback" class="sub-page ${store.dashSubState.tab !== 'feedback' ? 'hidden' : ''}"></div>` : ''}
   `;
   container.querySelector('#dash-sub-nav').addEventListener('click', (e) => {
     const btn = e.target.closest('.sub-tab');
@@ -119,11 +122,18 @@ export function renderDashboard() {
     _saveViewState();
   });
   if (store.dashSubState.tab === 'medical') store.dashSubState.tab = 'stats'; // onglet supprimé
+  // Un onglet 'feedback' restauré depuis l'état sauvegardé ne doit pas survivre
+  // à une perte du rôle admin : sans ça, le dernier `else` renverrait sur les
+  // demandes de congé avec un onglet actif fantôme.
+  if (store.dashSubState.tab === 'feedback' && !isFeedbackAdmin()) store.dashSubState.tab = 'stats';
   if (store.dashSubState.tab === 'stats') renderDashboardStats();
   else if (store.dashSubState.tab === 'hours') renderDashboardHours();
   else if (store.dashSubState.tab === 'signatures') renderDashboardSignatures();
   else if (store.dashSubState.tab === 'interviews') renderDashboardInterviews();
-  else renderLeaveRequestsPage();
+  else if (store.dashSubState.tab === 'feedback') {
+    renderDashboardFeedback();
+    loadFeedback().then(renderDashboardFeedback);
+  } else renderLeaveRequestsPage();
 }
 
 export function renderDashboardStats() {

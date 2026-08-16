@@ -62,9 +62,12 @@ describe('feedback — la table et ses contraintes', () => {
   it('énumère les statuts, sans état libre', () => {
     const statuses = flat(SQL).match(/status IN \(([^)]+)\)/);
     expect(statuses).not.toBeNull();
-    expect(statuses[1].split(',').map((s) => s.trim().replace(/'/g, '')).sort()).toEqual(
-      ['corrige', 'decision_humaine', 'en_cours', 'nouveau', 'rejete'],
-    );
+    expect(
+      statuses[1]
+        .split(',')
+        .map((s) => s.trim().replace(/'/g, ''))
+        .sort()
+    ).toEqual(['corrige', 'decision_humaine', 'en_cours', 'nouveau', 'rejete']);
   });
 
   it('énumère les sévérités et les rôles connus', () => {
