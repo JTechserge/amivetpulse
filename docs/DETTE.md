@@ -39,6 +39,39 @@ projet Supabase de production — un arbitrage de Jérémie sur un risque
 d'exploitation, pas un lot de développement. Elle reste donc ouverte, seule,
 tant que cet arbitrage n'est pas rendu.
 
+### Constatée par le chantier « migration du roster ASV vers table partagée » (2026-08-16)
+
+#### Rien n'oblige les modales à passer par le sélecteur partagé
+
+**Ce qui manque.** Le lot C1 a supprimé le décalage entre le balisage des cases
+« jours travaillés » et le sélecteur qui les relit, en faisant venir les deux de
+la même source. `tests/unit/asv-time-fraction.test.js` verrouille cet accord —
+mais à l'intérieur de `src/lib/time-fraction.js` seulement. Aucun test ne
+constate que `src/settings.js` *appelle* effectivement ces fonctions.
+
+**Où.** Les cinq points d'appel de `src/settings.js` (rendu des deux modales
+lignes 538 et 754, lectures lignes 587, 788 et 816) face aux helpers
+`dayCheckboxesHtml` / `daySelector` / `checkedDaySelector`.
+
+**Conséquence.** Une modification future qui réécrirait une classe en dur dans
+`settings.js` reproduirait exactement le défaut C1 sans faire rougir le TNR :
+aucune case trouvée à la relecture, fraction enregistrée à 0, donc CP acquis et
+cible annuelle à zéro pour l'ASV concernée. C'est un chemin de régression vers
+une **erreur de paie**, pas un défaut actif — le code d'aujourd'hui est correct
+et vérifié.
+
+**Coût de la laisser.** Faible aujourd'hui : cinq appels, tous justes, tous
+touchés à l'instant. Il croît avec `settings.js`, qui est déjà un gros module.
+Le fermer proprement suppose soit un test de structure sur `settings.js`, soit
+l'extraction du câblage des modales dans `src/lib/` — un lot en soi, pas une
+retouche. Laissée ouverte volontairement pour ne pas ajouter un garde-fou de
+plus au garde-fou du lot C1.
+
+**Ne pas confondre** avec la limite déjà assumée « les chemins authentifiés ne
+sont couverts par aucun test automatisé » (§ Limites acceptées) : celle-ci porte
+sur le bout en bout à travers le login, celle-là sur l'accord interne au front,
+qui est atteignable sans compte de test.
+
 ## Clos par le chantier « solde de la dette de la suppression définitive » (2026-08-16)
 
 ### 🔴 Rien ne relie les listes de sauvegarde et de restauration aux migrations

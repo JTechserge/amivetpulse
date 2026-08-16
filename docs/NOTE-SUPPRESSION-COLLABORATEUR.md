@@ -272,3 +272,120 @@ Les 9 tables de `PURGE_TARGETS` ont été confrontées aux migrations avant le d
 
 - Branche de travail : `feat/suppression-collaborateur`, créée le 16/08/2026. Merge sur `main` plus tard.
 - Note passée au contradicteur indépendant (skill AV, mode DOSSIER) le 16/08/2026 : trois objections retenues, toutes vérifiées dans le dépôt. Corrections intégrées aux §2, §3, §4, §7, §7 bis et §9.
+- Branche du lot C : `feat/asv-roster`, fusionnée dans `main` en fast-forward le 16/08/2026. **Non poussée** — voir §14.
+- Cadrage du lot C2 passé au contradicteur indépendant (AV, mode DOSSIER) le 16/08/2026 : trois objections, les quatre affirmations vérifiables confirmées dans le dépôt. Le cadrage a été révisé, pas défendu — §14.
+- Contrôle de périmètre (skill POLICE) le 16/08/2026 sur le lot C1 : cap tenu sur les cinq mesures. Deux livrables hors découpage identifiés dans le cadrage C2, rendus à l'arbitrage — §14.
+
+## 14. Lot C — la migration `asv_roster`
+
+### C1 — la correction d'arrondi (fait le 16/08/2026)
+
+Le garde-fou du §7 « corriger le chemin d'arrondi avant tout amorçage » est levé.
+La fraction de temps de travail ne se reconstruit plus depuis son affichage
+arrondi : la règle est sortie de `settings.js` vers `src/lib/time-fraction.js`,
+et le balisage des cases « jours travaillés » et le sélecteur qui les relit
+viennent désormais de la même source.
+
+Commits `e09fc65` (correctif) et `ed6a675` (test de garde). Preuve d'existence :
+`npx vitest run tests/unit/asv-time-fraction.test.js`, 32 tests.
+
+**Ce que C1 ne fait pas : réparer l'existant.** Aucun chemin de code ne corrige
+une `timeFraction` déjà enregistrée. Le rattrapage `src/state.js:69-83` ne
+réinjecte Carla que si elle est *absente* ; présente avec une valeur fausse,
+elle est conservée telle quelle (`p.timeFraction ?? 1.0`, `src/state.js:61`).
+
+### Le défaut de paie possiblement actif en production
+
+Constaté en marge du cadrage C2, **hors découpage du §9**.
+
+Le défaut corrigé par C1 n'écrivait pas seulement une fraction arrondie : par la
+modale d'invitation, il écrivait `timeFraction: 0` **et** `workingDays: []`.
+Or `??` ne rattrape pas zéro — `person.timeFraction ?? 1.0`
+(`src/leave-requests.js:413`) vaut alors 0, donc **zéro CP acquis et zéro cible
+annuelle** — pendant que `isPersonWorkingDay` (`src/slots.js:294`) échoue sur son
+garde `length > 0` et retombe sur `return true` : le calendrier a l'air normal.
+
+Une ASV invitée avec « Certains jours » cochés avant C1 porte donc une erreur de
+paie silencieuse. **Enjeu de paie : c'est un défaut bloquant, pas une dette.**
+Sa réparation est un lot à ouvrir, pas un morceau de C2.
+
+### C2 — le relevé avant amorçage (cadré, non commencé)
+
+Répond au dernier garde-fou du §7 : « Avant d'amorcer : dumper la clé
+`amivet_asv_roster` de chaque poste et archiver les JSON. »
+
+**L'ordre, corrigé après AV : dumper d'abord, pousser ensuite.** Le cadrage
+initial voulait déployer C1 avant de relever, pour « arrêter l'hémorragie avant
+de mesurer ». L'argument ne tient pas : la corruption exige un clic délibéré
+d'admin dans les réglages, pas le passage du temps. En face, le déploiement est
+irréversible **en preuve** — après lui, l'archive ne documente plus l'avant, et
+sur une valeur suspecte on ne peut plus dire si elle précédait ou suivait le
+push. Le point de non-retour de C2 n'est donc pas l'amorçage : c'est le
+`git push`.
+
+**Le relevé n'est pas un geste neutre.** Charger la page pour lire
+`localStorage` exécute `loadASVRoster()`, qui **écrit** si Carla est absente
+(`src/state.js:82`) ou si la clé n'existe pas (`src/state.js:87`). Sur un poste
+où Carla a été purgée par le 💣 des lots A et B, ouvrir l'app pour dumper la
+réinjecte en fin de tableau. La procédure doit lire avant boot, ou assumer et
+consigner la limite.
+
+**Liste d'inspection**, élargie après AV : la valeur de Carla (`0,2119047…`
+attendu, `0,21` = corrompu), **et** tout `timeFraction: 0`, **et** tout
+`workingDays: []`.
+
+**Deux justifications retirées du lot** — actées le 16/08/2026 :
+
+- *La forme de `working_days`* ne s'observe pas, elle se lit : `number[]` de 1 à
+  6 ou `null`, un seul producteur (`src/lib/time-fraction.js`), un seul
+  consommateur (`src/slots.js:294`). Le §10 la disait dépendante « de la forme
+  exacte du champ local » — c'est inexact, le dump ne peut révéler aucune forme
+  tierce.
+- *`sort_order` ne se dérive pas de l'ordre du `localStorage`.* Cet ordre ne
+  porte aucune intention : `push` ajoute en queue, `splice` décale, et
+  `loadASVRoster` re-pousse Carla en fin de tableau après une purge. Le dériver
+  promouvrait un accident en colonne de schéma. `vet_roster` a été amorcé avec
+  des rangs écrits à la main (`20260803000001:83-86`) — faire pareil, sur
+  décision explicite.
+
+**Arbitré le 16/08/2026 :**
+
+- **Une ASV a déjà été invitée avec « Certains jours » cochés.** Le défaut a donc
+  pu s'écrire en production. Un lot de réparation est ouvert — C3 ci-dessous.
+- **Le recensement serveur des `person_id` entre dans le périmètre de C2**
+  (`user_profiles.person_id`, plus l'extraction depuis `planning_data` par
+  `extractPersonIdFromKey`, `src/lib/planning-auth.js:18-26`). Élargissement
+  assumé du §7 : il transforme « désigner le poste qui fait foi » en
+  vérification au lieu d'une déclaration, et ferme l'angle mort du poste oublié.
+
+**Reste à la charge de Jérémie :** le nombre de postes et de navigateurs portant
+la clé, et le lieu d'archivage des JSON compte tenu du volet RGPD de
+`docs/EXPLOITATION.md`.
+
+### C3 — réparer les fractions perdues (ouvert, non commencé)
+
+**L'information est absente, pas corrompue.** La modale d'invitation lisait des
+cases qui n'existaient pas : les jours choisis par l'admin n'ont **jamais** été
+persistés, nulle part. Aucun calcul ne peut les retrouver. La réparation est
+donc une **re-saisie manuelle**, pas une migration de données.
+
+**L'ordre est contraint, et il ne peut pas être inversé :**
+
+1. **Relevé C2 d'abord.** Réparer sans relevé, c'est réparer à l'aveugle : le
+   dump est ce qui dit *qui* est touchée.
+2. **Push de C1 + `amivet-v9` ensuite.** Le bundle déployé (`amivet-v8`) porte
+   encore le défaut d'arrondi : re-saisir dessus réparerait `workingDays` en
+   corrompant `timeFraction` au passage. Vérifié sur le diff de `e09fc65` — la
+   modale de *modification* lisait bien ses propres cases et fonctionnait, mais
+   l'enregistrement passait par `parseInt('#edit-tf-pct') / 100`.
+3. **Re-saisie seulement après**, sur le bundle sain.
+
+**Condition d'arrêt, mesurable :** un second dump de `amivet_asv_roster` sur
+chaque poste ne contient plus aucune entrée avec `timeFraction: 0` ni
+`workingDays: []`.
+
+**Reste à décider au moment d'ouvrir C3 :** faut-il, en plus de la re-saisie,
+rendre bruyant ce qui était silencieux — une `timeFraction` à 0 traversant
+`?? 1.0` (`src/leave-requests.js:413`) et un `workingDays` vide traversant le
+garde `length > 0` (`src/slots.js:294`). C'est du code, donc un vrai lot avec
+TNR ; la re-saisie seule n'en est pas un.
