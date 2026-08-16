@@ -20,6 +20,11 @@ import {
   saveVetRosterCache,
 } from './state.js';
 import { apiUpsertVetPerson } from './api.js';
+import {
+  countCollaboratorFootprint,
+  requiresSecondConfirmation,
+  removalSummaryLines,
+} from './lib/collaborator-removal.js';
 import { openNotificationSettingsModal } from './pwa.js';
 import { openFeedbackModal } from './feedback.js';
 import { renderLoginScreen } from './login.js';
@@ -282,6 +287,113 @@ function openChangeMyPasswordModal() {
   box.querySelector('#pwd-new').focus();
 }
 
+/**
+ * Retire une personne de l'effectif, qu'elle soit ASV ou vétérinaire.
+ * Chercher dans les deux rosters est tout l'objet du correctif : une ligne
+ * « Sans compte » de vétérinaire salarié n'était cherchée que dans ASV_PEOPLE,
+ * donc jamais retirée de nulle part.
+ */
+function removeFromRosters(personId) {
+  if (!personId) return;
+  const asvIdx = ASV_PEOPLE.findIndex((p) => p.id === personId);
+  if (asvIdx !== -1) {
+    ASV_PEOPLE.splice(asvIdx, 1);
+    reindexPresentShades();
+    saveASVRoster();
+    return;
+  }
+  const vetIdx = PEOPLE.findIndex((p) => p.id === personId);
+  if (vetIdx !== -1) {
+    PEOPLE.splice(vetIdx, 1);
+    reindexVetPresentShades();
+    // Cache d'amorçage seulement : la table vet_roster fait foi, et c'est
+    // l'Edge Function qui y a supprimé la ligne avant qu'on arrive ici.
+    saveVetRosterCache();
+  }
+}
+
+/**
+ * Suppression définitive d'un collaborateur — chemin unique pour toutes les
+ * lignes du tableau, avec ou sans compte, ASV ou vétérinaire.
+ *
+ * Ordre imposé : purge distante d'abord, retrait local ensuite. L'inverse
+ * (le comportement historique) retirait la personne de l'écran même quand le
+ * serveur refusait, et laissait ses données en base sans plus rien pour les voir.
+ */
+function confirmAndRemoveCollaborator({ name, personId, userId }) {
+  const footprint = countCollaboratorFootprint({
+    slots: store.DATA.slots,
+    signatureKeys: store.SIGNATURES,
+    interviews: store.INTERVIEWS,
+    personId,
+  });
+  const summary = removalSummaryLines(footprint)
+    .map((l) => `• ${l}`)
+    .join('\n');
+
+  const purge = async () => {
+    try {
+      if (userId || personId) {
+        const res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
+          method: 'POST',
+          headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            action: 'purge',
+            user_id: userId || null,
+            person_id: personId || null,
+          }),
+        });
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          throw new Error(e.error || `Erreur ${res.status}`);
+        }
+      }
+      // Recompté ici, pas réutilisé depuis l'ouverture de la fenêtre : le
+      // rafraîchissement périodique remplace store.DATA toutes les 25 s, et une
+      // demi-journée saisie entre-temps survivrait à la suppression.
+      // Les chiffres affichés restent ceux du moment où la question a été posée.
+      const { planningKeys } = countCollaboratorFootprint({ slots: store.DATA.slots, personId });
+      if (planningKeys.length) {
+        planningKeys.forEach((k) => delete store.DATA.slots[k]);
+        _saveData(false);
+      }
+      removeFromRosters(personId);
+      showToast(`${name} supprimé(e) définitivement`, '🗑️');
+      store.CAL_VIEWS = _buildCalViews();
+      renderCalendarView(_activeCalendarViewKey() || 'asv-current');
+      openManageUsersModal();
+    } catch (e) {
+      showToast('Erreur suppression : ' + e.message, '⚠️');
+    }
+  };
+
+  // Second palier : une feuille d'heures signée est une preuve du temps de
+  // travail déclaré et validé. La détruire ne se fait pas d'un seul clic.
+  const confirmSigned = () =>
+    openConfirmModal({
+      title: `⚠️ ${name} a des feuilles d'heures signées`,
+      message: `Cette suppression détruit ${
+        footprint.signedMonths > 1 ? 'des feuilles d’heures signées' : 'une feuille d’heures signée'
+      } — la preuve du temps de travail déclaré et validé.\n\nIl n'existe aucun moyen de les restaurer.`,
+      confirmLabel: 'Détruire quand même',
+      danger: true,
+      onConfirm: purge,
+    });
+
+  openConfirmModal({
+    title: `⚠️ Suppression définitive de ${name} ?`,
+    message: `Seront supprimés, sans retour possible :\n\n${summary}${
+      userId ? '\n• Le compte de connexion' : ''
+    }\n• Sa ligne dans le planning et le tableau de bord`,
+    confirmLabel: 'Supprimer définitivement',
+    danger: true,
+    // openConfirmModal exécute `onConfirm(); close();` (ui.js) : ouvrir le second
+    // palier directement le ferait refermer aussitôt par ce `close()`. La
+    // micro-tâche le rouvre une fois le gestionnaire de clic terminé.
+    onConfirm: requiresSecondConfirmation(footprint) ? () => queueMicrotask(confirmSigned) : purge,
+  });
+}
+
 function openManageUsersModal() {
   const backdrop = document.getElementById('modal-backdrop');
   const box = document.getElementById('modal-box');
@@ -363,7 +475,7 @@ function openManageUsersModal() {
         <td style="font-size:12px;text-align:center;">—</td>
         <td style="white-space:nowrap;">
           <button class="btn btn-sm" data-prefill-invite="${escapeHTML(p.short)}" data-prefill-role="${p.localRole}" style="font-size:11.5px;padding:4px 8px;">📧 Inviter</button>
-          ${isAdmin ? `<button class="btn btn-sm" data-purge-local="${p.id}" data-purge-local-name="${escapeHTML(p.short)}" style="font-size:11.5px;padding:4px 8px;margin-left:4px;color:#FFFFFF;background:#B91C1C;border-color:#B91C1C;" title="Retirer du planning">💣</button>` : ''}
+          ${isAdmin ? `<button class="btn btn-sm" data-purge-local="${p.id}" data-purge-local-name="${escapeHTML(p.short)}" style="font-size:11.5px;padding:4px 8px;margin-left:4px;color:#FFFFFF;background:#B91C1C;border-color:#B91C1C;" title="Suppression définitive — efface toutes les données">💣</button>` : ''}
         </td>
       </tr>`
         )
@@ -495,53 +607,14 @@ function openManageUsersModal() {
           });
       });
 
-      // Suppression définitive (purge complète — admin uniquement)
+      // Suppression définitive (admin uniquement) — ligne avec compte
       box.querySelectorAll('[data-purge-user]').forEach((btn) => {
-        btn.onclick = () => {
-          const name = btn.dataset.purgeName;
-          const userId = btn.dataset.purgeUser;
-          const personId = btn.dataset.purgePerson || null;
-          openConfirmModal({
-            title: `⚠️ Suppression définitive de ${name} ?`,
-            message: `Cette action est IRRÉVERSIBLE et supprime :\n\n• Toutes les présences et absences saisies\n• Toutes les signatures et demandes de congé\n• Les entretiens annuels\n• Le compte de connexion\n\nLes données ne pourront pas être récupérées.`,
-            confirmLabel: `Supprimer définitivement`,
-            danger: true,
-            onConfirm: async () => {
-              try {
-                // 1. Nettoyer les données de planning en local
-                if (personId) {
-                  Object.keys(store.DATA.slots)
-                    .filter((k) => k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
-                    .forEach((k) => delete store.DATA.slots[k]);
-                  _saveData(false);
-                }
-                // 2. Retirer de l'effectif ASV si présent
-                const asvIdx = ASV_PEOPLE.findIndex((p) => p.id === personId);
-                if (asvIdx !== -1) {
-                  ASV_PEOPLE.splice(asvIdx, 1);
-                  reindexPresentShades();
-                  saveASVRoster();
-                }
-                // 3. Purge distante (tables Supabase + compte auth)
-                const res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
-                  method: 'POST',
-                  headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
-                  body: JSON.stringify({ action: 'purge', user_id: userId, person_id: personId }),
-                });
-                if (!res.ok) {
-                  const e = await res.json().catch(() => ({}));
-                  throw new Error(e.error || `Erreur ${res.status}`);
-                }
-                showToast(`${name} supprimé(e) définitivement`, '🗑️');
-                store.CAL_VIEWS = _buildCalViews();
-                renderCalendarView(_activeCalendarViewKey() || 'asv-current');
-                openManageUsersModal();
-              } catch (e) {
-                showToast('Erreur purge : ' + e.message, '⚠️');
-              }
-            },
+        btn.onclick = () =>
+          confirmAndRemoveCollaborator({
+            name: btn.dataset.purgeName,
+            personId: btn.dataset.purgePerson || null,
+            userId: btn.dataset.purgeUser,
           });
-        };
       });
 
       // Pré-remplir le formulaire d'invitation depuis une ligne locale (ASV ou vét)
@@ -554,34 +627,15 @@ function openManageUsersModal() {
         };
       });
 
-      // Purge d'un ASV local uniquement (sans compte Supabase)
+      // Suppression définitive (admin uniquement) — ligne sans compte.
+      // Même chemin que ci-dessus : c'est de leur divergence que venait le bug.
       box.querySelectorAll('[data-purge-local]').forEach((btn) => {
-        btn.onclick = () => {
-          const name = btn.dataset.purgeLocalName;
-          const personId = btn.dataset.purgeLocal;
-          openConfirmModal({
-            title: `⚠️ Retirer ${name} du planning ?`,
-            message: `Cette action efface toutes les données de planning de ${name} et retire sa ligne du calendrier.\n\nElle est IRRÉVERSIBLE.`,
-            confirmLabel: `Retirer définitivement`,
-            danger: true,
-            onConfirm: () => {
-              Object.keys(store.DATA.slots)
-                .filter((k) => k.includes(`_${personId}_`) || k.endsWith(`_${personId}`))
-                .forEach((k) => delete store.DATA.slots[k]);
-              _saveData(false);
-              const asvIdx = ASV_PEOPLE.findIndex((p) => p.id === personId);
-              if (asvIdx !== -1) {
-                ASV_PEOPLE.splice(asvIdx, 1);
-                reindexPresentShades();
-                saveASVRoster();
-              }
-              showToast(`${name} retiré(e) du planning`, '🗑️');
-              store.CAL_VIEWS = _buildCalViews();
-              renderCalendarView(_activeCalendarViewKey() || 'asv-current');
-              openManageUsersModal();
-            },
+        btn.onclick = () =>
+          confirmAndRemoveCollaborator({
+            name: btn.dataset.purgeLocalName,
+            personId: btn.dataset.purgeLocal,
+            userId: null,
           });
-        };
       });
 
       // Invitation

@@ -235,7 +235,20 @@ Deux points techniques se tranchent au moment du lot de migration, pas avant :
 1. `working_days` en `jsonb` ou en colonnes booléennes — dépend de la forme exacte du champ local.
 2. Le geste d'amorçage : bouton dédié dans les réglages, ou proposition à l'admin quand la table est vide.
 
-## 11. Traces
+## 11. Lot A — ce qui a été fait
+
+- **`src/lib/collaborator-removal.js`** (nouveau, module pur) : `countCollaboratorFootprint`, `requiresSecondConfirmation`, `removalSummaryLines`. L'appartenance d'une clé de planning est déterminée par `extractPersonIdFromKey`, pas par une recherche de sous-chaîne — l'ancienne condition `includes('_' + personId + '_')` était approximative.
+- **`tests/unit/collaborator-removal.test.js`** (nouveau) : 15 cas, dont la non-confusion `julie` / `julie-2`, le préfixe `ju` / `julie` sur les clés de signature, et le rejet d'une clé de signature malformée.
+- **`src/settings.js`** : les deux handlers 💣 fusionnés en un seul chemin (`confirmAndRemoveCollaborator`). Retrait de l'effectif via `removeFromRosters`, qui cherche dans **`PEOPLE` autant que dans `ASV_PEOPLE`** — c'était tout le bug. Purge distante **avant** retrait local. Récapitulatif chiffré, et second palier de confirmation si un mois est signé.
+- **`supabase/functions/manage-users/index.ts`** : l'action `purge` supprime désormais la ligne `vet_roster`, **en dernier** et avec échec fatal.
+
+**Deux pièges rencontrés en chemin, corrigés :**
+1. `openConfirmModal` exécute `onConfirm(); close();` ([ui.js:51](src/ui.js#L51)) : ouvrir le second palier depuis `onConfirm` le faisait refermer aussitôt. Résolu par une micro-tâche.
+2. L'empreinte de planning est **recomptée au moment de la purge**, pas réutilisée depuis l'ouverture de la fenêtre : `pullRemotePlanning` remplace `store.DATA` toutes les 25 s, et une demi-journée saisie entre-temps aurait survécu à la suppression.
+
+**Non testable automatiquement, à vérifier à la main :** l'enchaînement des deux fenêtres de confirmation exige une session admin authentifiée. Il n'existe pas de compte de test Supabase (`CLAUDE.md`), donc ni Playwright ni vitest ne peuvent le couvrir.
+
+## 12. Traces
 
 - Branche de travail : `feat/suppression-collaborateur`, créée le 16/08/2026. Merge sur `main` plus tard.
 - Note passée au contradicteur indépendant (skill AV, mode DOSSIER) le 16/08/2026 : trois objections retenues, toutes vérifiées dans le dépôt. Corrections intégrées aux §2, §3, §4, §7, §7 bis et §9.

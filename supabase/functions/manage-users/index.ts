@@ -14,7 +14,11 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) return new Response(JSON.stringify({ error: 'Non authentifié.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (!authHeader)
+      return new Response(JSON.stringify({ error: 'Non authentifié.' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -27,13 +31,19 @@ serve(async (req) => {
       headers: { apikey: anonKey, Authorization: authHeader },
     });
     if (!userRes.ok) {
-      return new Response(JSON.stringify({ error: 'Token invalide.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Token invalide.' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
     const authUser = await userRes.json();
 
     const { data: profile } = await adminClient.from('user_profiles').select('role').eq('id', authUser.id).single();
     if (!profile || profile.role !== 'admin') {
-      return new Response(JSON.stringify({ error: "Accès réservé à l'administrateur." }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: "Accès réservé à l'administrateur." }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const body = await req.json();
@@ -42,7 +52,9 @@ serve(async (req) => {
     // --- LIST ---
     if (action === 'list') {
       const [{ data: profiles }, { data: authData }] = await Promise.all([
-        adminClient.from('user_profiles').select('id,role,person_id,display_name,can_edit_vet_calendar,can_edit_all_asv,can_edit_asv_calendar'),
+        adminClient
+          .from('user_profiles')
+          .select('id,role,person_id,display_name,can_edit_vet_calendar,can_edit_all_asv,can_edit_asv_calendar'),
         adminClient.auth.admin.listUsers({ perPage: 1000 }),
       ]);
 
@@ -61,16 +73,24 @@ serve(async (req) => {
     if (action === 'invite') {
       const { email, display_name, role } = body;
       if (!email || !display_name || !role) {
-        return new Response(JSON.stringify({ error: 'email, display_name et role sont requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: 'email, display_name et role sont requis.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       // Rate limit : max 10 invitations / heure par IP (anti-spam email)
       const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
       const { data: rlOk } = await adminClient.rpc('check_rate_limit', {
-        p_key: `invite:${clientIp}`, p_max: 10, p_window_s: 3600,
+        p_key: `invite:${clientIp}`,
+        p_max: 10,
+        p_window_s: 3600,
       });
       if (!rlOk) {
-        return new Response(JSON.stringify({ error: 'Trop de tentatives. Réessayez dans une heure.' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: 'Trop de tentatives. Réessayez dans une heure.' }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       // inviteUserByEmail utilise l'infrastructure email de Supabase — aucune restriction
@@ -99,9 +119,21 @@ serve(async (req) => {
 
     // --- UPDATE ---
     if (action === 'update') {
-      const { user_id, email, display_name, role, person_id, can_edit_vet_calendar, can_edit_all_asv, can_edit_asv_calendar } =
-        body;
-      if (!user_id) return new Response(JSON.stringify({ error: 'user_id requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      const {
+        user_id,
+        email,
+        display_name,
+        role,
+        person_id,
+        can_edit_vet_calendar,
+        can_edit_all_asv,
+        can_edit_asv_calendar,
+      } = body;
+      if (!user_id)
+        return new Response(JSON.stringify({ error: 'user_id requis.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
 
       if (email !== undefined) {
         const { error: emailError } = await adminClient.auth.admin.updateUserById(user_id, { email });
@@ -117,7 +149,10 @@ serve(async (req) => {
       if (can_edit_asv_calendar !== undefined) profileUpdates.can_edit_asv_calendar = can_edit_asv_calendar;
 
       if (Object.keys(profileUpdates).length > 0) {
-        const { error: profileError } = await adminClient.from('user_profiles').update(profileUpdates).eq('id', user_id);
+        const { error: profileError } = await adminClient
+          .from('user_profiles')
+          .update(profileUpdates)
+          .eq('id', user_id);
         if (profileError) throw new Error(`Profil : ${profileError.message}`);
       }
 
@@ -129,12 +164,20 @@ serve(async (req) => {
     // --- SEND_ACCESS_EMAIL ---
     if (action === 'send_access_email') {
       const { user_id, type: emailType } = body;
-      if (!user_id) return new Response(JSON.stringify({ error: 'user_id requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (!user_id)
+        return new Response(JSON.stringify({ error: 'user_id requis.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
 
       const { data: targetUserData, error: targetError } = await adminClient.auth.admin.getUserById(user_id);
       if (targetError || !targetUserData) throw new Error('Utilisateur introuvable.');
 
-      const { data: targetProfile } = await adminClient.from('user_profiles').select('display_name').eq('id', user_id).single();
+      const { data: targetProfile } = await adminClient
+        .from('user_profiles')
+        .select('display_name')
+        .eq('id', user_id)
+        .single();
       const displayName = targetProfile?.display_name || targetUserData.user.email || 'Collaborateur';
       const targetEmail = targetUserData.user.email!;
 
@@ -157,7 +200,9 @@ serve(async (req) => {
 
       const accessLink = linkData.properties.action_link;
       const isInvite = linkType === 'invite';
-      const subject = isInvite ? 'Amivet PULSE — Votre invitation' : 'Amivet PULSE — Réinitialisation de votre mot de passe';
+      const subject = isInvite
+        ? 'Amivet PULSE — Votre invitation'
+        : 'Amivet PULSE — Réinitialisation de votre mot de passe';
       const title = isInvite ? '👋 Bienvenue sur Amivet PULSE' : '🔑 Réinitialisation de votre mot de passe';
       const bodyText = isInvite
         ? `Vous avez été invité(e) à rejoindre Amivet PULSE. Cliquez sur le bouton ci-dessous pour créer votre espace et choisir votre mot de passe.`
@@ -216,17 +261,26 @@ serve(async (req) => {
     // --- DELETE ---
     if (action === 'delete') {
       const { user_id } = body;
-      if (!user_id) return new Response(JSON.stringify({ error: 'user_id requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (!user_id)
+        return new Response(JSON.stringify({ error: 'user_id requis.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       const { error: delError } = await adminClient.auth.admin.deleteUser(user_id);
       if (delError) throw new Error(delError.message);
-      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // --- PURGE (suppression définitive : toutes les tables + compte auth) ---
     if (action === 'purge') {
       const { user_id, person_id } = body;
       if (!user_id && !person_id) {
-        return new Response(JSON.stringify({ error: 'user_id ou person_id requis.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: 'user_id ou person_id requis.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       // Supprimer toutes les données liées au person_id dans chaque table concernée
@@ -237,6 +291,14 @@ serve(async (req) => {
           adminClient.from('annual_interviews').delete().eq('person_id', person_id),
           adminClient.from('calendar_sync_tokens').delete().eq('person_id', person_id),
         ]);
+
+        // La ligne d'effectif part en DERNIER, et son échec est fatal.
+        // Tant qu'elle existe, une purge interrompue laisse une personne visible
+        // mais vidée : état incohérent, mais réparable en relançant la purge.
+        // La supprimer d'abord laisserait des données orphelines que plus aucune
+        // ligne de l'interface ne permettrait d'atteindre.
+        const { error: rosterError } = await adminClient.from('vet_roster').delete().eq('id', person_id);
+        if (rosterError) throw new Error(`Effectif vétérinaire : ${rosterError.message}`);
       }
 
       // Supprimer le profil et le compte auth
@@ -246,12 +308,20 @@ serve(async (req) => {
         if (delError) throw new Error(delError.message);
       }
 
-      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    return new Response(JSON.stringify({ error: `Action inconnue : ${action}` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: `Action inconnue : ${action}` }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   } catch (e) {
     console.error(e);
-    return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: (e as Error).message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 });
