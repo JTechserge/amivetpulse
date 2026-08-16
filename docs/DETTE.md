@@ -72,7 +72,43 @@ sont couverts par aucun test automatisé » (§ Limites acceptées) : celle-ci p
 sur le bout en bout à travers le login, celle-là sur l'accord interne au front,
 qui est atteignable sans compte de test.
 
-#### 🔴 La fraction de temps de Carla est figée à 7,25 h dans le localStorage de production
+#### L'interface ne sait pas saisir la fraction de Carla, ni corriger une fraction fausse
+
+**Ce qui manque.** Aucun chemin de l'écran « Temps de travail contractuel » ne
+produit la fraction contractuelle de Carla — `(7 + 25/60) / 35 = 0,2119047…`.
+« Personnalisé » n'accepte qu'un pourcentage **entier**, donc au mieux `0,21`. Et
+la garde `unchanged` de `resolveTimeFraction` rend la fraction courante
+**intacte** dès que le pourcentage arrondi et les jours n'ont pas bougé :
+re-saisir 21 % sur une valeur fausse de `0,20714` ne change donc rien,
+silencieusement. « Certains jours » + samedi, lui, calcule le samedi avec
+`ASV_STD_SAT_SECOND` (7,0 h) et non `ASV_STD_SAT_CARLA` (7 h 25) : il écrirait
+`0,2` et un `workingDays: [6]` — plus faux qu'avant.
+
+**Où.** `src/lib/time-fraction.js` : `fractionFromPercent` (lignes 122-127),
+`fractionFromDays` (106-114), et la garde `unchanged` de `resolveTimeFraction`
+(163-170). Écran correspondant : `buildTimeFractionUI` (`src/settings.js:748-775`),
+dont le champ est un `number` `min=10 step=5`.
+
+**Conséquence.** Le contrat d'une ASV qui ne tombe pas sur un pourcentage entier
+n'est pas saisissable dans l'application, et une fraction fausse qui s'affiche
+sur le même pourcentage arrondi que la valeur juste n'est **pas réparable par la
+fiche**. C'est exactement ce qui s'est passé pour Carla : la réparation du 16/08
+a dû se faire à la console, en supprimant son entrée du `localStorage` pour
+laisser `loadASVRoster()` la ré-amorcer depuis la constante. La garde `unchanged`
+reste un bon choix — elle protège la valeur précise contre une saisie qui ne la
+distingue pas — mais elle n'a aucune porte de sortie.
+
+**Coût de la laisser.** Nul tant que Carla est la seule ASV à contrat non rond et
+que sa valeur est juste, ce qui est le cas depuis le 16/08. Il devient bloquant à
+deux échéances : l'arrivée d'une ASV à horaire atypique, et la migration du
+roster vers la table partagée, qui met la donnée côté serveur et retire le
+recours à la console sur `localStorage`. Le fermer suppose une saisie en heures
+et minutes plutôt qu'en pourcentage, ou un chemin explicite « rétablir la valeur
+contractuelle » — un lot en soi, pas une retouche.
+
+## Clos par le chantier « migration du roster ASV vers table partagée » (2026-08-16)
+
+### 🔴 La fraction de temps de Carla est figée à 7,25 h dans le localStorage de production
 
 **Ce qui est faux.** La `timeFraction` de Carla vaut `0.20714285714285716` sur le
 poste relevé, soit exactement `7.25 / 35`. Sa valeur contractuelle est
@@ -116,6 +152,16 @@ depuis son affichage arrondi) : ici la valeur est `0,207`, elle vient d'un bug
 antérieur et distinct. Conséquence pour le lot C3a : une règle de détection qui
 cherche « `timeFraction` présent et ≤ 0 » **ne voit pas** ce cas, qui est
 pourtant le seul défaut réellement constaté en production à ce jour.
+
+**Réparé le 16/08/2026 (lot C3b).** Sur le poste qui fait foi (MacBook Air /
+Chrome), l'entrée `carla` a été retirée du tableau `amivet_asv_roster` à la
+console, puis l'application rouverte : `loadASVRoster()` (`src/state.js:69-82`)
+l'a ré-amorcée depuis la constante. Vérifié sur place — `timeFraction` vaut
+`0.2119047619047619`, strictement égal à `(7 + 25/60) / 35`, et `saturdayOnly`
+est préservé. La re-saisie par la fiche, telle que prévue au cadrage, s'est
+révélée **impossible** : voir la dette ouverte « L'interface ne sait pas saisir
+la fraction de Carla ». Aucun rattrapage de paie n'était dû, aucune paie ASV
+n'ayant jamais été calculée depuis cet outil.
 
 ## Clos par le chantier « solde de la dette de la suppression définitive » (2026-08-16)
 
