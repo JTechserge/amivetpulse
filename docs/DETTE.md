@@ -39,6 +39,29 @@ projet Supabase de production — un arbitrage de Jérémie sur un risque
 d'exploitation, pas un lot de développement. Elle reste donc ouverte, seule,
 tant que cet arbitrage n'est pas rendu.
 
+#### Supprimer une ASV ne vaut que pour le poste où on appuie
+
+**Ce qui est faux.** Le 💣 retire la personne de `PEOPLE` **et** de `ASV_PEOPLE`
+depuis le lot A, mais `ASV_PEOPLE` n'est persisté nulle part ailleurs que dans
+le `localStorage` du poste. Une ASV supprimée reste donc présente sur tous les
+autres appareils, et rien ne viendra les corriger : il n'y a pas de source
+partagée à synchroniser.
+
+**Où.** `ASV_ROSTER_KEY` (`src/config.js:146`), lu et écrit par `src/state.js`.
+Aucune table `asv_roster` n'existe dans `supabase/migrations/`.
+
+**Conséquence.** Une personne partie continue d'apparaître dans l'effectif ASV
+des autres postes, donc dans les écrans qui s'en servent. L'admin croit la
+suppression faite — elle l'est, sur son écran. Pour un vétérinaire le problème
+ne se pose pas : `vet_roster` est partagée.
+
+**Coût de la laisser.** Contournement immédiat et sûr : refaire le geste sur
+chaque poste, ce qui est écrit dans `docs/EXPLOITATION.md`. Le coût réel est
+qu'aucun correctif sur le 💣 ne réglera ce point — il ne se ferme que par la
+migration du roster ASV vers une table partagée, chantier sorti du périmètre le
+16/08/2026 (§8 amendé de la note). Tant qu'il n'est pas ouvert, cette dette est
+**la limite structurelle** de la suppression d'un collaborateur.
+
 ### Constatée par le chantier « migration du roster ASV vers table partagée » (2026-08-16)
 
 #### Rien n'oblige les modales à passer par le sélecteur partagé

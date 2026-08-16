@@ -192,6 +192,25 @@ Le geste d'amorçage reste réversible **tant qu'aucun autre poste n'a rechargé
 8. Commits locaux, un par lot, disant quoi et pourquoi. Le lot de migration signale explicitement qu'il touche aux données de temps de travail.
 9. Passation FS écrite.
 
+> **Amendement du 16/08/2026 (lot D), arbitré par Jérémie.** Les points **1, 2
+> et 4** supposent la table partagée `asv_roster`. Elle **n'a pas été écrite** :
+> le lot C a livré ses préalables (correction d'arrondi C1, relevé C2,
+> réparation et garde C3a/C3b) et s'est arrêté là. La migration sort du
+> périmètre de ce chantier et devient un **chantier à part entière**, à ouvrir
+> avec sa propre Phase 0 — c'était déjà l'intention du §9 (« peut vivre sur sa
+> propre branche »), elle est ici rendue explicite.
+>
+> Ce chantier se clôt donc sur ce qu'il a réellement livré : un 💣 unifié qui
+> traite les deux types de ligne, une purge distante étendue à neuf tables plus
+> le compte, l'anonymisation des annonces, la règle de suppression extraite et
+> testée, et deux tests de contrat. **La limite qui subsiste** — supprimer une
+> ASV ne vaut que pour le poste où le geste est fait — est écrite dans
+> `docs/EXPLOITATION.md` et consignée en dette, elle n'est pas passée sous
+> silence.
+>
+> Les points 1, 2 et 4 restent donc **non tenus**, volontairement, et repris
+> tels quels par le futur chantier de migration.
+
 **À la charge de Jérémie :**
 - Appliquer la migration `asv_roster` dans Supabase (SQL Editor), après validation du SQL.
 - **Amorcer le roster depuis son poste**, celui dont l'effectif ASV fait foi — geste unique et irréversible en pratique.
@@ -275,6 +294,7 @@ Les 9 tables de `PURGE_TARGETS` ont été confrontées aux migrations avant le d
 - Branche du lot C : `feat/asv-roster`, fusionnée dans `main` en fast-forward le 16/08/2026. **Non poussée** — voir §14.
 - Cadrage du lot C2 passé au contradicteur indépendant (AV, mode DOSSIER) le 16/08/2026 : trois objections, les quatre affirmations vérifiables confirmées dans le dépôt. Le cadrage a été révisé, pas défendu — §14.
 - Contrôle de périmètre (skill POLICE) le 16/08/2026 sur le lot C1 : cap tenu sur les cinq mesures. Deux livrables hors découpage identifiés dans le cadrage C2, rendus à l'arbitrage — §14.
+- Lot D le 16/08/2026 : documentation d'exploitation et de sécurité écrites, §8 amendé après constat que `asv_roster` n'existe pas — §15.
 
 ## 14. Lot C — la migration `asv_roster`
 
@@ -362,7 +382,23 @@ attendu, `0,21` = corrompu), **et** tout `timeFraction: 0`, **et** tout
 la clé, et le lieu d'archivage des JSON compte tenu du volet RGPD de
 `docs/EXPLOITATION.md`.
 
-### C3 — réparer les fractions perdues (ouvert, non commencé)
+### C3 — réparer les fractions perdues (clos le 16/08/2026)
+
+> **Ce qui suit était le cadrage. Il a été dépassé par les faits** — le texte
+> d'origine est conservé tel quel, la suite est dans `docs/NOTE-ROSTER-ASV.md`.
+>
+> - **C3b (réparation)** : la re-saisie par la fiche s'est révélée **impossible**
+>   — « Personnalisé » n'accepte qu'un pourcentage entier, et « Certains jours »
+>   aurait écrit une valeur fausse pour Carla. Réparé à la console : entrée
+>   retirée du `localStorage`, ré-amorcée depuis la constante du code. La valeur
+>   vient donc du code, pas d'un nombre tapé.
+> - **C3a (prévention)** : recentré sur une garde en écriture
+>   (`timeFractionRejectReason`), posée **avant l'appel réseau** dans les deux
+>   modales. Les marqueurs d'affichage envisagés ci-dessous ont été abandonnés :
+>   le défaut qu'ils auraient signalé était réparé, et l'écran ne sait pas le
+>   corriger.
+> - **Reste ouvert en dette** : l'interface ne sait toujours pas saisir une
+>   fraction non entière (`docs/DETTE.md`).
 
 **L'information est absente, pas corrompue.** La modale d'invitation lisait des
 cases qui n'existaient pas : les jours choisis par l'admin n'ont **jamais** été
@@ -389,3 +425,36 @@ rendre bruyant ce qui était silencieux — une `timeFraction` à 0 traversant
 `?? 1.0` (`src/leave-requests.js:413`) et un `workingDays` vide traversant le
 garde `length > 0` (`src/slots.js:294`). C'est du code, donc un vrai lot avec
 TNR ; la re-saisie seule n'en est pas un.
+
+## 15. Lot D — documentation et passation (16/08/2026)
+
+Aucun fichier de `src/`, `supabase/` ni `tests/` touché. Palier 2 vert avant
+commit : **486 tests / 19 fichiers**, lint à zéro warning.
+
+- **`docs/EXPLOITATION.md`** — section « Suppression définitive d'un
+  collaborateur (bouton 💣) » : l'irréversibilité en premier, la liste exacte de
+  ce qui est détruit dans son **ordre d'exécution réel** (neuf tables en
+  parallèle, puis les annonces anonymisées, puis le compte, puis `vet_roster` en
+  dernier), pourquoi cet ordre n'est pas cosmétique, ce qu'il faut vérifier
+  avant et après. Plus une sous-section « ce que le bouton ne fait pas » sur la
+  suppression d'ASV limitée au poste courant. Le § RGPD renvoie désormais à
+  cette section pour le droit à l'effacement (art. 17), avec ses deux réserves :
+  les annonces survivent, les sauvegardes aussi.
+- **`docs/SECURITE.md`** — section « action `purge` » : le contrôle de rôle est
+  côté serveur, le RLS est contourné par conception via la `service_role` (donc
+  le contrôle de rôle est le seul rempart), l'absence de journal d'audit est
+  assumée. Deux lignes ajoutées aux limites connues.
+- **§8 amendé, §14 clos, §13 tracé** — voir ci-dessus.
+- **Dette consignée** : la suppression d'une ASV ne vaut que pour un poste.
+
+**Erreur rattrapée en route** : la première rédaction de la table plaçait
+`vet_roster` avant le compte `auth`. C'est l'inverse dans le code, et l'inverse
+volontairement — corrigé après relecture de la fonction, pas après coup.
+
+**À la charge de Jérémie, ce qui reste :**
+1. Vérifier en production, sur la ligne « test vétérinaire », que la purge vide
+   les neuf tables et que l'annonce survit signée « Ancien collaborateur ».
+   Aucun test ne peut l'établir (pas de compte de test Supabase).
+2. Décider si les trois commits de code de C3a partent en production.
+3. Ouvrir, quand il le voudra, le chantier de migration `asv_roster` — avec sa
+   propre Phase 0.

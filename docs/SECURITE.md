@@ -133,9 +133,39 @@ npx supabase functions deploy <nom> --project-ref ubowqtowyqmpraoxbaoo
 
 ---
 
+## Suppression définitive d'un collaborateur (action `purge`)
+
+Chantier « suppression définitive d'un collaborateur » (16/08/2026). Procédure
+d'exploitation et liste exacte de ce qui est détruit : `docs/EXPLOITATION.md`.
+
+**Contrôle d'accès.** L'action `purge` de `manage-users` vérifie le jeton de
+l'appelant, puis lit son rôle dans `user_profiles` : tout ce qui n'est pas
+`admin` est refusé avant la moindre suppression
+(`supabase/functions/manage-users/index.ts`). L'interface ne fait qu'afficher le
+bouton — **le contrôle est côté serveur, pas côté écran**.
+
+**Le RLS est contourné, par conception.** La purge s'exécute avec la
+`SUPABASE_SERVICE_ROLE_KEY` : elle traverse toutes les policies. C'est
+nécessaire — supprimer les lignes d'autrui dans neuf tables, puis un compte
+`auth` — et c'est précisément pourquoi le contrôle de rôle ci-dessus est le seul
+rempart réel.
+
+**Irréversibilité assumée.** Aucune corbeille, aucun `undo`, **aucun journal
+d'audit** : rien ne trace qui a supprimé qui, ni quand. Les garde-fous sont en
+amont — double palier de confirmation dès qu'un mois est signé (preuve
+juridique), et la sauvegarde chiffrée quotidienne comme unique voie de retour.
+
+**Vérification.** `scripts/verif-purge-collaborateur.sql`, à rejouer après toute
+migration touchant une table purgée. C'est la seule preuve d'effet réel : le
+test de contrat prouve l'intention du code, pas le comportement de la base.
+
+---
+
 ## Limites connues (points acceptés)
 
 | Limite | Raison | Mitigation |
 |---|---|---|
 | `frame-ancestors` impossible | Limitation structurelle GitHub Pages (meta-CSP ne couvre pas cet en-tête) | Évaluer lors d'une migration vers Cloudflare Pages ou Netlify |
+| Aucun journal d'audit des suppressions | Décision du 16/08/2026 (§6 de la note) : pas de corbeille, pas d'`undo`, pas de trace | Double palier de confirmation si un mois est signé + sauvegarde quotidienne |
+| La purge n'a pas de preuve d'effet automatisée | Aucun compte de test Supabase (`CLAUDE.md`) : ni vitest ni Playwright ne franchissent le login | `scripts/verif-purge-collaborateur.sql` en manuel ; depuis le lot B, un échec de purge est bruyant et bloquant |
 | `sessionStorage` pour les tokens Supabase | Défaut du SDK Supabase JS, lisible par un XSS résiduel | Acceptable avec la CSP et `no-unsanitized` en place ; à reconsidérer si le périmètre XSS s'étend |
