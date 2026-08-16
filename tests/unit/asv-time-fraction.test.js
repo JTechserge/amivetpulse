@@ -21,6 +21,7 @@ import {
   percentForDisplay,
   presetForFraction,
   resolveTimeFraction,
+  timeFractionRejectReason,
 } from '../../src/lib/time-fraction.js';
 
 const carla = () => ASV_PEOPLE.find((p) => p.id === 'carla');
@@ -94,6 +95,47 @@ describe('resolveTimeFraction — une valeur non touchée ressort intacte', () =
     });
     expect(r.fraction).toBeGreaterThan(current);
     expect(r.workingDays).toEqual([1, 2, 3, 4]);
+  });
+});
+
+describe('timeFractionRejectReason — une fraction nulle ne s\'enregistre pas', () => {
+  it('refuse « Certains jours » sans aucun jour coché, à l\'invitation', () => {
+    // Personne neuve : aucune valeur courante à préserver, donc rien n'amortit
+    // le zéro. C'est le seul chemin qui produit une fraction nulle.
+    const reason = timeFractionRejectReason(resolveTimeFraction({ preset: 'days', checkedDays: [] }));
+    expect(reason).toBeTypeOf('string');
+    expect(reason.length).toBeGreaterThan(0);
+  });
+
+  it('refuse le même cas à l\'édition d\'une personne existante', () => {
+    const cur = carla().timeFraction;
+    const reason = timeFractionRejectReason(
+      resolveTimeFraction({ preset: 'days', checkedDays: [], currentFraction: cur, currentWorkingDays: null })
+    );
+    expect(reason).toBeTypeOf('string');
+  });
+
+  it('accepte dès qu\'un jour est coché', () => {
+    expect(timeFractionRejectReason(resolveTimeFraction({ preset: 'days', checkedDays: [6] }))).toBeNull();
+  });
+
+  it('accepte les trois presets fixes', () => {
+    for (const preset of ['full', 'three_quarter', 'half']) {
+      expect(timeFractionRejectReason(resolveTimeFraction({ preset, checkedDays: [] }))).toBeNull();
+    }
+  });
+
+  it('accepte une valeur existante ressortie intacte', () => {
+    const cur = carla().timeFraction;
+    const kept = resolveTimeFraction({ preset: 'custom', percentValue: '21', currentFraction: cur });
+    expect(kept.fraction).toBe(cur);
+    expect(timeFractionRejectReason(kept)).toBeNull();
+  });
+
+  it('ne refuse rien quand il n\'y a rien à valider', () => {
+    // Aucun preset actif : la modale n\'écrit pas de fraction, ce n\'est pas
+    // une saisie fautive.
+    expect(timeFractionRejectReason(null)).toBeNull();
   });
 });
 

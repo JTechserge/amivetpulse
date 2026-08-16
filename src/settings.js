@@ -34,6 +34,7 @@ import {
   percentForDisplay,
   presetForFraction,
   resolveTimeFraction,
+  timeFractionRejectReason,
 } from './lib/time-fraction.js';
 import { openNotificationSettingsModal } from './pwa.js';
 import { openFeedbackModal } from './feedback.js';
@@ -663,6 +664,16 @@ function openManageUsersModal() {
           errEl.style.display = 'block';
           return;
         }
+        // Valider le temps de travail AVANT d'inviter : l'invitation part sur le
+        // réseau et n'est pas rattrapable, alors que la fraction ne s'écrit
+        // qu'après. Refuser ici évite un compte créé sans temps de travail.
+        const inviteTf = role === 'asv' ? _readInviteTimeFractionUI(box) : null;
+        const inviteTfReason = timeFractionRejectReason(inviteTf);
+        if (inviteTfReason) {
+          errEl.textContent = inviteTfReason;
+          errEl.style.display = 'block';
+          return;
+        }
         box.querySelector('#invite-btn').disabled = true;
         try {
           const res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
@@ -702,19 +713,12 @@ function openManageUsersModal() {
               }
               personId = asvPerson?.id || null;
               // Appliquer le temps de travail choisi
-              if (asvPerson) {
-                const activeBtn = box.querySelector('.invite-tf-btn.active');
-                if (activeBtn) {
-                  // Personne neuve : aucune valeur courante à préserver.
-                  // Scope 'invite' — lire les cases de l'ÉDITION ici écrirait 0.
-                  const tfResult = resolveTimeFraction({
-                    preset: activeBtn.dataset.tf,
-                    checkedDays: _checkedDays(box, 'invite'),
-                  });
-                  asvPerson.timeFraction = tfResult.fraction;
-                  asvPerson.workingDays = tfResult.workingDays;
-                  saveASVRoster();
-                }
+              // `inviteTf` a été lu ET validé avant l'appel réseau : une fraction
+              // nulle n'arrive jamais jusqu'ici.
+              if (asvPerson && inviteTf) {
+                asvPerson.timeFraction = inviteTf.fraction;
+                asvPerson.workingDays = inviteTf.workingDays;
+                saveASVRoster();
               }
             }
             if (personId) {
@@ -836,6 +840,21 @@ function _readTimeFractionUI(box, personId) {
   });
 }
 
+/**
+ * Idem pour la modale d'INVITATION. Personne neuve : aucune valeur courante à
+ * préserver, et pas de saisie au pourcentage dans cette modale (quatre presets
+ * seulement). Scope 'invite' — lire les cases de l'ÉDITION ici rendrait une
+ * liste vide, donc une fraction 0.
+ */
+function _readInviteTimeFractionUI(box) {
+  const active = box.querySelector('.invite-tf-btn.active');
+  if (!active) return null;
+  return resolveTimeFraction({
+    preset: active.dataset.tf,
+    checkedDays: _checkedDays(box, 'invite'),
+  });
+}
+
 function openEditUserModal(userId, users, onBack) {
   const user = users.find((u) => u.id === userId);
   if (!user) return;
@@ -945,6 +964,15 @@ function openEditUserModal(userId, users, onBack) {
         return;
       }
     }
+    // Même garde qu'à l'invitation, et pour la même raison : la mise à jour part
+    // sur le réseau avant que la fraction soit écrite en local.
+    const tfResult = role === 'asv' && personId ? _readTimeFractionUI(box, personId) : null;
+    const tfReason = timeFractionRejectReason(tfResult);
+    if (tfReason) {
+      errEl.textContent = tfReason;
+      errEl.style.display = 'block';
+      return;
+    }
     box.querySelector('#edit-save').disabled = true;
     try {
       const payload = {
@@ -977,7 +1005,6 @@ function openEditUserModal(userId, users, onBack) {
       // Mettre à jour le temps de travail contractuel en local (ASV uniquement)
       if (role === 'asv' && personId) {
         const lastNameInput = box.querySelector('#edit-lastname');
-        const tfResult = _readTimeFractionUI(box, personId);
         const p = personOf(personId);
         if (p) {
           if (lastNameInput !== null) p.lastName = lastNameInput.value.trim() || undefined;

@@ -126,6 +126,29 @@ export function fractionFromPercent(rawValue, currentFraction) {
   return parsed / 100;
 }
 
+/**
+ * La raison de REFUSER une saisie de temps de travail, ou `null` si elle est
+ * enregistrable. Miroir de `colorRejectReason` : la validation se fait avant
+ * l'appel réseau, pas au moment d'écrire.
+ *
+ * Une fraction nulle n'est pas un contrat de travail, c'est une saisie
+ * incomplète — « Certains jours » sans aucun jour coché. Écrite, elle traverse
+ * les CP acquis et la cible de modulation sans faire de bruit : zéro congé
+ * acquis, et l'alerte « heures à régulariser » qui ne se déclenche jamais
+ * (`src/dashboard-stats.js:673`, gardée par `target > 0`).
+ *
+ * `result` à `null` — aucun preset actif, donc rien à écrire — n'est pas un
+ * refus : il n'y a simplement rien à valider.
+ */
+export function timeFractionRejectReason(result) {
+  if (!result) return null;
+  const f = result.fraction;
+  if (typeof f !== 'number' || !Number.isFinite(f) || f <= 0) {
+    return 'Temps de travail incomplet : cochez au moins un jour travaillé.';
+  }
+  return null;
+}
+
 function sameDays(a, b) {
   const x = Array.isArray(a) ? [...a].sort() : null;
   const y = Array.isArray(b) ? [...b].sort() : null;
