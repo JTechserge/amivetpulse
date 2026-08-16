@@ -101,16 +101,20 @@ CREATE POLICY "admin delete feedback" ON feedback
 
 
 -- ═════════════════════════════════════════════════════════════════════════════
--- VÉRIFICATION D'ISOLATION — à exécuter À LA MAIN après application.
+-- VÉRIFICATION D'ISOLATION
 --
 -- Il n'existe pas de compte de test Supabase sur ce projet (cf. CLAUDE.md) :
 -- aucun test automatisé ne peut prouver que Postgres applique bien ces
 -- politiques. `tests/unit/feedback-rls.test.js` verrouille le TEXTE des
--- politiques contre un affaiblissement ; seul le bloc ci-dessous prouve leur
--- EFFET. Le faire une fois, après l'application de la migration.
+-- politiques contre un affaiblissement ; seul un essai sous une vraie identité
+-- prouve leur EFFET.
 --
--- Dans le SQL Editor, en remplaçant les UUID par deux comptes réels distincts
--- (un ASV, un admin) :
+-- ➜ Utiliser `scripts/feedback-rls-check.sql` : il fait tout ce qui suit
+--   automatiquement, choisit les comptes lui-même et annule tout par ROLLBACK.
+--
+-- Le détail ci-dessous est conservé pour comprendre ce qui est vérifié, et
+-- pour le cas où l'on voudrait rejouer une étape isolément avec ses propres
+-- UUID (un ASV, un admin) :
 --
 --   -- 1. Les politiques sont bien en place et aucune n'est ouverte
 --   SELECT policyname, cmd, qual, with_check
