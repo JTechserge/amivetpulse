@@ -4,6 +4,7 @@ import { escapeHTML } from './utils.js';
 import { store } from './store.js';
 import { triggerPushNotification } from './pwa.js';
 import { showToast } from './ui.js';
+import { REMOVED_AUTHOR_ID, REMOVED_AUTHOR_LABEL } from './lib/collaborator-removal.js';
 
 // Module Annonces — chargement + badge
 // ----------------------------------------------------------------
@@ -109,6 +110,11 @@ export function renderAnnounces() {
     return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
   }
   function authorName(id) {
+    // Auteur supprimé : l'annonce reste, la signature devient générique.
+    // Un identifiant inconnu qui n'est PAS ce marqueur continue de s'afficher
+    // tel quel — c'est un défaut de données, pas un départ, et le masquer
+    // le rendrait indiagnosticable.
+    if (id === REMOVED_AUTHOR_ID) return REMOVED_AUTHOR_LABEL;
     const p = allPeople().find((p) => p.id === id);
     return p ? p.short || p.name : id;
   }
