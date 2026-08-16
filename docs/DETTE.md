@@ -72,6 +72,40 @@ sont couverts par aucun test automatisé » (§ Limites acceptées) : celle-ci p
 sur le bout en bout à travers le login, celle-là sur l'accord interne au front,
 qui est atteignable sans compte de test.
 
+#### 🔴 La fraction de temps de Carla est figée à 7,25 h dans le localStorage de production
+
+**Ce qui est faux.** La `timeFraction` de Carla vaut `0.20714285714285716` sur le
+poste relevé, soit exactement `7.25 / 35`. Sa valeur contractuelle est
+`ASV_STD_SAT_CARLA / 35 = (7 + 25/60) / 35 = 0,2119047…`, soit 7 h 25. C'est la
+confusion « 7h25 » / « 7,25 h » corrigée **dans le code** le 03/08 par `5475ef0` —
+mais ce correctif n'a jamais touché les données déjà écrites.
+
+**Où.** Clé `amivet_asv_roster` du `localStorage`, entrée `carla`, sur tout poste
+amorcé avant le 03/08/2026. Relevé du 16/08 archivé hors dépôt sous
+`roster-macbookair-chrome-2026-08-16.json`. Le repli de `src/state.js:79` dérive
+désormais la valeur correctement, mais il ne s'exécute que si la clé est absente
+ou si Carla manque du tableau — donc jamais sur un poste déjà amorcé.
+
+**Conséquence.** 2,247 % de CP acquis en moins pour Carla, en continu depuis le
+03/08 au moins : `timeFraction` proratise les congés payés acquis et la cible
+annuelle du tableau de bord. **Défaut de paie actif en production**, et non un
+chemin de régression comme la dette précédente. Il est invisible à l'œil : la
+valeur est positive, plausible, et l'interface ne l'affiche qu'arrondie à 21 %.
+La feuille de présence signée, elle, a bien été réparée par `5475ef0` — le dégât
+restant est borné aux CP acquis et à la cible de modulation.
+
+**Coût de la laisser.** Il s'accumule à chaque mois de CP acquis, et devient plus
+difficile à dater : une fois C1 déployé, l'archive du 16/08 est la seule pièce
+qui prouve que la valeur précédait le push. La réparation est triviale en
+elle-même — réécrire la fraction dérivée de la constante — mais elle relève du
+lot C3b (re-saisie après déploiement), pas d'une migration.
+
+**Ne pas confondre** avec le défaut du lot C1 (`0,21`, fraction reconstruite
+depuis son affichage arrondi) : ici la valeur est `0,207`, elle vient d'un bug
+antérieur et distinct. Conséquence pour le lot C3a : une règle de détection qui
+cherche « `timeFraction` présent et ≤ 0 » **ne voit pas** ce cas, qui est
+pourtant le seul défaut réellement constaté en production à ce jour.
+
 ## Clos par le chantier « solde de la dette de la suppression définitive » (2026-08-16)
 
 ### 🔴 Rien ne relie les listes de sauvegarde et de restauration aux migrations

@@ -11,11 +11,21 @@ sans copie ni journal.
 ## L'ordre compte
 
 1. **Ce relevé d'abord**, sur tous les postes.
-2. Le déploiement de C1 (`CACHE_VERSION` → `amivet-v9`) **ensuite**.
+2. Le déploiement de C1 — c'est-à-dire le `git push` — **ensuite**.
 3. La re-saisie des fractions perdues (lot C3) **après** le déploiement.
 
 Relever après avoir déployé ferait perdre la qualité de preuve de l'archive : on
 ne pourrait plus dire si une valeur suspecte précédait ou suivait le push.
+
+**Ce qui déploie, c'est le `git push`, et rien d'autre.** `.github/workflows/deploy.yml`
+se déclenche sur tout push vers `main` touchant `src/**`, `public/**`,
+`vite.config.js` ou les fichiers de dépendances. Ne pas prendre le bump de
+`CACHE_VERSION` pour un second verrou : le service worker n'a aucune branche
+pour `request.destination === 'script'` (`public/sw.js:88-118`) — les modules JS
+ne sont donc pas interceptés du tout — et le HTML est servi network-first
+(`public/sw.js:99`). Le bump reste utile pour les assets non hashés servis
+cache-first (icônes, `manifest.json`), mais il ne retient pas la livraison. Rien
+d'automatique ne protège l'ordre ci-dessus : seule cette consigne le fait.
 
 ## ⚠️ Ne pas ouvrir l'application pour relever
 
