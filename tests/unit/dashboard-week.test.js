@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { getWeekStart, getASVTimeFraction, getASVQuota } from '../../src/dashboard-stats.js';
-import { ASV_STD_SAT_CARLA } from '../../src/config.js';
+import { ASV_STD_SAT_CARLA } from '../../src/lib/pay-constants.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. getWeekStart(date) — retourne le lundi de la semaine

@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { CP_DAYS_PER_MONTH } from '../../src/config.js';
+import { CP_DAYS_PER_MONTH } from '../../src/lib/pay-constants.js';
 
 // Reproduit la logique de getCPAcquired sans dépendre du DOM ni de `today`.
 function simulateCPAcquired(person, startISO, endISO){

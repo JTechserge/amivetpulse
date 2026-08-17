@@ -1,4 +1,5 @@
-import { ASV_PEOPLE, MONTH_NAMES, WEEKLY_MAX_HOURS, personOf } from './config.js';
+import { ASV_PEOPLE, MONTH_NAMES, personOf } from './config.js';
+import { WEEKLY_MAX_HOURS } from './lib/pay-constants.js';
 import { escapeHTML, fmtISO, isSunday, holidayName, formatHHMM, daysInMonth, getWeekMondayDate } from './utils.js';
 import { store } from './store.js';
 import { showToast, openConfirmModal } from './ui.js';

@@ -5,13 +5,15 @@ import {
   SLOTS,
   getCurrentYear,
   personOf,
+  MONTH_NAMES,
+  MONTH_SHORT,
+} from './config.js';
+import {
   ASV_STD_SAT_CARLA,
   ANNUAL_FULLTIME_HOURS,
   HALFDAY_HOURS,
   WEEKLY_MAX_HOURS,
-  MONTH_NAMES,
-  MONTH_SHORT,
-} from './config.js';
+} from './lib/pay-constants.js';
 import {
   escapeHTML,
   formatNum,

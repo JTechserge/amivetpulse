@@ -18,7 +18,7 @@
    rien changé, et la valeur courante est rendue INTACTE.
    ================================================================ */
 
-import { ASV_STD_SAT_SECOND, ASV_STD_WEEKDAY_AVG } from '../config.js';
+import { ASV_STD_SAT_SECOND, ASV_STD_WEEKDAY_AVG } from './pay-constants.js';
 
 /** Durée hebdomadaire d'un temps plein, dénominateur de toute fraction. */
 export const FULLTIME_WEEKLY_HOURS = 35;

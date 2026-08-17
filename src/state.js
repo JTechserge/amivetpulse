@@ -10,9 +10,9 @@ import {
   ASV_ROSTER_KEY,
   VET_ROSTER_KEY,
   PERSON_COLORS_KEY,
-  ASV_STD_SAT_CARLA,
   allPeople,
 } from './config.js';
+import { ASV_STD_SAT_CARLA } from './lib/pay-constants.js';
 
 // ----------------------------------------------------------------
 // Roster ASV dynamique

@@ -1,4 +1,5 @@
-import { ASV_PEOPLE, ASV_STD_SAT_CARLA, SLOTS, personOf, isNonPartnerVet } from './config.js';
+import { ASV_PEOPLE, SLOTS, personOf, isNonPartnerVet } from './config.js';
+import { ASV_STD_SAT_CARLA } from './lib/pay-constants.js';
 import { store } from './store.js';
 
 /* ---------- Clés de stockage ---------- */

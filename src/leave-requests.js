@@ -6,9 +6,9 @@ import {
   SLOT_LABELS,
   getCurrentYear,
   personOf,
-  CP_DAYS_PER_MONTH,
   SUPABASE_URL,
 } from './config.js';
+import { CP_DAYS_PER_MONTH } from './lib/pay-constants.js';
 import { escapeHTML, daysInMonth, fmtISO, formatFR } from './utils.js';
 import { store } from './store.js';
 import { supabaseHeaders } from './auth.js';

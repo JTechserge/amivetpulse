@@ -12,6 +12,44 @@ une dette : c'est un défaut bloquant, signalé comme tel.
 
 ## Dette restante
 
+### Constatée par le chantier « correction automatique des signalements » (2026-08-17)
+
+#### Des constantes de paie sans aucune occurrence dans les tests
+
+- **Quoi** : `HALFDAY_HOURS`, `CLINIC_M_H`, `CLINIC_AM_H` (désormais dans
+  `src/lib/pay-constants.js`) n'apparaissent dans aucun fichier de `tests/`.
+- **Où** : `src/lib/pay-constants.js` ; seul consommateur de `HALFDAY_HOURS` :
+  `src/dashboard-stats.js`.
+- **Conséquence** : une valeur de paie modifiée là passe les 486 tests en vert —
+  régression de paie silencieuse possible. Touche la paie : défaut signalé
+  comme bloquant, pas seulement consigné.
+- **Coût de laisser** : nul à court terme si le lot 3 du chantier (la frontière
+  testée sur `pay-constants.js`) est livré ; rédhibitoire si le chantier
+  s'arrête avant le lot 3.
+
+#### Quatre constantes exportées que rien n'utilise
+
+- **Quoi** : `CLINIC_HOURS`, `CLINIC_M_H`, `CLINIC_AM_H` et
+  `CP_REFERENCE_START_MONTH` sont exportées et utilisées nulle part.
+- **Où** : `src/lib/pay-constants.js` (déplacées telles quelles depuis
+  `src/config.js` par le lot 1, qui était un déplacement pur).
+- **Conséquence** : lecteur et outillage croient à une couverture qui n'existe
+  pas ; modifier ces valeurs ne change rien à l'application, ce qui masque
+  l'endroit où les horaires cliniques sont réellement codés.
+- **Coût de laisser** : faible ; à trancher (supprimer ou brancher) lors du
+  lot 3 qui posera la frontière sur ce fichier.
+
+#### Le roster ASV par défaut donne à Carla une teinte inexistante
+
+- **Quoi** : `present: PRESENT_SHADES[3]` alors que `PRESENT_SHADES` a trois
+  entrées (indices 0-2) → `undefined`.
+- **Où** : `src/config.js`, tableau `ASV_PEOPLE`, entrée `carla`.
+- **Conséquence** : dans l'effectif par défaut (avant chargement du roster
+  distant, donc au premier démarrage ou hors ligne), le style « présent » de
+  Carla est indéfini.
+- **Coût de laisser** : cosmétique et borné au roster par défaut ; corrigible
+  en une ligne mais hors du périmètre du lot 1 (déplacement pur).
+
 ### Constatée par le chantier « suppression définitive d'un collaborateur » (2026-08-16)
 
 #### La purge n'a pas de preuve d'effet
@@ -346,3 +384,12 @@ Ce qui suit est assumé, pas oublié. Ne pas le reproposer comme dette sans
 - **`rate_limit_log` n'est ni sauvegardée ni restaurée** : journal éphémère de
   limitation de débit, sans état métier, qui se reconstitue seul. C'est la seule
   exemption du contrat sauvegarde/restauration.
+
+## Limites acceptées (décision du 17/08/2026)
+
+- **La purge de `feedback` à 15 jours efface l'`admin_note` sans condition de
+  statut** : la justification d'un correctif automatique disparaît de la base
+  15 jours après le signalement. Assumé : la justification de référence vit
+  dans la description de la PR du correctif (immuable, jamais purgée) ;
+  l'`admin_note` n'est qu'une copie jetable. Décision Q4 du chantier
+  « correction automatique des signalements ».

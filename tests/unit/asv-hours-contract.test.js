@@ -9,7 +9,7 @@ import {
   getDayDeficitH,
   getLegacyOtH,
 } from '../../src/lib/asv-hours.js';
-import { ASV_STD_SAT_CARLA } from '../../src/config.js';
+import { ASV_STD_SAT_CARLA } from '../../src/lib/pay-constants.js';
 
 // Tests de contrat : vérifient les valeurs que le module partagé doit produire
 // pour que le front (src/lib/asv-hours.js) et la Edge Function

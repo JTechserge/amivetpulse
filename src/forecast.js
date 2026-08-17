@@ -3,7 +3,8 @@
    Module ES autonome. Branchement : app.js → renderForecastPage().
    ================================================================ */
 
-import { ASV_PEOPLE, MONTH_NAMES, MONTH_SHORT, ANNUAL_FULLTIME_HOURS } from './config.js';
+import { ASV_PEOPLE, MONTH_NAMES, MONTH_SHORT } from './config.js';
+import { ANNUAL_FULLTIME_HOURS } from './lib/pay-constants.js';
 import { escapeHTML, asvFullName } from './utils.js';
 import { store } from './store.js';
 import { getForecastWeek, setForecastWeek } from './slots.js';

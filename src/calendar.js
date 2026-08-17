@@ -4,10 +4,10 @@ import {
   SLOTS,
   SLOT_LABELS,
   MONTH_NAMES,
-  WEEKLY_MAX_HOURS,
   SUPABASE_FUNCTIONS_URL,
   personOf,
 } from './config.js';
+import { WEEKLY_MAX_HOURS } from './lib/pay-constants.js';
 import {
   escapeHTML,
   hexToRgba,

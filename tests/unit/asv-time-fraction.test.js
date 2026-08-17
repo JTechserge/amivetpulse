@@ -9,7 +9,8 @@
    ================================================================ */
 
 import { describe, it, expect } from 'vitest';
-import { ASV_PEOPLE, ASV_STD_SAT_CARLA, ASV_STD_SAT_SECOND, ASV_STD_WEEKDAY_AVG } from '../../src/config.js';
+import { ASV_PEOPLE } from '../../src/config.js';
+import { ASV_STD_SAT_CARLA, ASV_STD_SAT_SECOND, ASV_STD_WEEKDAY_AVG } from '../../src/lib/pay-constants.js';
 import {
   DAY_LABELS,
   FULLTIME_WEEKLY_HOURS,

@@ -2,7 +2,7 @@
 // Miroir JS de supabase/functions/_shared/asv-hours.ts (même logique, même constantes).
 // Tout changement dans l'un doit être répercuté dans l'autre.
 
-// Doit rester synchronisé avec ASV_STD_SAT_CARLA dans src/config.js
+// Doit rester synchronisé avec ASV_STD_SAT_CARLA dans src/lib/pay-constants.js
 // et avec SATURDAY_HOURS_BY_PID dans supabase/functions/_shared/asv-hours.ts.
 //
 // ATTENTION — 7h25 s'écrit `7 + 25 / 60`, PAS `7.25`.

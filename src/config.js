@@ -1,7 +1,12 @@
 /* ================================================================
    AMIVET PLANNING — Constantes & configuration statique
-   Aucune dépendance externe. Importé par app.js et les modules métier.
+   Libellés, rosters par défaut, clés de stockage, endpoints.
+   Les constantes de paie (heures, plafonds, CP) vivent dans
+   src/lib/pay-constants.js — ne pas en réintroduire ici.
+   Seule dépendance : lib/pay-constants.js. Importé par app.js
+   et les modules métier.
    ================================================================ */
+import { ASV_STD_SAT_CARLA } from './lib/pay-constants.js';
 
 // ----------------------------------------------------------------
 // Personnes
@@ -44,13 +49,6 @@ export const PEOPLE = [
   },
 ];
 
-// Déclarée ici, et non dans le bloc « Heures & plafonds légaux » plus bas, parce que
-// ASV_PEOPLE en dérive : une const déclarée après ne serait pas lisible à l'évaluation
-// du tableau. Le temps de travail de Carla doit être DÉRIVÉ de cette constante, jamais
-// recopié — un 7.25 écrit à la main au lieu de 7 + 25/60 fausserait ses CP proratisés
-// (c'est le bug corrigé par le commit 5475ef0).
-export const ASV_STD_SAT_CARLA = 7 + 25 / 60; // Carla : 8:30-16:45 avec ~50min pause → 7h25
-
 // Tableau muté en place par le module roster (ajout/retrait ASV depuis le tableau de bord).
 // ASV_PEOPLE est intentionnellement muté in-place plutôt que réassigné : tout le reste de
 // l'app garde la même référence et voit automatiquement les changements.
@@ -89,7 +87,7 @@ export const ASV_PEOPLE = [
     color: '#0EA5E9',
     initial: 'Ca',
     present: PRESENT_SHADES[3],
-    // Dérivé, jamais recopié. Voir le commentaire sur ASV_STD_SAT_CARLA ci-dessus.
+    // Dérivé, jamais recopié. Voir ASV_STD_SAT_CARLA dans lib/pay-constants.js.
     timeFraction: ASV_STD_SAT_CARLA / 35,
     saturdayOnly: true,
   },
@@ -123,12 +121,6 @@ export function isNonPartnerVet(id) {
   const p = PEOPLE.find((x) => x.id === id);
   return !!p && p.partner === false;
 }
-
-// ----------------------------------------------------------------
-// Congés Payés
-// ----------------------------------------------------------------
-export const CP_DAYS_PER_MONTH = 2.5;
-export const CP_REFERENCE_START_MONTH = 0; // janvier = index 0
 
 // ----------------------------------------------------------------
 // Annonces
@@ -189,19 +181,6 @@ export const SUPABASE_STORAGE_URL = 'https://ubowqtowyqmpraoxbaoo.supabase.co/st
 export const CALENDAR_FEED_URL = `${SUPABASE_FUNCTIONS_URL}calendar-feed`;
 export const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVib3dxdG93eXFtcHJhb3hiYW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MzkzNjksImV4cCI6MjA5ODIxNTM2OX0.cC7vTWrK-Ykii5dtlg_6lA5quHe6rv78IRxZT-ArV_8';
-
-// ----------------------------------------------------------------
-// Heures & plafonds légaux (modulation art. L3122-4 CT)
-// ----------------------------------------------------------------
-export const ANNUAL_FULLTIME_HOURS = 1607; // référence légale France (loi Aubry 2000)
-export const HALFDAY_HOURS = 3.5; // 35h / 5j / 2 demi-journées
-export const WEEKLY_MAX_HOURS = 42;
-// ASV_STD_SAT_CARLA appartient à ce bloc, mais est déclarée plus haut : ASV_PEOPLE en dérive.
-export const ASV_STD_SAT_SECOND = 7.0; // 2e ASV samedi : 9:00-16:30
-export const ASV_STD_WEEKDAY_AVG = 8.375;
-export const CLINIC_HOURS = { mStart: '08:30', mEnd: '13:00', amStart: '15:00', amEnd: '20:00' };
-export const CLINIC_M_H = 4.5; // 8h30→13h00
-export const CLINIC_AM_H = 4.25; // 15h00→19h15
 
 // ----------------------------------------------------------------
 // Année courante (clé localStorage + accesseurs)

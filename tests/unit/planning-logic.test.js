@@ -11,7 +11,7 @@ import {
   ASV_STD_SAT_CARLA,
   ASV_STD_SAT_SECOND,
   ASV_STD_WEEKDAY_AVG,
-} from '../../src/config.js';
+} from '../../src/lib/pay-constants.js';
 
 import { isWithinNextTwoWeeks } from '../../src/slots.js';
 import { isReposLabel } from '../../src/lib/leave-utils.js';
