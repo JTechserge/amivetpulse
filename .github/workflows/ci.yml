@@ -1,0 +1,46 @@
+name: CI
+
+# La barrière du chantier « correction automatique des signalements » (lot 2) :
+# aucune PR ne se fusionne sans lint, tests unitaires et Playwright verts.
+# Le blocage effectif du merge est porté par le ruleset de la branche main
+# (Settings → Rules), qui exige le check « tests » — le workflow seul ne
+# bloque rien.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests unitaires
+        run: npm run test:unit
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Playwright (chromium)
+        run: npm run test:install
+
+      - name: Tests Playwright
+        run: npm test
