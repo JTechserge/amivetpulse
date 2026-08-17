@@ -20,7 +20,7 @@ npm run build           # vite build
 
 Les TNR des quatre projets tournent automatiquement à 7h45 (agent launchd `com.jeremie.tnr-daily`). Pour forcer un run : `echo "$(date)" > ~/Projets/.tnr-trigger`.
 
-Référence sur run vert : **486 tests unitaires / 19 fichiers + 30 Playwright** (16/08/2026). Une chute sous cette valeur sans commit qui l'explique est une régression en soi.
+Référence sur run vert : **536 tests unitaires / 20 fichiers + 30 Playwright** (17/08/2026). Une chute sous cette valeur sans commit qui l'explique est une régression en soi.
 
 ## Invariants non négociables
 
