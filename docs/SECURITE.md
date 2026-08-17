@@ -169,3 +169,41 @@ test de contrat prouve l'intention du code, pas le comportement de la base.
 | Aucun journal d'audit des suppressions | Décision du 16/08/2026 (§6 de la note) : pas de corbeille, pas d'`undo`, pas de trace | Double palier de confirmation si un mois est signé + sauvegarde quotidienne |
 | La purge n'a pas de preuve d'effet automatisée | Aucun compte de test Supabase (`CLAUDE.md`) : ni vitest ni Playwright ne franchissent le login | `scripts/verif-purge-collaborateur.sql` en manuel ; depuis le lot B, un échec de purge est bruyant et bloquant |
 | `sessionStorage` pour les tokens Supabase | Défaut du SDK Supabase JS, lisible par un XSS résiduel | Acceptable avec la CSP et `no-unsanitized` en place ; à reconsidérer si le périmètre XSS s'étend |
+
+---
+
+## Routine de correction automatique des signalements (chantier 08/2026)
+
+Périmètre écrit au lot 4 du chantier ; les règles d'exploitation complètes
+arriveront avec l'ouverture (lot 6, `EXPLOITATION.md`).
+
+### Ce que la routine a le droit de faire
+
+- **Écrire dans `feedback` uniquement**, et uniquement via
+  `scripts/feedback-mark.mjs` : transitions gardées par le statut de départ
+  (compare-and-set), idempotentes, sans écrasement des statuts terminaux ni
+  des prises en charge humaines. Elle ne touche jamais une ligne dont
+  l'`admin_note` ne porte pas son marqueur `[routine <horodatage>]`.
+- **Modifier du code uniquement dans la frontière** de
+  `scripts/feedback-frontier.mjs` (refus par défaut ; liste blanche :
+  `src/config.js`, `src/style.css`), et uniquement via branche + PR — jamais
+  de push sur `main` (ruleset `protection-main`, check `tests` requis).
+
+### Ce qui lui est interdit, même si l'outillage le permet
+
+Le connecteur Supabase des sessions Claude a des pouvoirs d'administration
+(SQL direct, migrations, déploiement d'Edge Functions) très supérieurs au
+besoin de la routine. **Consigné comme risque assumé, borné par la règle :
+la routine n'utilise jamais `execute_sql`, `apply_migration` ni
+`deploy_edge_function` en écriture.** Restreindre le connecteur (mode
+lecture seule, scope) dès que l'interface le permet.
+
+### Arrêt d'urgence
+
+Créer le fichier **`ARRET-CORRECTIONS.md`** à la racine du dépôt sur `main`
+— depuis l'interface web GitHub, téléphone compris : *Add file → Create new
+file*, avec le motif en contenu. Toute routine qui démarre lit ce fichier
+avant la moindre écriture (`readEmergencyStop`) et s'arrête en remontant le
+motif. Supprimer le fichier rouvre la voie. **À essayer une fois avant le
+premier run à blanc du lot 5** — l'essai fait partie de la définition de
+« terminé » du chantier.
