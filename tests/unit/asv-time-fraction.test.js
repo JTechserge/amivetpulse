@@ -99,8 +99,8 @@ describe('resolveTimeFraction — une valeur non touchée ressort intacte', () =
   });
 });
 
-describe('timeFractionRejectReason — une fraction nulle ne s\'enregistre pas', () => {
-  it('refuse « Certains jours » sans aucun jour coché, à l\'invitation', () => {
+describe("timeFractionRejectReason — une fraction nulle ne s'enregistre pas", () => {
+  it("refuse « Certains jours » sans aucun jour coché, à l'invitation", () => {
     // Personne neuve : aucune valeur courante à préserver, donc rien n'amortit
     // le zéro. C'est le seul chemin qui produit une fraction nulle.
     const reason = timeFractionRejectReason(resolveTimeFraction({ preset: 'days', checkedDays: [] }));
@@ -108,7 +108,7 @@ describe('timeFractionRejectReason — une fraction nulle ne s\'enregistre pas',
     expect(reason.length).toBeGreaterThan(0);
   });
 
-  it('refuse le même cas à l\'édition d\'une personne existante', () => {
+  it("refuse le même cas à l'édition d'une personne existante", () => {
     const cur = carla().timeFraction;
     const reason = timeFractionRejectReason(
       resolveTimeFraction({ preset: 'days', checkedDays: [], currentFraction: cur, currentWorkingDays: null })
@@ -116,7 +116,7 @@ describe('timeFractionRejectReason — une fraction nulle ne s\'enregistre pas',
     expect(reason).toBeTypeOf('string');
   });
 
-  it('accepte dès qu\'un jour est coché', () => {
+  it("accepte dès qu'un jour est coché", () => {
     expect(timeFractionRejectReason(resolveTimeFraction({ preset: 'days', checkedDays: [6] }))).toBeNull();
   });
 
@@ -133,7 +133,7 @@ describe('timeFractionRejectReason — une fraction nulle ne s\'enregistre pas',
     expect(timeFractionRejectReason(kept)).toBeNull();
   });
 
-  it('ne refuse rien quand il n\'y a rien à valider', () => {
+  it("ne refuse rien quand il n'y a rien à valider", () => {
     // Aucun preset actif : la modale n\'écrit pas de fraction, ce n\'est pas
     // une saisie fautive.
     expect(timeFractionRejectReason(null)).toBeNull();
