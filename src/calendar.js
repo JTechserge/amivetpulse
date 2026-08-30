@@ -1,12 +1,4 @@
-import {
-  PEOPLE,
-  isVetPerson,
-  SLOTS,
-  SLOT_LABELS,
-  MONTH_NAMES,
-  SUPABASE_FUNCTIONS_URL,
-  personOf,
-} from './config.js';
+import { PEOPLE, isVetPerson, SLOTS, SLOT_LABELS, MONTH_NAMES, SUPABASE_FUNCTIONS_URL, personOf } from './config.js';
 import { WEEKLY_MAX_HOURS } from './lib/pay-constants.js';
 import {
   escapeHTML,
@@ -38,6 +30,7 @@ import {
   setSlotLabel,
   getDayComment,
   setDayComment,
+  hasDayComment,
   cycleState,
   getLeaveDecision,
   setLeaveDecision,
@@ -700,30 +693,40 @@ function buildWeekGrid(year, month, people) {
             isSun = wd === 6;
           const hName = holidayName(iso);
           const comment = getDayComment(iso);
+          const hasComment = hasDayComment(iso);
           let dayCls = 'cal-wg-day';
           if (isSat || isSun) dayCls += ' cal-wg-day-we';
           if (isSat) dayCls += ' cal-wg-day-sa';
           if (isSun) dayCls += ' cal-wg-day-su';
           if (hName) dayCls += ' cal-wg-day-holiday';
           if (iso === todayISO) dayCls += ' cal-wg-day-today';
+          if (hasComment) dayCls += ' cal-wg-day-has-comment';
           const clinicClosed = !isSun && isClinicClosed(iso);
           if (clinicClosed) dayCls += ' cal-wg-day-clinic-closed';
           const earlyClose = !isSun && !clinicClosed ? getClinicEarlyClose(iso) : '';
           if (earlyClose) dayCls += ' cal-wg-day-early-close';
+          // Marqueur de commentaire — visible de tous (ASV comprises), en lecture seule
+          // quand l'utilisateur n'a pas le droit d'éditer. Rendu uniquement s'il y a
+          // un commentaire ; sinon rien.
+          const commentFlag = hasComment
+            ? `<span class="cal-wg-comment-flag" role="img" aria-label="Commentaire : ${escapeHTML(comment)}" title="${escapeHTML(comment)}">💬<span class="cal-comment-dot" aria-hidden="true"></span></span>`
+            : '';
           const toolsHtml = !isSun
             ? `<div class="cal-wg-tools">
         ${isVetAdmin ? `<button class="cal-wg-tool-btn${clinicClosed ? ' clinic-close-active' : ''}" data-clinic-close="${iso}" title="${clinicClosed ? 'Clinique fermée — cliquer pour rouvrir' : 'Fermer la clinique ce jour'}">${clinicClosed ? '🔓' : '🏥'}</button>` : ''}
         ${isVetAdmin && !clinicClosed ? `<button class="cal-wg-tool-btn${earlyClose ? ' early-close-active' : ''}" data-early-close="${iso}" title="${earlyClose ? `Fermeture anticipée ${earlyClose} — cliquer pour modifier` : 'Définir une fermeture anticipée'}">⏰${earlyClose ? `<span class="early-close-badge">${earlyClose}</span>` : ''}</button>` : ''}
-        ${isVetAdmin ? `<button class="cal-wg-tool-btn${comment ? ' has-comment' : ''}" data-action="comment" data-date="${iso}" aria-label="Commentaire du ${day}/${month + 1}" title="${comment ? escapeHTML(comment) : 'Ajouter un commentaire'}">💬</button>` : ''}
+        ${isVetAdmin ? `<button class="cal-wg-tool-btn${hasComment ? ' has-comment' : ''}" data-action="comment" data-date="${iso}" aria-label="Commentaire du ${day}/${month + 1}" title="${hasComment ? escapeHTML(comment) : 'Ajouter un commentaire'}">💬${hasComment ? '<span class="cal-comment-dot" aria-hidden="true"></span>' : ''}</button>` : commentFlag}
         ${isVetAdmin ? `<button class="cal-wg-tool-btn" data-action="edit-day" data-date="${iso}" aria-label="Édition rapide du ${day}/${month + 1}">✏️</button>` : ''}
       </div>`
-            : '<div class="cal-wg-tools"></div>';
+            : `<div class="cal-wg-tools">${commentFlag}</div>`;
           const dayHead = `<div class="cal-wg-day-head">
         <div class="cal-wg-daynum">${day}</div>
         ${hName ? `<div class="cal-wg-holiday-name" title="${escapeHTML(hName)}">${escapeHTML(hName)}</div>` : ''}
         ${toolsHtml}
       </div>`;
-          return `<div class="${dayCls}" data-date="${iso}" style="grid-column:span ${isSun ? 1 : 2}">${dayHead}</div>`;
+          // Survol du jour : le texte du commentaire, sans avoir à viser l'icône 💬.
+          const dayTitle = hasComment ? ` title="💬 ${escapeHTML(comment)}"` : '';
+          return `<div class="${dayCls}" data-date="${iso}"${dayTitle} style="grid-column:span ${isSun ? 1 : 2}">${dayHead}</div>`;
         })
         .join('');
 
@@ -1069,7 +1072,7 @@ function buildLegend(people = PEOPLE) {
           <span class="legend-help-item">👆 <strong>Clic droit</strong> (ou appui long) sur une case : ouvre la saisie d'un motif d'absence</span>
           <span class="legend-help-item">🏥 <strong>Fermer</strong> / 🔓 <strong>Ouvert</strong> : marque la clinique fermée ce jour (grise tous les créneaux)</span>
           <span class="legend-help-item">⏰ <strong>Fin anticipée</strong> : définit une heure de fermeture anticipée (réduit les heures ASV)</span>
-          <span class="legend-help-item">💬 <strong>Note</strong> : ajoute un commentaire sur le jour</span>
+          <span class="legend-help-item">💬 <strong>Note</strong> : ajoute un commentaire sur le jour — une pastille rouge signale les jours commentés, le texte s'affiche au survol</span>
           <span class="legend-help-item">✏️ <strong>Modifier</strong> : édition rapide des absences du jour</span>
         `
         }

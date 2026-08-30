@@ -138,6 +138,11 @@ export function setDayComment(isoDate, text) {
   if (text) store.DATA.slots[key] = text;
   else delete store.DATA.slots[key];
 }
+// Prédicat d'affichage : pastille rouge + infobulle sur l'en-tête de jour.
+// Un commentaire fait uniquement d'espaces ne compte pas.
+export function hasDayComment(isoDate) {
+  return getDayComment(isoDate).trim() !== '';
+}
 
 /* ---------- Cycle d'état (vide → présent → absent → vide) ---------- */
 export function cycleState(state) {

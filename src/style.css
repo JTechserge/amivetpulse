@@ -59,6 +59,7 @@
   --color-sunday:#F4F1EA;
   --color-saturday:#FEF3E2;
   --color-holiday:#FDE047;
+  --color-comment-dot:#DC2626;
   --color-david:#0D9488;
   --color-stephane:#4F46E5;
   --color-absent:#FCA5A5;
@@ -613,9 +614,14 @@ tbody .row-label{border-top:1.5px solid var(--color-border);}
 .cal-wg-day-sa .cal-wg-daynum,.cal-wg-day-su .cal-wg-daynum{color:var(--color-text-muted);}
 .cal-wg-holiday-name{font-size:7px;font-weight:600;color:#D97706;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
 .cal-wg-tools{display:flex;gap:1px;margin-left:auto;flex-shrink:0;}
-.cal-wg-tool-btn{width:16px;height:16px;border:none;background:transparent;border-radius:4px;font-size:9px;color:var(--color-text-muted);display:flex;align-items:center;justify-content:center;transition:background var(--transition);cursor:pointer;padding:0;font-family:inherit;}
+.cal-wg-tool-btn{position:relative;width:16px;height:16px;border:none;background:transparent;border-radius:4px;font-size:9px;color:var(--color-text-muted);display:flex;align-items:center;justify-content:center;transition:background var(--transition);cursor:pointer;padding:0;font-family:inherit;}
 .cal-wg-tool-btn:hover{background:rgba(234,88,12,0.1);color:var(--color-primary);}
 .cal-wg-tool-btn.has-comment{color:var(--color-primary);}
+/* Commentaire de journée — 💬 en lecture seule pour qui n'a pas le droit d'éditer
+   (ASV, vétérinaire non associé), et pastille rouge signalant qu'un texte existe.
+   Rendus uniquement s'il y a un commentaire. */
+.cal-wg-comment-flag{position:relative;width:16px;height:16px;font-size:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:help;}
+.cal-comment-dot{position:absolute;top:0;right:0;width:5px;height:5px;border-radius:50%;background:var(--color-comment-dot);box-shadow:0 0 0 1px var(--color-surface);pointer-events:none;}
 .cal-wg-persons{flex:1;display:flex;flex-direction:column;padding:0 3px 3px;gap:2px;}
 .cal-wg-pstrip{display:flex;border-radius:4px;overflow:hidden;min-height:20px;border:0.5px solid transparent;}
 .cal-wg-pstrip-null{background:var(--color-secondary);}
@@ -955,7 +961,7 @@ table.recap-table tfoot td{font-weight:800;border-top:2px solid var(--color-bord
 .cal-wg-tool-btn.early-close-active{background:rgba(234,179,8,0.15);border-radius:4px;position:relative;}
 .early-close-badge{font-size:8px;font-weight:700;background:rgba(234,179,8,0.9);color:#713f12;border-radius:3px;padding:0 3px;margin-left:2px;vertical-align:middle;}
 /* Vue VET : boutons outils légèrement agrandis */
-.cal-wg--vet .cal-wg-tool-btn{width:20px;height:20px;font-size:13px;}
+.cal-wg--vet .cal-wg-tool-btn,.cal-wg--vet .cal-wg-comment-flag{width:20px;height:20px;font-size:13px;}
 .cal-wg-day-early-close .cal-wg-daynum::after{content:"⏰";font-size:8px;margin-left:2px;opacity:0.7;}
 .clinic-bulk-actions{display:flex;gap:8px;flex-wrap:wrap;padding:8px 0 4px;margin:0 2px;}
 .clinic-bulk-actions .btn{font-size:12px;padding:5px 10px;}
@@ -1412,6 +1418,10 @@ body.no-dashboard [data-view="dashboard"]{display:none;}
   .cal-wg-person-legend { padding:7px 10px; gap:8px; }
   .cal-wg-person-tag { font-size:10px; padding:2px 6px; }
   .cal-wg-tools { display:none; }
+  /* La barre d'outils est masquée en mobile : la pastille de commentaire se
+     rabat sur le numéro du jour pour rester visible. */
+  .cal-wg-daynum { position:relative; }
+  .cal-wg-day-has-comment .cal-wg-daynum::after { content:""; position:absolute; top:-1px; right:-1px; width:5px; height:5px; border-radius:50%; background:var(--color-comment-dot); box-shadow:0 0 0 1px var(--color-surface); }
   .cal-wg-label-spacer { min-height:26px; }
   .cal-wg-plabel { font-size:0; }
   /* Les lettres L/M/M/J/V dans le header sont centrées (text-align:center).
