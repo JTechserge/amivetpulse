@@ -281,3 +281,101 @@ describe('surface anon — lot 1, chaîne CalDAV', () => {
     expect(/drop\s+function/i.test(CALDAV_SQL)).toBe(false);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOT 2 — tokens de flux calendrier.
+//
+// Même portée de preuve que le lot 1 : l'intention du code, pas le comportement
+// de Postgres. S'y ajoute une vérification de cohérence entre la migration et
+// l'Edge Function calendar-feed, qui doivent être déployées ensemble — la
+// migration révoque anon sur get_calendar_feed_access, la fonction Edge doit
+// donc avoir basculé sur service_role. Un écart ici casse le flux ICS des
+// téléphones abonnés.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TOKEN_FILE = '20260905000003_calendar_token_guard.sql';
+const TOKEN_SQL = readSql(TOKEN_FILE);
+
+const CALENDAR_FEED_TS = readFileSync(join(HERE, '../../supabase/functions/calendar-feed/index.ts'), 'utf8');
+
+// Les quatre fonctions de GESTION : réservées au propriétaire ou à vet/admin.
+const GESTION_CALENDRIER = [
+  'generate_calendar_sync_token',
+  'revoke_calendar_sync_token',
+  'get_calendar_sync_status',
+  'update_calendar_sync_preferences',
+];
+
+// Les deux fonctions de VÉRIFICATION : fermées à anon ET authenticated.
+const VERIFICATION_CALENDRIER = ['verify_calendar_sync_token', 'get_calendar_feed_access'];
+
+describe('surface anon — lot 2, tokens de flux calendrier', () => {
+  it('révoque anon sur les six fonctions calendrier', () => {
+    const nonRevoquees = [...GESTION_CALENDRIER, ...VERIFICATION_CALENDRIER].filter(
+      (fn) =>
+        !new RegExp(
+          `revoke\\s+execute\\s+on\\s+function\\s+${fn}\\s*\\([^)]*\\)\\s+from\\s+public\\s*,\\s*anon`,
+          'i'
+        ).test(TOKEN_SQL)
+    );
+    expect(nonRevoquees).toEqual([]);
+  });
+
+  it('conserve authenticated sur les quatre fonctions de gestion', () => {
+    const nonAccordees = GESTION_CALENDRIER.filter(
+      (fn) =>
+        !new RegExp(`grant\\s+execute\\s+on\\s+function\\s+${fn}\\s*\\([^)]*\\)\\s+to\\s+authenticated`, 'i').test(
+          TOKEN_SQL
+        )
+    );
+    expect(nonAccordees).toEqual([]);
+  });
+
+  it('ferme aussi authenticated sur les deux fonctions de vérification', () => {
+    for (const fn of VERIFICATION_CALENDRIER) {
+      expect(
+        new RegExp(
+          `revoke\\s+execute\\s+on\\s+function\\s+${fn}\\s*\\([^)]*\\)\\s+from\\s+public\\s*,\\s*anon\\s*,\\s*authenticated`,
+          'i'
+        ).test(TOKEN_SQL),
+        `${fn} reste ouverte à authenticated`
+      ).toBe(true);
+      // Et jamais réaccordée ensuite.
+      expect(
+        new RegExp(`grant\\s+execute\\s+on\\s+function\\s+${fn}`, 'i').test(TOKEN_SQL),
+        `${fn} est réaccordée après avoir été révoquée`
+      ).toBe(false);
+    }
+  });
+
+  it("les quatre fonctions de gestion dérivent l'identité et acceptent vet/admin", () => {
+    for (const fn of GESTION_CALENDRIER) {
+      const body = functionBody(TOKEN_SQL, fn);
+      expect(body, `corps introuvable pour ${fn}`).not.toBeNull();
+      expect(body, `${fn} ne dérive pas l'identité`).toMatch(/v_caller\s+text\s*:=\s*my_person_id\(\)/i);
+      expect(body, `${fn} ne refuse pas un person_id étranger`).toMatch(
+        /p_person_id\s+is\s+distinct\s+from\s+v_caller/i
+      );
+      expect(body, `${fn} traite un appelant NULL comme un joker`).toMatch(/v_caller\s+is\s+null/i);
+      expect(body, `${fn} n'ouvre pas à vet/admin`).toMatch(
+        /get_my_role\(\)\s+not\s+in\s*\(\s*'admin'\s*,\s*'vet'\s*\)/i
+      );
+      expect(body, `${fn} ne lève pas de refus`).toMatch(/raise\s+exception/i);
+    }
+  });
+
+  it('calendar-feed appelle get_calendar_feed_access en service_role, pas en anon', () => {
+    // La migration révoque anon sur cette fonction : sans cette bascule, tous
+    // les téléphones abonnés reçoivent un 502 au prochain rafraîchissement.
+    const appel = CALENDAR_FEED_TS.match(/rpc\/get_calendar_feed_access[\s\S]{0,400}?\}\)/);
+    expect(appel, "l'appel à get_calendar_feed_access est introuvable").not.toBeNull();
+    expect(appel[0]).toMatch(/SERVICE_ROLE_KEY/);
+    expect(appel[0]).not.toMatch(/ANON_KEY/);
+  });
+
+  it('calendar-feed reste public : aucun garde JWT ajouté par erreur', () => {
+    // C'est l'exception assumée du chantier — le flux ICS est un lien porteur,
+    // consulté par un téléphone qui n'a aucune session Supabase.
+    expect(CALENDAR_FEED_TS).not.toMatch(/auth\/v1\/user/);
+  });
+});

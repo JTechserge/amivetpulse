@@ -6,7 +6,6 @@
 // tous les appareils en même temps (au prochain rafraîchissement de chacun).
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 
 const PERSON_LABELS: Record<string, string> = { david: 'David', stephane: 'Stéphane' };
 // Apple honore X-APPLE-CALENDAR-COLOR (hex libre) à l'abonnement ; la propriété standard
@@ -14,64 +13,90 @@ const PERSON_LABELS: Record<string, string> = { david: 'David', stephane: 'Stép
 // Calendar, lui, ne respecte généralement pas la couleur d'un flux importé : c'est
 // l'utilisateur qui la choisit dans son appli, ce flux ne peut pas la forcer.
 const CSS3_COLOR_NAMES: Record<string, string> = {
-  '#0F766E': 'teal', '#2563EB': 'blue', '#7C3AED': 'purple',
-  '#DC2626': 'red', '#16A34A': 'green', '#EA580C': 'orange',
+  '#0F766E': 'teal',
+  '#2563EB': 'blue',
+  '#7C3AED': 'purple',
+  '#DC2626': 'red',
+  '#16A34A': 'green',
+  '#EA580C': 'orange',
 };
 // Fenêtre raisonnable pour garder le flux léger : le passé récent + 2 ans à venir.
 const PAST_DAYS = 90;
 const FUTURE_DAYS = 730;
 
-function icsEscape(text: string){
+function icsEscape(text: string) {
   return text.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 }
-function icsDate(iso: string){ return iso.replace(/-/g, ''); }
-function addDaysIso(iso: string, days: number){
+function icsDate(iso: string) {
+  return iso.replace(/-/g, '');
+}
+function addDaysIso(iso: string, days: number) {
   const [y, m, d] = iso.split('-').map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 }
-function emptyCalendar(personLabel: string){
+function emptyCalendar(personLabel: string) {
   return [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Amivet PULSE//Calendar Sync//FR',
-    'CALSCALE:GREGORIAN', `X-WR-CALNAME:${icsEscape(`Amivet — ${personLabel}`)}`,
-    'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H', 'END:VCALENDAR',
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Amivet PULSE//Calendar Sync//FR',
+    'CALSCALE:GREGORIAN',
+    `X-WR-CALNAME:${icsEscape(`Amivet — ${personLabel}`)}`,
+    'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
+    'X-PUBLISHED-TTL:PT1H',
+    'END:VCALENDAR',
   ].join('\r\n');
 }
 
 type DayStatus = { iso: string; status: 'present' | 'absent'; label: string };
 
 Deno.serve(async (req) => {
-  try{
+  try {
     const url = new URL(req.url);
     const personId = url.searchParams.get('person') || '';
     const token = url.searchParams.get('token') || '';
     const personLabel = PERSON_LABELS[personId];
-    if(!personLabel || !token){
+    if (!personLabel || !token) {
       return new Response('Lien invalide.', { status: 400 });
     }
 
+    // service_role, et non la clé anon : get_calendar_feed_access est révoquée
+    // d'anon depuis 20260905000003_calendar_token_guard.sql. C'est la dernière
+    // fonction calendrier qui restait atteignable avec la clé publique, alors
+    // que cette fonction Edge détient déjà SERVICE_ROLE_KEY et s'en sert plus
+    // bas pour planning_data. L'appelant reste anonyme côté HTTP : le jeton du
+    // lien ICS demeure le seul facteur d'accès, la vérification se fait
+    // simplement côté serveur.
     const accessRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_calendar_feed_access`, {
       method: 'POST',
-      headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}`, 'Content-Type': 'application/json' },
+      headers: {
+        apikey: SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({ p_person_id: personId, p_token: token }),
     });
     // Strict : un échec de la requête (table/fonction absente, erreur réseau...) doit
     // refuser l'accès, jamais l'autoriser par défaut.
-    if(!accessRes.ok){
+    if (!accessRes.ok) {
       return new Response('Vérification impossible.', { status: 502 });
     }
     const rows = await accessRes.json();
     const access = Array.isArray(rows) ? rows[0] : null;
-    if(!access){
+    if (!access) {
       return new Response('Lien invalide.', { status: 403 });
     }
-    if(access.status !== 'active'){
+    if (access.status !== 'active') {
       // Jeton tout juste révoqué/remplacé : un calendrier vide (et non une erreur) fait
       // disparaître les événements déjà ajoutés au prochain rafraîchissement de l'appareil
       // — c'est le plus proche d'une "suppression automatique" que permet ce mécanisme.
       return new Response(emptyCalendar(personLabel), {
-        headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' },
+        headers: {
+          'Content-Type': 'text/calendar; charset=utf-8',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          Pragma: 'no-cache',
+        },
       });
     }
     const { sync_presence, sync_absences, color } = access;
@@ -91,30 +116,30 @@ Deno.serve(async (req) => {
     const days: DayStatus[] = [];
     const stateRe = /^(\d{4}-\d{2}-\d{2})_([a-z0-9-]+)_(M|AM)$/;
     const byDate: Record<string, { M?: string; AM?: string }> = {};
-    for(const key of Object.keys(slots)){
+    for (const key of Object.keys(slots)) {
       const m = key.match(stateRe);
-      if(!m) continue;
+      if (!m) continue;
       const [, iso, pid, slot] = m;
-      if(pid !== personId) continue;
-      if(iso < windowStart || iso > windowEnd) continue;
-      (byDate[iso] ||= {})[slot as 'M'|'AM'] = slots[key];
+      if (pid !== personId) continue;
+      if (iso < windowStart || iso > windowEnd) continue;
+      (byDate[iso] ||= {})[slot as 'M' | 'AM'] = slots[key];
     }
-    for(const iso of Object.keys(byDate).sort()){
+    for (const iso of Object.keys(byDate).sort()) {
       const { M, AM } = byDate[iso];
-      if((M === 'absent' || AM === 'absent') && sync_absences){
+      if ((M === 'absent' || AM === 'absent') && sync_absences) {
         const label = slots[`${iso}_${personId}_AM_label`] || slots[`${iso}_${personId}_M_label`] || '';
         days.push({ iso, status: 'absent', label });
-      } else if((M === 'present' || AM === 'present') && sync_presence){
+      } else if ((M === 'present' || AM === 'present') && sync_presence) {
         days.push({ iso, status: 'present', label: '' });
       }
     }
 
     // Regroupe les jours consécutifs de même statut (et même motif pour les absences) en
     // un seul événement, pour ne pas saturer le calendrier personnel d'une entrée par jour.
-    const events: { start: string; end: string; status: 'present'|'absent'; label: string }[] = [];
-    for(const d of days){
+    const events: { start: string; end: string; status: 'present' | 'absent'; label: string }[] = [];
+    for (const d of days) {
       const last = events[events.length - 1];
-      if(last && last.status === d.status && last.label === d.label && addDaysIso(last.end, 1) === d.iso){
+      if (last && last.status === d.status && last.label === d.label && addDaysIso(last.end, 1) === d.iso) {
         last.end = d.iso;
       } else {
         events.push({ start: d.iso, end: d.iso, status: d.status, label: d.label });
@@ -123,7 +148,7 @@ Deno.serve(async (req) => {
 
     const now = new Date();
     const dtstamp = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-    const hexColor = (typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)) ? color : '#0F766E';
+    const hexColor = typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#0F766E';
     const css3Color = CSS3_COLOR_NAMES[hexColor] || 'teal';
     const lines: string[] = [
       'BEGIN:VCALENDAR',
@@ -136,8 +161,9 @@ Deno.serve(async (req) => {
       'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
       'X-PUBLISHED-TTL:PT1H',
     ];
-    for(const ev of events){
-      const summary = ev.status === 'present' ? 'Présent — Clinique Amivet' : `Absent${ev.label ? ' — ' + ev.label : ''}`;
+    for (const ev of events) {
+      const summary =
+        ev.status === 'present' ? 'Présent — Clinique Amivet' : `Absent${ev.label ? ' — ' + ev.label : ''}`;
       const uid = `${personId}-${ev.start}-${ev.status}@amivet-pulse`;
       lines.push(
         'BEGIN:VEVENT',
@@ -148,7 +174,7 @@ Deno.serve(async (req) => {
         `SUMMARY:${icsEscape(summary)}`,
         `COLOR:${css3Color}`,
         'TRANSP:TRANSPARENT',
-        'END:VEVENT',
+        'END:VEVENT'
       );
     }
     lines.push('END:VCALENDAR');
@@ -158,10 +184,10 @@ Deno.serve(async (req) => {
         'Content-Type': 'text/calendar; charset=utf-8',
         'Content-Disposition': 'inline; filename="amivet-pulse.ics"',
         'Cache-Control': 'no-store, no-cache, must-revalidate',
-        'Pragma': 'no-cache',
+        Pragma: 'no-cache',
       },
     });
-  }catch(e){
+  } catch (e) {
     console.error(e);
     return new Response('Erreur interne.', { status: 500 });
   }
