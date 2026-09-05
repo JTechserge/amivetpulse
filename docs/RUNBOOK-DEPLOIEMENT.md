@@ -246,3 +246,71 @@ supabase functions deploy <nom-function> --project-ref ubowqtowyqmpraoxbaoo
 - [ ] Archiver les branches `hardening/2026-07-phase6` et `hardening/2026-07-phase7` (ou les supprimer si le travail est terminé)
 - [ ] Vérifier que le premier run CodeQL (déclenché par le push sur `main`) s'est terminé sans finding critique — GitHub → Actions → Security
 - [ ] Mettre à jour le statut des migrations dans `supabase/README.md` (passer ⏳ → ✅ pour les deux migrations déployées)
+
+---
+
+# Chantier « surfaces anon » (05/09/2026) — procédure de déploiement
+
+Cinq lots commités localement, **rien d'appliqué**. Contexte et modèle
+d'autorisation : `docs/SECURITE.md`, section « Chantier surfaces anon ».
+
+## ⚠️ Pré-vol — à faire AVANT toute application
+
+Une seule requête, dans le SQL Editor. C'est le seul point capable de casser la
+production :
+
+```sql
+SELECT id, role, person_id FROM user_profiles ORDER BY role, person_id NULLS FIRST;
+```
+
+**Un `person_id` NULL sur un compte `vet` ou `admin` enferme ce compte dehors de
+son propre écran de synchronisation** dès que `20260905000002` est appliquée : les
+fonctions CalDAV dérivent désormais l'identité du profil, et un profil sans
+collaborateur associé ne correspond à personne. Renseigner le `person_id` manquant
+**avant** de continuer.
+
+## L'ordre, qui n'est pas négociable
+
+| # | Action | Pourquoi à cette place |
+|---|---|---|
+| 1 | Appliquer `20260905000001_close_anon_policies.sql` | Autonome. Ferme les 27 policies RLS, dont `medical_visits`. |
+| 2 | Appliquer `20260905000002_caldav_owner_guard.sql` **puis** déployer le front | Le front rend le bloc CalDAV d'un collègue en lecture seule ; l'inverse afficherait des boutons qui répondraient 403. |
+| 3 | Déployer `calendar-feed` **PUIS** appliquer `20260905000003_calendar_token_guard.sql` | **L'ordre inverse coupe le flux ICS.** La migration révoque `anon` sur `get_calendar_feed_access` ; tant que la fonction Edge n'est pas passée en `service_role`, tous les téléphones abonnés reçoivent un 502. |
+| 4 | Déployer `caldav-push` et `push-server` | Ne dépendent d'aucune migration, peuvent partir en dernier. |
+| 5 | Appliquer `20260905000004_drop_password_functions.sql` | Autonome, aucun appelant. Vient en dernier parce que rien ne l'attend. |
+
+```bash
+# Étapes 3 et 4 — déploiement des Edge Functions
+npx supabase functions deploy calendar-feed --project-ref ubowqtowyqmpraoxbaoo
+npx supabase functions deploy caldav-push   --project-ref ubowqtowyqmpraoxbaoo
+npx supabase functions deploy push-server   --project-ref ubowqtowyqmpraoxbaoo
+```
+
+Le déploiement du front se fait par `git push origin main` : le workflow *Deploy to
+GitHub Pages* se déclenche parce que `src/**` est modifié.
+
+## Vérification
+
+Chaque migration porte son propre bloc `VÉRIFICATION` en fin de fichier, avec la
+requête à passer et le résultat attendu. Les jouer dans l'ordre d'application.
+
+Puis, dans l'application :
+
+1. Ouvrir l'écran de synchronisation calendrier — son propre bloc CalDAV est
+   modifiable, celui de l'associé est en lecture seule.
+2. Générer, recolorer, révoquer un lien ICS, **y compris sur le bloc de l'associé**
+   (modèle C).
+3. Ouvrir un lien ICS déjà abonné dans un navigateur : le calendrier se télécharge.
+4. Enregistrer un planning et vérifier que la synchro iCloud part toujours — c'est
+   la voie `service_role` de `caldav-push`.
+5. Déposer une demande de congé depuis un compte **ASV** : la notification push doit
+   arriver aux vétérinaires.
+
+## En cas de problème
+
+- **502 sur les flux ICS** → `calendar-feed` n'a pas été déployée avant
+  `20260905000003`. La déployer immédiatement, l'ordre se rattrape.
+- **Écran de synchro vide ou refusé pour un vet** → `person_id` NULL sur son profil.
+  Le pré-vol l'aurait montré.
+- **Plus aucune notification push** → le front envoie la clé `anon` au lieu du JWT,
+  donc la session est expirée. Se reconnecter.

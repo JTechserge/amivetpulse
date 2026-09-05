@@ -133,6 +133,45 @@ npx supabase functions deploy <nom> --project-ref ubowqtowyqmpraoxbaoo
 
 ---
 
+## Chantier « surfaces anon » (05/09/2026) — ⏳ NON DÉPLOYÉ
+
+Fermeture des surfaces atteignables avec la seule clé publique `anon`. **Le code
+est commité, rien n'est appliqué ni déployé** : la procédure et son ordre imposé
+sont dans `docs/RUNBOOK-DEPLOIEMENT.md`, section « Chantier surfaces anon ».
+
+| Lot | Livrable | Ce qui était ouvert |
+|---|---|---|
+| 0 | `20260905000001_close_anon_policies.sql` | 27 policies RLS ouvertes à `anon` sur 10 tables, dont `medical_visits` (données de santé) |
+| 1 | `20260905000002_caldav_owner_guard.sql` | Les identifiants CalDAV s'écrivaient avec un `person_id` fourni par l'appelant : un associé pouvait écraser le mot de passe d'application Apple de l'autre |
+| 2 | `20260905000003_calendar_token_guard.sql` + `calendar-feed` | Le lien ICS de n'importe quel vétérinaire se générait ou se révoquait avec la clé publique — donc son planning se lisait sans compte |
+| 3 | `caldav-push`, `push-server` | Les deux seules Edge Functions sans aucune vérification : un POST anonyme effaçait le calendrier iCloud d'un associé ou notifiait tous les collaborateurs |
+| 4 | `20260905000004_drop_password_functions.sql` | Six fonctions du mot de passe partagé, toutes `GRANT` à `anon`, sans appelant depuis le passage aux comptes individuels |
+
+**Modèle d'autorisation retenu (option C).** Les identifiants CalDAV sont réservés
+au **propriétaire strict** — le mot de passe d'application Apple est un secret
+personnel. Le lien ICS, lui, est ouvert au **propriétaire OU à vet/admin** : c'est
+un jeton de lecture d'un planning déjà partagé entre les deux associés, et ce choix
+aligne les fonctions sur la policy « owner or vet reads token » que
+`calendar_sync_tokens` porte depuis `20240515000001`.
+
+**Exceptions assumées, à ne pas « corriger » par erreur :**
+
+- `calendar-feed` **reste public**. Le flux ICS est un lien porteur, consulté par un
+  téléphone qui n'a aucune session Supabase. Un garde JWT y couperait tous les
+  abonnements. Sa protection est le token, pas l'authentification.
+- `push-server` **accepte tous les rôles**, ASV compris : ce sont eux qui déclenchent
+  les notifications de demande de congé. Un filtre vet/admin couperait la chaîne
+  sans erreur visible.
+- L'action `clear` de `caldav-push` est réservée au **propriétaire**, y compris pour
+  un admin. Conséquence consignée en dette : le calendrier Apple d'un collaborateur
+  parti ne peut plus être purgé après la suppression de son compte.
+
+**Preuve.** `tests/unit/anon-surface.test.js` — 42 tests de contrat qui lisent les
+migrations et les Edge Functions. Ils constatent l'intention du code, pas le
+comportement de Postgres : il n'existe pas de compte de test Supabase.
+
+---
+
 ## Suppression définitive d'un collaborateur (action `purge`)
 
 Chantier « suppression définitive d'un collaborateur » (16/08/2026). Procédure
