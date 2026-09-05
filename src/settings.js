@@ -1141,7 +1141,23 @@ async function discoverCaldavCalendars(appleId, appPassword) {
   return data.calendars || [];
 }
 
-function caldavSectionHtml(caldavStatus) {
+// Le mot de passe d'application Apple est un secret personnel : depuis le lot 1
+// du chantier « surfaces anon », save_caldav_credentials et
+// clear_caldav_credentials n'acceptent que le propriétaire du compte
+// (20260905000002_caldav_owner_guard.sql). Le bloc d'un collègue est donc rendu
+// en lecture seule — afficher des boutons qui répondraient 403 serait mentir à
+// l'écran. La lecture du statut, elle, reste ouverte à vet/admin.
+function caldavSectionHtml(caldavStatus, isOwner) {
+  if (!isOwner) {
+    return `
+      <div class="caldav-section">
+        <div style="font-size:12.5px;font-weight:600;margin-bottom:6px;">📲 Push iCloud (présences)</div>
+        <p style="font-size:11.5px;color:var(--color-text-muted);">${
+          caldavStatus.is_configured ? `✅ Configuré — ${escapeHTML(caldavStatus.apple_id)}` : 'Non configuré'
+        }</p>
+        <p style="font-size:11px;color:var(--color-text-muted);margin-top:4px;">Seul le titulaire du compte peut modifier ses identifiants iCloud.</p>
+      </div>`;
+  }
   if (caldavStatus.is_configured) {
     return `
       <div class="caldav-section">
@@ -1169,14 +1185,17 @@ function caldavSectionHtml(caldavStatus) {
     </div>`;
 }
 
-function wireCaldavSection(sectionEl, person, initialStatus) {
+function wireCaldavSection(sectionEl, person, initialStatus, isOwner) {
   let caldavStatus = initialStatus;
+
+  // Bloc d'un collègue : rendu en lecture seule, aucun contrôle à câbler.
+  if (!isOwner) return;
 
   function refresh(newStatus) {
     caldavStatus = newStatus;
     // eslint-disable-next-line no-unsanitized/property
-    sectionEl.innerHTML = caldavSectionHtml(caldavStatus);
-    wireCaldavSection(sectionEl, person, caldavStatus);
+    sectionEl.innerHTML = caldavSectionHtml(caldavStatus, isOwner);
+    wireCaldavSection(sectionEl, person, caldavStatus, isOwner);
   }
 
   if (caldavStatus.is_configured) {
@@ -1467,11 +1486,12 @@ function openCalendarSyncModal() {
     // Push CalDAV (nouveau)
     const caldavEl = box.querySelector(`#cal-sync-caldav-${person.id}`);
     if (caldavEl) {
+      const isCaldavOwner = store.currentUser?.person_id === person.id;
       getCaldavStatus(person.id)
         .then((caldavStatus) => {
           // eslint-disable-next-line no-unsanitized/property
-          caldavEl.innerHTML = caldavSectionHtml(caldavStatus);
-          wireCaldavSection(caldavEl, person, caldavStatus);
+          caldavEl.innerHTML = caldavSectionHtml(caldavStatus, isCaldavOwner);
+          wireCaldavSection(caldavEl, person, caldavStatus, isCaldavOwner);
         })
         .catch((e) => {
           caldavEl.innerHTML = `<p style="font-size:11.5px;color:var(--color-text-muted);">Push iCloud indisponible</p>`;

@@ -184,3 +184,100 @@ describe('surface anon — invariants de sécurité conservés', () => {
     expect(dropped.has('app_security::allow anon update')).toBe(true);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOT 1 — chaîne CalDAV.
+//
+// CE QUE CES TESTS PROUVENT : que la migration de durcissement révoque bien anon
+// sur les trois fonctions, et que chaque corps dérive l'identité de l'appelant
+// au lieu de faire confiance au p_person_id reçu.
+//
+// CE QU'ILS NE PROUVENT PAS : qu'un appel anon est effectivement refusé par
+// Postgres. Sans compte de test Supabase (CLAUDE.md), aucun test automatisé ne
+// peut le vérifier. La preuve d'effet est la requête has_function_privilege en
+// fin de migration.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CALDAV_FILE = '20260905000002_caldav_owner_guard.sql';
+const CALDAV_SQL = readSql(CALDAV_FILE);
+
+// Isole le corps d'une fonction : de sa signature jusqu'au $$; de fermeture.
+function functionBody(sql, name) {
+  const re = new RegExp(`create\\s+or\\s+replace\\s+function\\s+${name}\\s*\\(([\\s\\S]*?)\\$\\$\\s*;`, 'i');
+  const m = sql.match(re);
+  return m ? m[0].replace(/\s+/g, ' ') : null;
+}
+
+const CALDAV_ECRITURE = ['save_caldav_credentials', 'clear_caldav_credentials'];
+const CALDAV_TOUTES = [...CALDAV_ECRITURE, 'get_caldav_status'];
+
+describe('surface anon — lot 1, chaîne CalDAV', () => {
+  it('révoque EXECUTE à anon et à PUBLIC sur les trois fonctions', () => {
+    const nonRevoquees = CALDAV_TOUTES.filter(
+      (fn) =>
+        !new RegExp(
+          `revoke\\s+execute\\s+on\\s+function\\s+${fn}\\s*\\([^)]*\\)\\s+from\\s+public\\s*,\\s*anon`,
+          'i'
+        ).test(CALDAV_SQL)
+    );
+    expect(nonRevoquees).toEqual([]);
+  });
+
+  it("conserve EXECUTE pour authenticated — sinon l'écran de synchro casse", () => {
+    const nonAccordees = CALDAV_TOUTES.filter(
+      (fn) =>
+        !new RegExp(`grant\\s+execute\\s+on\\s+function\\s+${fn}\\s*\\([^)]*\\)\\s+to\\s+authenticated`, 'i').test(
+          CALDAV_SQL
+        )
+    );
+    expect(nonAccordees).toEqual([]);
+  });
+
+  it('ne réaccorde jamais anon', () => {
+    expect(/grant\s+execute[\s\S]*?\bto\b[^;]*\banon\b/i.test(CALDAV_SQL)).toBe(false);
+  });
+
+  it("chaque fonction dérive l'identité de l'appelant, sans faire confiance au paramètre", () => {
+    for (const fn of CALDAV_TOUTES) {
+      const body = functionBody(CALDAV_SQL, fn);
+      expect(body, `corps introuvable pour ${fn}`).not.toBeNull();
+      expect(body, `${fn} ne dérive pas l'identité`).toMatch(/my_person_id\(\)/i);
+    }
+  });
+
+  it("les deux fonctions d'écriture refusent tout person_id qui n'est pas celui de l'appelant", () => {
+    for (const fn of CALDAV_ECRITURE) {
+      const body = functionBody(CALDAV_SQL, fn);
+      expect(body, `${fn} n'a pas de refus strict`).toMatch(/p_person_id\s+is\s+distinct\s+from\s+v_caller/i);
+      // Un caller NULL (pas de session, ou profil sans person_id) doit être un
+      // refus. Sans cette branche, `NULL IS DISTINCT FROM NULL` vaut false et un
+      // p_person_id NULL passerait.
+      expect(body, `${fn} traite un appelant NULL comme un joker`).toMatch(/v_caller\s+is\s+null\s+or/i);
+      expect(body, `${fn} ne lève pas de refus`).toMatch(/raise\s+exception/i);
+    }
+  });
+
+  it("les fonctions d'écriture n'ouvrent PAS aux autres vet/admin — le mot de passe Apple est personnel", () => {
+    for (const fn of CALDAV_ECRITURE) {
+      const body = functionBody(CALDAV_SQL, fn);
+      expect(body, `${fn} accepte un rôle à la place du propriétaire`).not.toMatch(/get_my_role/i);
+    }
+  });
+
+  it('get_caldav_status reste lisible par vet/admin, et ne renvoie jamais le mot de passe', () => {
+    const body = functionBody(CALDAV_SQL, 'get_caldav_status');
+    expect(body).toMatch(/get_my_role\(\)\s+not\s+in\s*\(\s*'admin'\s*,\s*'vet'\s*\)/i);
+    expect(body).not.toMatch(/select[\s\S]*caldav_app_password\s*,/i);
+  });
+
+  it('ferme les privilèges par défaut du schéma public', () => {
+    // Sans cette ligne, tout DROP + CREATE ultérieur réattribuerait anon.
+    expect(CALDAV_SQL).toMatch(
+      /alter\s+default\s+privileges\s+in\s+schema\s+public\s+revoke\s+execute\s+on\s+functions\s+from\s+anon/i
+    );
+  });
+
+  it("n'altère aucune signature : rejouable en CREATE OR REPLACE, sans DROP FUNCTION", () => {
+    expect(/drop\s+function/i.test(CALDAV_SQL)).toBe(false);
+  });
+});
