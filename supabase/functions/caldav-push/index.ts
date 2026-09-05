@@ -10,6 +10,7 @@
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': 'https://jtechserge.github.io',
@@ -316,14 +317,59 @@ function json(body: unknown, status = 200) {
   });
 }
 
+// ── Garde d'identite ─────────────────────────────────────────────────────────
+// Avant le lot 3 du chantier « surfaces anon », cette fonction ne verifiait rien :
+// un simple POST anonyme suffisait a effacer tous les evenements iCloud d'un
+// associe (action « clear ») ou a se servir du serveur comme sonde de comptes
+// Apple (action « discover »). Deux voies d'entree sont desormais reconnues, et
+// elles n'ouvrent pas les memes actions :
+//   1. service_role — l'appel interne de save-planning (save-planning/index.ts:172).
+//      Aucun utilisateur derriere : cette voie n'autorise QUE le push de planning,
+//      jamais « discover » ni « clear ».
+//   2. JWT d'un compte connecte — l'ecran de reglages. Le personId du corps n'est
+//      jamais cru : il est remplace par le person_id du profil appelant.
+// Le profil est relu cote serveur car le JWT ne porte ni le role metier ni le
+// person_id (le claim 'role' vaut toujours 'authenticated').
+
+type Caller = { kind: 'service' } | { kind: 'user'; personId: string | null };
+
+async function identifyCaller(req: Request): Promise<Caller | null> {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) return null;
+
+  if (authHeader === `Bearer ${SERVICE_ROLE_KEY}`) return { kind: 'service' };
+
+  const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: ANON_KEY, Authorization: authHeader },
+  });
+  if (!userRes.ok) return null;
+  const authUser = await userRes.json();
+  if (!authUser?.id) return null;
+
+  const profRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${authUser.id}&select=person_id`,
+    { headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+  );
+  if (!profRes.ok) return null;
+  const [profile] = await profRes.json();
+  if (!profile) return null;
+
+  return { kind: 'user', personId: profile.person_id ?? null };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
 
   try {
+    const caller = await identifyCaller(req);
+    if (!caller) return json({ error: 'Non authentifié.' }, 401);
+
     const body = await req.json();
 
     // ── Découverte ───────────────────────────────────────────────────────────
     if (body.action === 'discover') {
+      if (caller.kind !== 'user')
+        return json({ error: 'Action réservée à un compte connecté.' }, 403);
       const { apple_id, app_password } = body as { apple_id: string; app_password: string };
       if (!apple_id || !app_password)
         return json({ error: 'apple_id et app_password requis.' }, 400);
@@ -333,8 +379,11 @@ Deno.serve(async (req) => {
 
     // ── Suppression totale avant désactivation ───────────────────────────────
     if (body.action === 'clear') {
-      const { personId } = body as { personId: string };
-      if (!personId) return json({ error: 'personId requis.' }, 400);
+      if (caller.kind !== 'user')
+        return json({ error: 'Action réservée à un compte connecté.' }, 403);
+      // Le personId du corps est ignoré : on n'efface que son propre calendrier.
+      const personId = caller.personId;
+      if (!personId) return json({ error: 'Compte sans collaborateur associé.' }, 403);
       const creds = await fetchCreds(personId);
       if (!creds) return json({ ok: true, deleted: 0, reason: 'non configuré' });
       const deleted = await clearAllEvents(personId, creds);
@@ -342,8 +391,14 @@ Deno.serve(async (req) => {
     }
 
     // ── Sync complet (action par défaut, déclenché depuis save-planning) ─────
-    const { persons } = body as { persons?: string[] };
-    if (!Array.isArray(persons) || persons.length === 0)
+    // Par service_role, la liste vient de save-planning et fait autorité. Par JWT,
+    // elle est ignorée : un compte connecté ne resynchronise que son propre
+    // calendrier, jamais celui d'un collègue.
+    const { persons: requestedPersons } = body as { persons?: string[] };
+    const persons = caller.kind === 'service'
+      ? (Array.isArray(requestedPersons) ? requestedPersons.filter(Boolean) : [])
+      : (caller.personId ? [caller.personId] : []);
+    if (persons.length === 0)
       return json({ ok: true, skipped: 'no persons' });
 
     // Lecture du planning complet (une seule requête pour toutes les personnes)

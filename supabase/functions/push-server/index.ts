@@ -7,6 +7,7 @@ import webpush from 'npm:web-push@3.6.7';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 // Clé PRIVÉE VAPID : uniquement dans les secrets Supabase (jamais dans le code source).
 const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY')!;
 const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY')!;
@@ -24,6 +25,37 @@ const VALID_TYPES = new Set([
   'leave_request', 'leave_approved', 'leave_rejected',
   'medical_visit', 'interview', 'announcement',
 ]);
+
+// ── Garde d'identite ─────────────────────────────────────────────────────────
+// Avant le lot 3 du chantier « surfaces anon », un POST anonyme suffisait a faire
+// sonner le telephone de tous les collaborateurs abonnes, avec le texte de son
+// choix. Il faut desormais un compte : JWT valide ET profil present dans
+// user_profiles. Tous les roles sont acceptes, y compris ASV — ce sont eux qui
+// declenchent les notifications de demande de conge (src/calendar.js:1602, :1668) ;
+// exiger vet/admin casserait la fonction. La voie service_role est reconnue pour
+// les appels entre Edge Functions, qui n'ont pas de JWT utilisateur a presenter.
+async function isAuthorizedCaller(req: Request): Promise<boolean> {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) return false;
+  if (authHeader === `Bearer ${SERVICE_ROLE_KEY}`) return true;
+
+  const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: ANON_KEY, Authorization: authHeader },
+  });
+  if (!userRes.ok) return false;
+  const authUser = await userRes.json();
+  if (!authUser?.id) return false;
+
+  // Le profil est relu cote serveur : un JWT valide ne prouve pas encore qu'il
+  // s'agit d'un collaborateur de la clinique.
+  const profRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${authUser.id}&select=id`,
+    { headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+  );
+  if (!profRes.ok) return false;
+  const [profile] = await profRes.json();
+  return !!profile;
+}
 
 interface PushRequestBody {
   type: string;
@@ -43,6 +75,12 @@ serve(async (req) => {
   }
 
   try {
+    if (!await isAuthorizedCaller(req)) {
+      return new Response(JSON.stringify({ error: 'Non authentifié.' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const payload = await req.json() as PushRequestBody;
     if (!payload.type || !VALID_TYPES.has(payload.type) || !payload.title || !payload.body) {
       return new Response(JSON.stringify({ error: 'Champs requis manquants ou type invalide.' }), {

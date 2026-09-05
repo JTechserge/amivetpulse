@@ -379,3 +379,105 @@ describe('surface anon — lot 2, tokens de flux calendrier', () => {
     expect(CALENDAR_FEED_TS).not.toMatch(/auth\/v1\/user/);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lot 3 — gardes d'identité sur les deux Edge Functions qui n'en avaient aucune.
+//
+// Portée de preuve : l'intention du code déployé, pas son exécution. Il n'existe
+// pas de compte de test Supabase (CLAUDE.md) — ces tests constatent que le garde
+// est écrit, qu'il précède tout traitement, et que les deux voies d'entrée
+// n'ouvrent pas les mêmes actions. S'y ajoute la cohérence avec save-planning,
+// seul appelant interne : si sa requête cessait d'être reconnue, la synchro
+// iCloud s'arrêterait silencieusement à la prochaine sauvegarde de planning.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CALDAV_PUSH_TS = readFileSync(join(HERE, '../../supabase/functions/caldav-push/index.ts'), 'utf8');
+const PUSH_SERVER_TS = readFileSync(join(HERE, '../../supabase/functions/push-server/index.ts'), 'utf8');
+const SAVE_PLANNING_TS = readFileSync(join(HERE, '../../supabase/functions/save-planning/index.ts'), 'utf8');
+
+function section(source, from, to) {
+  const start = source.indexOf(from);
+  if (start === -1) return null;
+  const end = to ? source.indexOf(to, start + from.length) : -1;
+  return source.slice(start, end === -1 ? source.length : end);
+}
+
+const DISCOVER_BLOC = section(CALDAV_PUSH_TS, "body.action === 'discover'", '── Suppression totale');
+const CLEAR_BLOC = section(CALDAV_PUSH_TS, "body.action === 'clear'", '── Sync complet');
+const SYNC_BLOC = section(CALDAV_PUSH_TS, '── Sync complet', 'return json({ ok: true, results })');
+
+describe("surface anon — lot 3, gardes d'identité des Edge Functions", () => {
+  it('les deux fonctions vérifient le JWT et relisent le profil côté serveur', () => {
+    for (const [nom, src] of [['caldav-push', CALDAV_PUSH_TS], ['push-server', PUSH_SERVER_TS]]) {
+      expect(src, `${nom} ne vérifie pas le JWT`).toMatch(/auth\/v1\/user/);
+      expect(src, `${nom} ne relit pas user_profiles`).toMatch(/rest\/v1\/user_profiles\?id=eq\./);
+    }
+  });
+
+  it('caldav-push refuse tout appel non identifié avant même de lire le corps', () => {
+    const handler = section(CALDAV_PUSH_TS, 'Deno.serve(async (req)');
+    expect(handler).toMatch(/const caller = await identifyCaller\(req\);/);
+    expect(handler).toMatch(/if \(!caller\) return json\(\{ error: 'Non authentifié\.' \}, 401\);/);
+    expect(
+      handler.indexOf('identifyCaller'),
+      'le corps est lu avant le garde'
+    ).toBeLessThan(handler.indexOf('req.json()'));
+  });
+
+  it("caldav-push n'ouvre discover et clear qu'à un compte connecté, jamais à service_role", () => {
+    // La voie service_role n'a pas d'utilisateur derrière elle : lui laisser
+    // « clear » rendrait la destruction d'un calendrier iCloud accessible à tout
+    // appel interne, et « discover » ferait du serveur une sonde de comptes Apple.
+    for (const [nom, bloc] of [['discover', DISCOVER_BLOC], ['clear', CLEAR_BLOC]]) {
+      expect(bloc, `bloc ${nom} introuvable`).not.toBeNull();
+      expect(bloc, `${nom} accepte la voie service_role`).toMatch(/caller\.kind !== 'user'/);
+    }
+  });
+
+  it("caldav-push ignore le personId du corps pour clear — on n'efface que son propre calendrier", () => {
+    expect(CLEAR_BLOC).toMatch(/const personId = caller\.personId/);
+    expect(CLEAR_BLOC, 'le personId du corps est encore lu').not.toMatch(/body as \{ personId/);
+    expect(CLEAR_BLOC, 'un compte sans collaborateur associé passe quand même').toMatch(
+      /if \(!personId\) return json\([^)]*403\)/
+    );
+  });
+
+  it("caldav-push ne synchronise que le calendrier de l'appelant quand il vient d'un JWT", () => {
+    expect(SYNC_BLOC, 'bloc de sync introuvable').not.toBeNull();
+    expect(SYNC_BLOC, 'la liste du corps est prise telle quelle').toMatch(/caller\.kind === 'service'/);
+    expect(SYNC_BLOC, "la voie JWT ne se limite pas à l'appelant").toMatch(
+      /caller\.personId \? \[caller\.personId\] : \[\]/
+    );
+  });
+
+  it('caldav-push reconnaît la voie service_role, telle que save-planning la présente', () => {
+    expect(CALDAV_PUSH_TS, 'la voie service_role a disparu').toMatch(
+      /authHeader === `Bearer \$\{SERVICE_ROLE_KEY\}`/
+    );
+    const appel = SAVE_PLANNING_TS.match(/functions\/v1\/caldav-push[\s\S]{0,400}?\}\)/);
+    expect(appel, "l'appel interne de save-planning est introuvable").not.toBeNull();
+    expect(appel[0], 'save-planning ne présente plus la clé service_role').toMatch(
+      /Bearer \$\{SERVICE_ROLE_KEY\}/
+    );
+    expect(appel[0], "save-planning envoie une action, que la voie service_role refuse").not.toMatch(
+      /action/
+    );
+  });
+
+  it("push-server exige un compte avant d'envoyer la moindre notification", () => {
+    const handler = section(PUSH_SERVER_TS, 'serve(async (req)');
+    expect(handler).toMatch(/if \(!await isAuthorizedCaller\(req\)\)/);
+    expect(
+      handler.indexOf('isAuthorizedCaller'),
+      'le corps est lu avant le garde'
+    ).toBeLessThan(handler.indexOf('req.json()'));
+  });
+
+  it('push-server accepte tous les rôles — les ASV déclenchent des notifications légitimes', () => {
+    // src/calendar.js:1602 et :1668 : une demande de congé d'ASV notifie les vets.
+    // Un filtre vet/admin ici couperait cette chaîne sans erreur visible.
+    expect(PUSH_SERVER_TS, 'un filtre de rôle a été introduit').not.toMatch(
+      /'vet'\s*,\s*'admin'|'admin'\s*,\s*'vet'/
+    );
+  });
+});

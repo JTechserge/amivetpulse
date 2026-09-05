@@ -12,6 +12,45 @@ une dette : c'est un défaut bloquant, signalé comme tel.
 
 ## Dette restante
 
+### Constatée par le chantier « surfaces anon » (2026-09-05)
+
+**Le miroir `planning-auth` n'a pas de test de contrat, contrairement à `asv-hours`.**
+`src/lib/planning-auth.js` et `supabase/functions/_shared/planning-auth.ts` portent
+les mêmes règles d'autorisation du planning, mais rien ne vérifie qu'ils restent
+d'accord : `tests/unit/planning-auth.test.js:13` n'importe que la version front.
+Si les deux divergent, le navigateur autorisera un geste que l'Edge Function
+refusera — ou l'inverse, plus grave : l'écran interdira un geste que le serveur
+accepte encore, et la règle ne tiendra plus qu'à l'affichage. `asv-hours` a exactement
+ce garde-fou (`tests/unit/asv-hours-contract.test.js`, invariant non négociable) ;
+`planning-auth` non. Le laisser coûte peu tant que les deux fichiers ne bougent pas,
+et devient cher au premier changement d'autorisation : la divergence ne se voit
+qu'en production, sur un geste refusé sans message.
+
+**`send-leave-recap` est déclarée déployée mais n'a pas de source dans le dépôt.**
+`docs/SECURITE.md:58` lui fixe une limite de débit et `:123` la marque déployée,
+alors que `supabase/functions/send-leave-recap/` n'existe pas. Conséquence directe :
+son garde d'identité est inconnu — le chantier « surfaces anon » a pu fermer les
+douze fonctions présentes dans le dépôt, pas celle-là. Une Edge Function ouverte
+qui envoie des e-mails est une surface d'abus. Le coût de la laisser est celui
+d'un angle mort permanent : chaque audit ultérieur repartira du même doute. À lever
+par `npx supabase functions list`, puis soit verser la source, soit la supprimer
+du projet Supabase et des tableaux de `SECURITE.md`.
+
+**Aucun chemin ne purge le calendrier iCloud d'un collaborateur parti.**
+Depuis les lots 1 et 3, `clear_caldav_credentials` (migration
+`20260905000002_caldav_owner_guard.sql`) et l'action `clear` de
+`supabase/functions/caldav-push/index.ts` sont réservées au propriétaire strict :
+le bouton n'existe que dans sa propre fiche (`src/settings.js:1211`). Quand un
+collaborateur quitte la clinique et que son compte est supprimé, plus personne ne
+peut effacer les événements Amivet déjà poussés dans son calendrier Apple
+personnel — ils y restent indéfiniment. C'est le prix assumé de la fermeture : le
+mot de passe d'application Apple est un secret personnel, et rouvrir `clear` à
+l'admin rouvrirait la destruction du calendrier d'un associé par l'autre. Le coût
+de la laisser est faible et se paie chez la personne partie, pas dans la clinique ;
+le remède, s'il devient nécessaire, est un geste explicite à faire par l'intéressé
+**avant** son départ, à ajouter à la procédure de sortie d'`EXPLOITATION.md`.
+
+
 ### Constatée par le chantier « correction automatique des signalements » (2026-08-17)
 
 #### Des constantes de paie sans aucune occurrence dans les tests
