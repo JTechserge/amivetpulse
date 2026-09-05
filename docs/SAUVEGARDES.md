@@ -67,9 +67,20 @@ Puis :
 | `announcement_reads` | Lectures d'annonces | non |
 | `calendar_sync_tokens` | Hash tokens synchronisation calendrier | non (régénérables) |
 | `push_subscriptions` | Abonnements notifications push | non (régénérables) |
-| `app_security` | Réglages de sécurité applicative | non |
+| `app_security` | Vide depuis le 05/09/2026 — ne porte plus que `id` et `updated_at` | non |
 
 **Exclues** : `rate_limit_log` (éphémère, sans valeur de restauration).
+
+> **Sauvegardes antérieures au 05/09/2026.** La migration
+> `20260905000004_drop_password_functions.sql` a supprimé les colonnes du mot de
+> passe partagé (`password_hash`, `password_salt`, `reset_token`,
+> `reset_token_expires_at`, `reset_email_pending`), devenues des données mortes
+> mais sensibles, exportées chaque nuit. Restaurer une sauvegarde plus ancienne
+> fera donc échouer la seule table `app_security` (« column does not exist ») :
+> l'erreur est attrapée par table et n'interrompt pas les autres
+> (`scripts/restore-supabase.mjs:110-117`). Rien d'utile n'est perdu — la ligne ne
+> contenait que le hash d'un mot de passe abandonné. Pour une restauration sans
+> ligne rouge, supprimer `app_security.json` du dossier avant de lancer le script.
 
 ---
 

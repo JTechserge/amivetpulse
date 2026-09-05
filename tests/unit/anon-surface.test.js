@@ -481,3 +481,125 @@ describe("surface anon — lot 3, gardes d'identité des Edge Functions", () => 
     );
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lot 4 — suppression des six fonctions du mot de passe partagé.
+//
+// Portée de preuve : la couverture, pas l'exécution. Ce que ces tests protègent,
+// c'est qu'aucune des fonctions créées par 20240201000001 ne survive à la
+// migration de suppression, et qu'aucune colonne sensible ne soit oubliée en
+// route — les deux sont dérivés du fichier d'origine, pas recopiés à la main.
+// S'y ajoute le piège propre au DROP : `DROP FUNCTION IF EXISTS f(text)` sur une
+// fonction `f(text, text)` ne supprime rien et ne dit rien. L'arité est donc
+// comparée entre création et suppression.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ORIGINE_FILE = '20240201000001_password_security.sql';
+const ORIGINE_SQL = readSql(ORIGINE_FILE);
+const DROP_FILE = '20260905000004_drop_password_functions.sql';
+const DROP_SQL = readSql(DROP_FILE);
+
+// Les fonctions telles que la migration d'origine les déclare : nom → nombre
+// de paramètres. Rien n'est saisi à la main ici.
+const FONCTIONS_ORIGINE = new Map(
+  [...ORIGINE_SQL.matchAll(/create\s+or\s+replace\s+function\s+(\w+)\s*\(([^)]*)\)/gi)].map(
+    ([, nom, params]) => [nom, params.trim() === '' ? 0 : params.split(',').length]
+  )
+);
+
+// Les colonnes de app_security, telles que la migration d'origine les crée.
+const COLONNES_ORIGINE = (() => {
+  const bloc = ORIGINE_SQL.match(/create table if not exists app_security \(([\s\S]*?)\n\);/i);
+  if (!bloc) return [];
+  return bloc[1]
+    .split('\n')
+    .map((l) => l.trim().match(/^(\w+)\s/))
+    .filter(Boolean)
+    .map((m) => m[1]);
+})();
+
+// Colonnes conservées : la clé et l'horodatage. La table survit vidée de son
+// contenu sensible parce que backup-restore-contract.test.js exige sa présence.
+const COLONNES_CONSERVEES = new Set(['id', 'updated_at']);
+
+function fichiersSources() {
+  const racines = ['src', 'scripts', 'supabase/functions', '.github'];
+  const fichiers = [];
+  for (const racine of racines) {
+    let entrees;
+    try {
+      entrees = readdirSync(join(HERE, '../..', racine), { recursive: true, withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entrees) {
+      if (e.isFile() && /\.(js|mjs|ts|html|yml|yaml)$/.test(e.name)) {
+        fichiers.push(join(e.parentPath ?? e.path, e.name));
+      }
+    }
+  }
+  return fichiers;
+}
+
+describe('surface anon — lot 4, fonctions du mot de passe partagé', () => {
+  it('le corpus contient bien six fonctions à supprimer (garde-fou du test lui-même)', () => {
+    expect(FONCTIONS_ORIGINE.size).toBe(6);
+    expect(COLONNES_ORIGINE.length).toBeGreaterThan(2);
+  });
+
+  it("chaque fonction créée par la migration d'origine est supprimée", () => {
+    const survivantes = [...FONCTIONS_ORIGINE.keys()].filter(
+      (nom) => !new RegExp(`drop\\s+function\\s+if\\s+exists\\s+${nom}\\s*\\(`, 'i').test(DROP_SQL)
+    );
+    expect(survivantes).toEqual([]);
+  });
+
+  it("chaque DROP porte l'arité de la fonction créée — sinon il ne supprime rien, en silence", () => {
+    for (const [nom, arite] of FONCTIONS_ORIGINE) {
+      const drop = DROP_SQL.match(
+        new RegExp(`drop\\s+function\\s+if\\s+exists\\s+${nom}\\s*\\(([^)]*)\\)`, 'i')
+      );
+      expect(drop, `DROP introuvable pour ${nom}`).not.toBeNull();
+      const ariteDrop = drop[1].trim() === '' ? 0 : drop[1].split(',').length;
+      expect(ariteDrop, `${nom} : DROP à ${ariteDrop} paramètre(s), création à ${arite}`).toBe(arite);
+    }
+  });
+
+  it('ne recrée ni ne réaccorde aucune de ces fonctions', () => {
+    for (const nom of FONCTIONS_ORIGINE.keys()) {
+      expect(new RegExp(`create\\s+(or\\s+replace\\s+)?function\\s+${nom}`, 'i').test(DROP_SQL)).toBe(false);
+      expect(new RegExp(`grant\\s+execute\\s+on\\s+function\\s+${nom}`, 'i').test(DROP_SQL)).toBe(false);
+    }
+  });
+
+  it('supprime toutes les colonnes sensibles de app_security, et ne garde que la clé et la date', () => {
+    const aSupprimer = COLONNES_ORIGINE.filter((c) => !COLONNES_CONSERVEES.has(c));
+    const oubliees = aSupprimer.filter(
+      (c) => !new RegExp(`alter\\s+table\\s+app_security\\s+drop\\s+column\\s+if\\s+exists\\s+${c}\\b`, 'i').test(DROP_SQL)
+    );
+    expect(oubliees).toEqual([]);
+    for (const gardee of COLONNES_CONSERVEES) {
+      expect(
+        new RegExp(`drop\\s+column\\s+if\\s+exists\\s+${gardee}\\b`, 'i').test(DROP_SQL),
+        `${gardee} est supprimée alors qu'elle porte la table`
+      ).toBe(false);
+    }
+  });
+
+  it('ne supprime pas la table elle-même — le contrat de sauvegarde en dépend', () => {
+    expect(/drop\s+table[^;]*app_security/i.test(DROP_SQL)).toBe(false);
+  });
+
+  it("aucune de ces fonctions n'est appelée nulle part dans le code", () => {
+    // Le vrai garde-fou du lot : si quelqu'un réintroduit un appel après le DROP,
+    // il obtiendra un 404 PostgREST en production, sans erreur au build.
+    const appelantes = [];
+    for (const fichier of fichiersSources()) {
+      const contenu = readFileSync(fichier, 'utf8');
+      for (const nom of FONCTIONS_ORIGINE.keys()) {
+        if (contenu.includes(nom)) appelantes.push(`${nom} → ${fichier}`);
+      }
+    }
+    expect(appelantes).toEqual([]);
+  });
+});
