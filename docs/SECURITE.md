@@ -133,11 +133,18 @@ npx supabase functions deploy <nom> --project-ref ubowqtowyqmpraoxbaoo
 
 ---
 
-## Chantier « surfaces anon » (05/09/2026) — ⏳ NON DÉPLOYÉ
+## Chantier « surfaces anon » (05/09/2026) — ✅ DÉPLOYÉ le 06/09/2026
 
-Fermeture des surfaces atteignables avec la seule clé publique `anon`. **Le code
-est commité, rien n'est appliqué ni déployé** : la procédure et son ordre imposé
-sont dans `docs/RUNBOOK-DEPLOIEMENT.md`, section « Chantier surfaces anon ».
+Fermeture des surfaces atteignables avec la seule clé publique `anon`. **Les
+quatre migrations sont appliquées, les trois Edge Functions et le front sont
+déployés** (06/09/2026, ~07h40). La procédure suivie et son ordre imposé sont
+dans `docs/RUNBOOK-DEPLOIEMENT.md`, section « Chantier surfaces anon ».
+
+Vérifié en production après application : aucune policy réellement ouverte à
+`anon`, RLS active sur toutes les tables, `anon = false` sur les dix fonctions
+CalDAV et calendrier, flux ICS toujours servi (HTTP 400 sur jeton invalide, pas
+502), `caldav-push` et `push-server` en **401 sur appel anonyme**, les six
+fonctions du mot de passe absentes, `app_security` réduite à `id`/`updated_at`.
 
 | Lot | Livrable | Ce qui était ouvert |
 |---|---|---|

@@ -282,6 +282,31 @@ informative :
   qui est correct : sans collaborateur associé, il n'a pas de calendrier.
 - `asv` sans `person_id` → perd tout accès à l'écran. Là, corriger avant.
 
+## Attention : la requête « 0 policy anon » ment
+
+Le bloc VÉRIFICATION de `20260905000001` demande de compter les policies dont
+`roles` contient `anon` ou `public`, et annonce « ATTENDU : 0 ligne ». **C'est
+impossible par construction** : une policy créée sans clause `TO` est enregistrée
+avec `roles = {public}`, et la migration en crée elle-même une vingtaine. Le
+06/09/2026 cette requête a remonté 20 lignes sur une base pourtant saine.
+
+Ce qui compte n'est pas le rôle attaché à la policy mais son prédicat. La bonne
+requête écarte celles qui exigent déjà une identité :
+
+```sql
+SELECT tablename, policyname, cmd, qual, with_check
+FROM   pg_policies
+WHERE  schemaname = 'public'
+  AND  roles::text[] && ARRAY['anon', 'public']
+  AND  coalesce(qual,'')||coalesce(with_check,'') NOT LIKE '%authenticated%'
+  AND  coalesce(qual,'')||coalesce(with_check,'') NOT LIKE '%get_my_role%'
+  AND  coalesce(qual,'')||coalesce(with_check,'') NOT LIKE '%uid()%';
+```
+
+ATTENDU : une seule ligne, `signature_tokens` / « Service role only », dont le
+`qual` vaut `false` — une policy qui refuse tout le monde, donc l'inverse d'une
+ouverture. Toute autre ligne est une vraie surface anon.
+
 ## L'ordre, qui n'est pas négociable
 
 | # | Action | Pourquoi à cette place |
