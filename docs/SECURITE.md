@@ -178,6 +178,16 @@ s'ouvrirait au lieu de se fermer. Les deux fonctions d'écriture CalDAV, elles,
 gardent le refus sec sur un appelant sans `person_id` : sans calendrier, rien à
 enregistrer.
 
+**Deux fonctions ont échappé au chantier, et c'est instructif.** Le lendemain du
+déploiement, `npx supabase functions list` a révélé **15 fonctions déployées pour
+13 sources au dépôt**. `send-leave-recap` et `send-password-reset` avaient été
+déployées depuis l'ancien emplacement iCloud et leurs sources n'ont pas suivi le
+déménagement. **Les deux étaient appelables avec la seule clé publique** — un
+`verify_jwt: true` ne protège de rien, puisque la clé `anon` est un JWT valide.
+Le chantier n'a pu fermer que ce dont il voyait le code : un audit qui ne lit que
+le dépôt manque tout ce que le dépôt a perdu. Détail, code archivé et geste
+restant : `supabase/functions-retirees/README.md` et `docs/DETTE.md`.
+
 **Exceptions assumées, à ne pas « corriger » par erreur :**
 
 - `calendar-feed` **reste public**. Le flux ICS est un lien porteur, consulté par un

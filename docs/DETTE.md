@@ -26,15 +26,36 @@ ce garde-fou (`tests/unit/asv-hours-contract.test.js`, invariant non négociable
 et devient cher au premier changement d'autorisation : la divergence ne se voit
 qu'en production, sur un geste refusé sans message.
 
-**`send-leave-recap` est déclarée déployée mais n'a pas de source dans le dépôt.**
-`docs/SECURITE.md:58` lui fixe une limite de débit et `:123` la marque déployée,
-alors que `supabase/functions/send-leave-recap/` n'existe pas. Conséquence directe :
-son garde d'identité est inconnu — le chantier « surfaces anon » a pu fermer les
-douze fonctions présentes dans le dépôt, pas celle-là. Une Edge Function ouverte
-qui envoie des e-mails est une surface d'abus. Le coût de la laisser est celui
-d'un angle mort permanent : chaque audit ultérieur repartira du même doute. À lever
-par `npx supabase functions list`, puis soit verser la source, soit la supprimer
-du projet Supabase et des tableaux de `SECURITE.md`.
+**~~`send-leave-recap` est déclarée déployée mais n'a pas de source dans le dépôt.~~
+LEVÉE le 06/09/2026 — et le constat est pire que la dette.** `npx supabase
+functions list` a montré **15 fonctions déployées pour 13 sources au dépôt** : il y
+en avait **deux** sans source, pas une. `send-leave-recap` et `send-password-reset`,
+toutes deux déployées depuis l'ancien emplacement iCloud
+(`~/Documents/projet claude/CalendrierAmivet/`), leurs sources perdues au
+déménagement vers `~/Projets/`.
+
+**Les deux étaient appelables avec la seule clé publique `anon`** : leur
+`verify_jwt: true` ne protège rien, la clé `anon` étant un JWT valide pour
+Supabase. Vérifié en production le 06/09 : `send-leave-recap` a répondu **HTTP 200
+à un appel sans compte** (branche « no-pending », donc sans envoi d'e-mail, mais
+elle a bien écrit `email_settings.last_run_at` en `service_role`).
+`send-password-reset` répondait 500 depuis le lot 4, qui a supprimé les colonnes
+qu'elle visait — neutralisée par effet de bord, pas par intention.
+
+C'est le trou du chantier « surfaces anon » : il n'a pu fermer que les fonctions
+dont il voyait le code. Aucune des deux n'a d'appelant (ni `src/`, ni `pg_cron`,
+ni workflow GitHub ; le bouton et le script de cron qu'elles citent n'existent
+plus). Sources archivées dans `supabase/functions-retirees/`.
+
+**Reste à faire** — un seul geste, refusé à l'agent parce que destructif :
+
+```bash
+npx supabase functions delete send-password-reset --project-ref ubowqtowyqmpraoxbaoo
+npx supabase functions delete send-leave-recap   --project-ref ubowqtowyqmpraoxbaoo
+```
+
+Puis retirer `send-leave-recap` des tableaux de `docs/SECURITE.md` et
+`docs/RUNBOOK-DEPLOIEMENT.md`.
 
 **Aucun chemin ne purge le calendrier iCloud d'un collaborateur parti.**
 Depuis les lots 1 et 3, `clear_caldav_credentials` (migration
