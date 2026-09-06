@@ -266,7 +266,9 @@ describe('surface anon — lot 1, chaîne CalDAV', () => {
 
   it('get_caldav_status reste lisible par vet/admin, et ne renvoie jamais le mot de passe', () => {
     const body = functionBody(CALDAV_SQL, 'get_caldav_status');
-    expect(body).toMatch(/get_my_role\(\)\s+not\s+in\s*\(\s*'admin'\s*,\s*'vet'\s*\)/i);
+    expect(body).toMatch(
+      /coalesce\(\s*get_my_role\(\)\s*,\s*''\s*\)\s+not\s+in\s*\(\s*'admin'\s*,\s*'vet'\s*\)/i
+    );
     expect(body).not.toMatch(/select[\s\S]*caldav_app_password\s*,/i);
   });
 
@@ -358,7 +360,7 @@ describe('surface anon — lot 2, tokens de flux calendrier', () => {
       );
       expect(body, `${fn} traite un appelant NULL comme un joker`).toMatch(/v_caller\s+is\s+null/i);
       expect(body, `${fn} n'ouvre pas à vet/admin`).toMatch(
-        /get_my_role\(\)\s+not\s+in\s*\(\s*'admin'\s*,\s*'vet'\s*\)/i
+        /coalesce\(\s*get_my_role\(\)\s*,\s*''\s*\)\s+not\s+in\s*\(\s*'admin'\s*,\s*'vet'\s*\)/i
       );
       expect(body, `${fn} ne lève pas de refus`).toMatch(/raise\s+exception/i);
     }
@@ -601,5 +603,84 @@ describe('surface anon — lot 4, fonctions du mot de passe partagé', () => {
       }
     }
     expect(appelantes).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Comptes de gestion sans collaborateur associé.
+//
+// CE QUE CE TEST PROUVE : que les cinq fonctions « propriétaire OU vet/admin »
+// consultent le rôle AVANT le person_id de l'appelant, et qu'un rôle absent est
+// ramené à une valeur comparable avant le NOT IN.
+//
+// POURQUOI IL EXISTE. Au pré-vol du déploiement du 05/09/2026, la garde
+// s'écrivait « IF v_caller IS NULL OR (… AND get_my_role() NOT IN (…)) ». Le
+// court-circuit sur v_caller passait avant le rôle : le compte admin de la
+// clinique, qui n'a pas de person_id parce qu'il ne figure pas au planning, se
+// voyait refuser l'écran de synchronisation entier — celui-là même que le
+// modèle C lui confie. Ni le lint ni les tests ne le voyaient ; seule la
+// lecture de user_profiles en production l'a montré.
+//
+// Le coalesce() est l'autre moitié du contrat, et la plus discrète :
+// get_my_role() rend NULL pour un JWT sans profil, « NULL NOT IN (…) » vaut
+// NULL, et un IF qui reçoit NULL n'exécute pas sa branche. Sans coalesce, la
+// garde s'OUVRIRAIT à un compte sans profil au lieu de se fermer. C'est
+// pourquoi il est vérifié séparément, et pas seulement comme une graphie.
+//
+// CE QU'IL NE PROUVE PAS : que Postgres autorise effectivement l'admin. Il
+// n'existe pas de compte de test Supabase (cf. CLAUDE.md) ; la preuve d'effet
+// est le point 2 de la check-list applicative du runbook, une fois déployé.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ROLE_OU_PROPRIETAIRE = [
+  [CALDAV_SQL, 'get_caldav_status'],
+  ...GESTION_CALENDRIER.map((fn) => [TOKEN_SQL, fn]),
+];
+
+describe('surface anon — comptes de gestion sans person_id', () => {
+  it('couvre bien les cinq fonctions ouvertes à vet/admin (garde-fou du test lui-même)', () => {
+    expect(ROLE_OU_PROPRIETAIRE).toHaveLength(5);
+  });
+
+  it("consulte le rôle AVANT le person_id de l'appelant", () => {
+    for (const [sql, fn] of ROLE_OU_PROPRIETAIRE) {
+      const body = functionBody(sql, fn);
+      expect(body, `corps introuvable pour ${fn}`).not.toBeNull();
+
+      const garde = body.match(/\bif\b[\s\S]*?\bthen\b/i);
+      expect(garde, `${fn} n'a plus de garde IF … THEN`).not.toBeNull();
+
+      const role = garde[0].search(/get_my_role/i);
+      const caller = garde[0].search(/v_caller\s+is\s+null/i);
+      expect(role, `${fn} ne consulte pas le rôle`).toBeGreaterThanOrEqual(0);
+      expect(caller, `${fn} ne traite plus l'appelant sans person_id`).toBeGreaterThanOrEqual(0);
+      expect(
+        role,
+        `${fn} teste v_caller avant le rôle : un admin sans person_id serait refusé`
+      ).toBeLessThan(caller);
+    }
+  });
+
+  it("ramène un rôle absent à une valeur comparable — sinon la garde s'ouvre au lieu de fermer", () => {
+    for (const [sql, fn] of ROLE_OU_PROPRIETAIRE) {
+      const body = functionBody(sql, fn);
+      expect(
+        body,
+        `${fn} compare get_my_role() sans coalesce : NULL NOT IN (…) vaut NULL, donc aucun refus`
+      ).toMatch(/coalesce\(\s*get_my_role\(\)\s*,\s*''\s*\)\s+not\s+in/i);
+    }
+  });
+
+  it("laisse intact le refus sec des deux fonctions d'écriture CalDAV", () => {
+    // Contre-épreuve : la correction ne doit PAS avoir débordé sur les fonctions
+    // propriétaire-strict. Un compte de gestion sans collaborateur n'a pas de
+    // calendrier, il n'a donc aucun identifiant Apple à y enregistrer.
+    for (const fn of CALDAV_ECRITURE) {
+      const body = functionBody(CALDAV_SQL, fn);
+      expect(body, `${fn} a perdu son refus sur un appelant sans person_id`).toMatch(
+        /v_caller\s+is\s+null\s+or/i
+      );
+      expect(body, `${fn} s'est ouverte à un rôle`).not.toMatch(/get_my_role/i);
+    }
   });
 });

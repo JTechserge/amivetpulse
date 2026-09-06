@@ -254,20 +254,33 @@ supabase functions deploy <nom-function> --project-ref ubowqtowyqmpraoxbaoo
 Cinq lots commités localement, **rien d'appliqué**. Contexte et modèle
 d'autorisation : `docs/SECURITE.md`, section « Chantier surfaces anon ».
 
-## ⚠️ Pré-vol — à faire AVANT toute application
+## Pré-vol — passé le 05/09/2026, et il a servi
 
-Une seule requête, dans le SQL Editor. C'est le seul point capable de casser la
-production :
+Une seule requête, dans le SQL Editor :
 
 ```sql
 SELECT id, role, person_id FROM user_profiles ORDER BY role, person_id NULLS FIRST;
 ```
 
-**Un `person_id` NULL sur un compte `vet` ou `admin` enferme ce compte dehors de
-son propre écran de synchronisation** dès que `20260905000002` est appliquée : les
-fonctions CalDAV dérivent désormais l'identité du profil, et un profil sans
-collaborateur associé ne correspond à personne. Renseigner le `person_id` manquant
-**avant** de continuer.
+**Résultat obtenu** : `admin` sans `person_id`, puis `marie`/asv, `david`/vet,
+`stephane`/vet. Le compte admin est celui de Jérémie, qui ne figure pas au
+planning — aucune valeur ne lui conviendrait, et lui en inventer une mettrait
+dans la colonne un identifiant ne désignant aucun collaborateur.
+
+Ce constat a **arrêté le déploiement et fait corriger le code**. Les cinq
+fonctions « propriétaire OU vet/admin » testaient `v_caller IS NULL` *avant* le
+rôle : le court-circuit refusait à ce compte l'écran de synchronisation entier,
+alors que le modèle C lui confie précisément la gestion des liens ICS. Les
+migrations `20260905000002` et `20260905000003` ont été corrigées à la source —
+elles n'étaient pas encore appliquées — pour consulter le rôle en premier.
+
+**La requête reste à passer avant toute application**, mais elle est désormais
+informative :
+
+- `vet` ou `admin` sans `person_id` → garde la lecture des statuts et la gestion
+  des liens ICS. Il ne peut pas enregistrer d'identifiants CalDAV à son nom, ce
+  qui est correct : sans collaborateur associé, il n'a pas de calendrier.
+- `asv` sans `person_id` → perd tout accès à l'écran. Là, corriger avant.
 
 ## L'ordre, qui n'est pas négociable
 

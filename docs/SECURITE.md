@@ -154,6 +154,23 @@ un jeton de lecture d'un planning déjà partagé entre les deux associés, et c
 aligne les fonctions sur la policy « owner or vet reads token » que
 `calendar_sync_tokens` porte depuis `20240515000001`.
 
+**Un compte de gestion n'a pas de `person_id`, et cela ne doit pas l'enfermer
+dehors.** Le compte `admin` de la clinique ne figure pas au planning : aucun
+collaborateur ne lui correspond, et lui en attribuer un de complaisance mettrait
+dans la colonne un identifiant qui ne désigne personne. Les cinq fonctions
+« propriétaire OU vet/admin » consultent donc le **rôle en premier**, et ne
+retombent sur le `person_id` que pour les comptes sans rôle de gestion. Écrit
+dans l'autre sens — `v_caller IS NULL` d'abord — le court-circuit refusait à ce
+compte l'écran de synchronisation entier ; c'était l'état des migrations jusqu'au
+pré-vol du déploiement, qui l'a révélé et fait corriger avant application.
+
+Le `coalesce(get_my_role(), '')` de ces gardes n'est pas une coquetterie :
+`get_my_role()` rend `NULL` pour un JWT sans profil, `NULL NOT IN (…)` vaut
+`NULL`, et un `IF` qui reçoit `NULL` n'exécute pas sa branche. Sans lui, la garde
+s'ouvrirait au lieu de se fermer. Les deux fonctions d'écriture CalDAV, elles,
+gardent le refus sec sur un appelant sans `person_id` : sans calendrier, rien à
+enregistrer.
+
 **Exceptions assumées, à ne pas « corriger » par erreur :**
 
 - `calendar-feed` **reste public**. Le flux ICS est un lien porteur, consulté par un
@@ -166,7 +183,7 @@ aligne les fonctions sur la policy « owner or vet reads token » que
   un admin. Conséquence consignée en dette : le calendrier Apple d'un collaborateur
   parti ne peut plus être purgé après la suppression de son compte.
 
-**Preuve.** `tests/unit/anon-surface.test.js` — 42 tests de contrat qui lisent les
+**Preuve.** `tests/unit/anon-surface.test.js` — 46 tests de contrat qui lisent les
 migrations et les Edge Functions. Ils constatent l'intention du code, pas le
 comportement de Postgres : il n'existe pas de compte de test Supabase.
 

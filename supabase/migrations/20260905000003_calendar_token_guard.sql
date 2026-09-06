@@ -14,6 +14,14 @@
 -- 20240515000001_fix_rls_recursion.sql:36-43 : la base et les fonctions disent
 -- désormais la même chose.
 --
+-- CORRECTION du 05/09/2026, au pré-vol du déploiement — même défaut qu'au lot 1,
+-- et même correctif. La garde des quatre fonctions de gestion testait
+-- « v_caller IS NULL » AVANT le rôle : le compte admin de la clinique, qui n'a
+-- pas de person_id faute de figurer au planning, perdait la gestion des liens
+-- ICS que ce modèle lui accorde explicitement. Le rôle passe en premier, et le
+-- coalesce() est requis parce que « NULL NOT IN (…) » vaut NULL et n'aurait
+-- déclenché aucun refus pour un JWT sans profil.
+--
 -- DEUX FONCTIONS DE VÉRIFICATION, traitées différemment des quatre de gestion :
 --
 --   · verify_calendar_sync_token — AUCUN appelant dans tout le dépôt (src/,
@@ -51,8 +59,8 @@ DECLARE
   v_caller TEXT := my_person_id();
   new_token TEXT;
 BEGIN
-  IF v_caller IS NULL
-     OR (p_person_id IS DISTINCT FROM v_caller AND get_my_role() NOT IN ('admin', 'vet')) THEN
+  IF coalesce(get_my_role(), '') NOT IN ('admin', 'vet')
+     AND (v_caller IS NULL OR p_person_id IS DISTINCT FROM v_caller) THEN
     RAISE EXCEPTION 'Lien calendrier : acces refuse.' USING ERRCODE = '42501';
   END IF;
 
@@ -84,8 +92,8 @@ AS $$
 DECLARE
   v_caller TEXT := my_person_id();
 BEGIN
-  IF v_caller IS NULL
-     OR (p_person_id IS DISTINCT FROM v_caller AND get_my_role() NOT IN ('admin', 'vet')) THEN
+  IF coalesce(get_my_role(), '') NOT IN ('admin', 'vet')
+     AND (v_caller IS NULL OR p_person_id IS DISTINCT FROM v_caller) THEN
     RAISE EXCEPTION 'Lien calendrier : acces refuse.' USING ERRCODE = '42501';
   END IF;
 
@@ -115,8 +123,8 @@ AS $$
 DECLARE
   v_caller TEXT := my_person_id();
 BEGIN
-  IF v_caller IS NULL
-     OR (p_person_id IS DISTINCT FROM v_caller AND get_my_role() NOT IN ('admin', 'vet')) THEN
+  IF coalesce(get_my_role(), '') NOT IN ('admin', 'vet')
+     AND (v_caller IS NULL OR p_person_id IS DISTINCT FROM v_caller) THEN
     RAISE EXCEPTION 'Statut calendrier : acces refuse.' USING ERRCODE = '42501';
   END IF;
 
@@ -147,8 +155,8 @@ AS $$
 DECLARE
   v_caller text := my_person_id();
 BEGIN
-  IF v_caller IS NULL
-     OR (p_person_id IS DISTINCT FROM v_caller AND get_my_role() NOT IN ('admin', 'vet')) THEN
+  IF coalesce(get_my_role(), '') NOT IN ('admin', 'vet')
+     AND (v_caller IS NULL OR p_person_id IS DISTINCT FROM v_caller) THEN
     RAISE EXCEPTION 'Preferences calendrier : acces refuse.' USING ERRCODE = '42501';
   END IF;
 

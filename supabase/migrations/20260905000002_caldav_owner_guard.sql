@@ -17,6 +17,21 @@
 --     porte déjà depuis 20240515000001_fix_rls_recursion.sql:36-43. Ne renvoie
 --     jamais le mot de passe (inchangé).
 --
+-- CORRECTION du 05/09/2026, au pré-vol du déploiement. La garde des fonctions
+-- « propriétaire OU vet/admin » s'écrivait :
+--     IF v_caller IS NULL
+--        OR (p_person_id IS DISTINCT FROM v_caller AND get_my_role() NOT IN (…))
+-- Le court-circuit sur v_caller passait AVANT le test de rôle. Or le compte
+-- admin de la clinique n'a pas de person_id — il ne figure pas au planning, et
+-- aucune valeur ne lui conviendrait. Il se voyait donc refuser l'écran de
+-- synchronisation ENTIER, alors que le modèle C lui accorde justement la
+-- gestion des liens. Le rôle est désormais testé en premier.
+--
+-- Le coalesce() n'est pas décoratif : get_my_role() rend NULL quand le profil
+-- n'existe pas, et « NULL NOT IN (…) » vaut NULL, pas TRUE. Sans lui, un JWT
+-- authenticated sans profil ne déclencherait AUCUN refus — la garde s'ouvrirait
+-- au lieu de se fermer.
+--
 -- get_caldav_credentials n'est pas touchée : elle n'a aucun GRANT et reste
 -- réservée au service_role (Edge Function). C'est déjà le bon état.
 --
@@ -31,8 +46,11 @@
 -- Pendant de get_my_role() (20240515000001_fix_rls_recursion.sql:9-17), même
 -- forme : SECURITY DEFINER + STABLE, pour être appelable depuis les policies
 -- comme depuis les fonctions sans récursion RLS.
--- Retourne NULL si aucune session, ou si le profil n'a pas de person_id —
--- les appelants traitent NULL comme un refus, jamais comme un joker.
+-- Retourne NULL si aucune session, ou si le profil n'a pas de person_id.
+-- Les fonctions PROPRIÉTAIRE STRICT traitent ce NULL comme un refus sec. Les
+-- fonctions « propriétaire OU vet/admin » testent le rôle D'ABORD : un compte de
+-- gestion sans collaborateur associé garde ses droits (cf. bloc CORRECTION en
+-- tête de fichier). NULL n'est un joker dans aucun des deux cas.
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION my_person_id()
 RETURNS text
@@ -134,8 +152,8 @@ AS $$
 DECLARE
   v_caller text := my_person_id();
 BEGIN
-  IF v_caller IS NULL
-     OR (p_person_id IS DISTINCT FROM v_caller AND get_my_role() NOT IN ('admin', 'vet')) THEN
+  IF coalesce(get_my_role(), '') NOT IN ('admin', 'vet')
+     AND (v_caller IS NULL OR p_person_id IS DISTINCT FROM v_caller) THEN
     RAISE EXCEPTION 'Statut CalDAV : acces refuse.'
       USING ERRCODE = '42501';
   END IF;
@@ -180,10 +198,16 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM anon;
 --   ORDER  BY 1;
 --   -- ATTENDU : anon = false partout, authenticated = true partout.
 --
--- PRÉALABLE BLOQUANT — à passer AVANT cette migration :
+-- CONSTAT D'ÉTAT — à passer AVANT cette migration. Informatif depuis la
+-- CORRECTION ci-dessus ; il était bloquant tant que v_caller primait le rôle.
 --   SELECT id, role, person_id FROM user_profiles ORDER BY role, person_id NULLS FIRST;
---   -- Un person_id NULL sur un compte vet ou admin signifie que ce compte sera
---   -- enfermé DEHORS de son propre écran de synchro. Corriger d'abord.
+--   -- Passé le 05/09/2026 : admin = NULL (compte de gestion, hors planning),
+--   -- marie/asv, david/vet, stephane/vet. Lecture du résultat :
+--   --   · vet ou admin sans person_id → garde la lecture des statuts et la
+--   --     gestion des liens ICS (le rôle suffit), mais ne peut pas enregistrer
+--   --     d'identifiants CalDAV À SON NOM. C'est correct : sans collaborateur
+--   --     associé, il n'a pas de calendrier à synchroniser.
+--   --   · asv sans person_id → perd tout accès à l'écran. Là, corriger.
 --
 -- PUIS, dans l'application :
 --   1. ⚙️ → Synchronisation calendrier → son propre bloc : activer, puis
