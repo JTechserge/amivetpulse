@@ -54,8 +54,12 @@ npx supabase functions delete send-password-reset --project-ref ubowqtowyqmpraox
 npx supabase functions delete send-leave-recap   --project-ref ubowqtowyqmpraoxbaoo
 ```
 
-Puis retirer `send-leave-recap` des tableaux de `docs/SECURITE.md` et
-`docs/RUNBOOK-DEPLOIEMENT.md`.
+Le nettoyage documentaire, lui, est **fait le 07/09/2026** : `send-leave-recap` est sortie
+des tableaux de `docs/SECURITE.md` et de l'étape 3 de `docs/RUNBOOK-DEPLOIEMENT.md`, où sa
+commande de redéploiement subsistait — la relancer aurait rouvert la surface. Vérifié le
+07/09 : les deux fonctions sont toujours `ACTIVE` en production (`send-password-reset` v7,
+`send-leave-recap` v14), leur `entrypoint_path` pointant encore l'ancien dossier iCloud.
+**La dette ne sera close qu'une fois les deux commandes ci-dessus passées.**
 
 **Aucun chemin ne purge le calendrier iCloud d'un collaborateur parti.**
 Depuis les lots 1 et 3, `clear_caldav_credentials` (migration

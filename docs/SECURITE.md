@@ -55,7 +55,6 @@ Fonction SQL `check_rate_limit()` (SECURITY DEFINER) + table `rate_limit_log`. S
 |---|---|---|
 | `manage-users` | 1 heure | 10 req |
 | `request-signature` | 1 heure | 20 req |
-| `send-leave-recap` | 1 heure | 5 req |
 
 ### 5. Tokens calendar-feed
 
@@ -120,9 +119,14 @@ Toutes les migrations sont déployées en production. Voir `supabase/README.md` 
 | `upload-signed-pdf` | Reçoit le PDF base64, upload dans `signed-sheets`, stocke `pdf_path` | ✅ |
 | `reject-signature` | Soft-delete d'une signature (vet/admin) — status → `rejected` | ✅ |
 | `request-signature` | Génère le lien d'email de signature | ✅ |
-| `send-leave-recap` | Récapitulatif congés hebdomadaire | ✅ |
 | `push-server` | Notifications push PWA | ✅ |
 | `save-planning` | Sauvegarde le planning (service_role) | ✅ |
+
+`send-leave-recap` et `send-password-reset` ne figurent plus dans ce tableau : orphelines,
+sans source ni appelant, elles sont **encore déployées en production** en attente d'une
+suppression manuelle. Tant qu'elles y sont, `send-leave-recap` reste appelable avec la
+seule clé `anon`. Geste restant et code archivé : `docs/DETTE.md` et
+`supabase/functions-retirees/README.md`.
 
 Toutes les fonctions retournent `Access-Control-Allow-Origin: https://jtechserge.github.io` (jamais `*`).
 

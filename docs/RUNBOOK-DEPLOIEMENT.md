@@ -19,7 +19,6 @@ Durée estimée : **20–30 minutes** (hors communication aux vétérinaires).
 | Edge Function `request-signature` | ✅ Redéployée (Phase 7 Lot 2 — module `asv-hours` partagé) |
 | Edge Function `manage-users` (CORS) | ⏳ À redéployer |
 | Edge Function `confirm-signature` (CORS) | ⏳ À redéployer |
-| Edge Function `send-leave-recap` (CORS) | ⏳ À redéployer |
 | Edge Function `push-server` (CORS) | ⏳ À redéployer |
 | Branche `hardening/2026-07-phase7` → `main` | ⏳ À merger |
 
@@ -137,15 +136,19 @@ Envoyer le message suivant aux vétérinaires (David, Stéphane) :
 
 ## Étape 3 — Redéploiement des Edge Functions (CORS)
 
-Ces 4 fonctions ont été modifiées pour restreindre le CORS de `*` à `https://jtechserge.github.io`. Elles nécessitent également la fonction `check_rate_limit()` créée à l'étape 2 (pour 3 d'entre elles).
+Ces 3 fonctions ont été modifiées pour restreindre le CORS de `*` à `https://jtechserge.github.io`. Elles nécessitent également la fonction `check_rate_limit()` créée à l'étape 2 (pour 2 d'entre elles).
 
-**Pré-requis** : étape 2a complétée (sinon `manage-users`, `request-signature`, `send-leave-recap` planteront au démarrage avec une erreur fonction SQL manquante).
+> **`send-leave-recap` a été retirée de cette étape le 07/09/2026.** Elle figurait ici comme
+> quatrième fonction à redéployer ; elle est orpheline (aucun appelant, source perdue au
+> déménagement iCloud, archivée dans `supabase/functions-retirees/`) et doit être **supprimée**,
+> pas redéployée. La relancer rouvrirait une surface appelable avec la seule clé `anon`.
+
+**Pré-requis** : étape 2a complétée (sinon `manage-users` et `request-signature` planteront au démarrage avec une erreur fonction SQL manquante).
 
 ```bash
 # Depuis la racine du projet :
 supabase functions deploy manage-users      --project-ref ubowqtowyqmpraoxbaoo
 supabase functions deploy confirm-signature --project-ref ubowqtowyqmpraoxbaoo
-supabase functions deploy send-leave-recap  --project-ref ubowqtowyqmpraoxbaoo
 supabase functions deploy push-server       --project-ref ubowqtowyqmpraoxbaoo
 ```
 
