@@ -158,6 +158,11 @@ describe('formatHHMM', () => {
   test('0 → 0h00', () => expect(formatHHMM(0)).toBe('0h00'));
   test('négatif → abs', () => expect(formatHHMM(-1.5)).toBe('1h30'));
   test('7.75 → 7h45', () => expect(formatHHMM(7.75)).toBe('7h45'));
+  // Des sommes d'heures en flottants (7h25 = 7 + 25/60) tombent juste sous l'heure :
+  // les minutes arrondies ne doivent jamais afficher « 60 ».
+  test('35.9999 → 36h00, jamais 35h60', () => expect(formatHHMM(35.9999)).toBe('36h00'));
+  test('somme flottante de 7h25 → 14h50', () => expect(formatHHMM(2 * (7 + 25 / 60))).toBe('14h50'));
+  test('35.75 → 35h45', () => expect(formatHHMM(35.75)).toBe('35h45'));
 });
 
 describe('signedHHMM', () => {

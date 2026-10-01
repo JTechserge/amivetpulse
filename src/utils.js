@@ -134,9 +134,11 @@ export function holidayName(isoDate){
 // Heures
 // ----------------------------------------------------------------
 export function formatHHMM(h){
-  const abs = Math.abs(h);
-  const hh = Math.floor(abs);
-  const mm = Math.round((abs - hh) * 60);
+  // Arrondir à la minute AVANT de séparer heures et minutes : 35.9999 doit
+  // donner 36h00, pas 35h60.
+  const totalMin = Math.round(Math.abs(h) * 60);
+  const hh = Math.floor(totalMin / 60);
+  const mm = totalMin % 60;
   return `${hh}h${String(mm).padStart(2,'0')}`;
 }
 

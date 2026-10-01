@@ -649,6 +649,12 @@ export function buildDashWeeklyMonthCard(year, month) {
 }
 
 // ── Carte 1 : Modulation annuelle ──────────────────────────────
+// Écart signé en heures-minutes (« +2h15 », « -0h45 »). Arrondi à la minute
+// d'abord : un reste flottant de -0,0001h ne doit pas s'afficher « -0h00 ».
+function signedMinutes(h) {
+  return signedHHMM(Math.round(h * 60) / 60);
+}
+
 export function buildASVModulationCard(year) {
   const cy = getCurrentYear();
   const cm = today.getMonth();
@@ -669,7 +675,7 @@ export function buildASVModulationCard(year) {
         const proj = Math.round((worked / cm) * 12);
         const diff = proj - target;
         const dc = Math.abs(diff) < 20 ? '#16A34A' : diff > 0 ? '#F59E0B' : '#EA580C';
-        estim = `<div style="display:flex;justify-content:flex-end;margin-top:3px;"><span style="font-size:11px;color:${dc};">proj. fin d'année : ${formatNum(proj)}h (${diff >= 0 ? '+' : ''}${formatNum(diff)}h vs cible)</span></div>`;
+        estim = `<div style="display:flex;justify-content:flex-end;margin-top:3px;"><span style="font-size:11px;color:${dc};">proj. fin d'année : ${formatHHMM(proj)} (${signedMinutes(diff)} vs cible)</span></div>`;
       }
       const overNotif =
         worked > target && target > 0
@@ -682,7 +688,7 @@ export function buildASVModulationCard(year) {
         <span style="width:8px;height:8px;border-radius:2px;background:${p.color};display:inline-block;flex-shrink:0;"></span>
         <span style="font-weight:700;font-size:14px;">${escapeHTML(p.short)}</span>
         <span style="font-size:11px;color:var(--color-text-muted);">${tfLabel}</span>
-        <span style="margin-left:auto;font-size:13px;">${icon} <strong>${formatNum(worked)}h</strong><span style="color:var(--color-text-muted);"> / ${formatNum(target)}h</span></span>
+        <span style="margin-left:auto;font-size:13px;">${icon} <strong>${formatHHMM(worked)}</strong><span style="color:var(--color-text-muted);"> / ${formatHHMM(target)}</span></span>
         <span style="font-size:14px;font-weight:700;color:${barC};min-width:38px;text-align:right;">${pct}%</span>
       </div>
       <div style="background:var(--color-border);border-radius:99px;height:8px;overflow:hidden;">
@@ -710,7 +716,7 @@ export function buildASVModulationCard(year) {
       <span style="width:8px;height:8px;border-radius:2px;background:${p.color};display:inline-block;flex-shrink:0;"></span>
       <span style="font-weight:700;font-size:14px;">${escapeHTML(p.short)}</span>
       <span style="font-size:11px;color:var(--color-text-muted);">— samedi uniquement</span>
-      <span style="margin-left:auto;font-size:13px;"><strong>${satCount} samedis</strong><span style="color:var(--color-text-muted);"> · ${formatNum(worked)}h</span></span>
+      <span style="margin-left:auto;font-size:13px;"><strong>${satCount} samedis</strong><span style="color:var(--color-text-muted);"> · ${formatHHMM(worked)}</span></span>
       <span style="font-size:11px;background:#EFF6FF;color:#1D4ED8;border-radius:4px;padding:2px 8px;white-space:nowrap;flex-shrink:0;">Hors modulation</span>
     </div>`;
     })
@@ -875,7 +881,7 @@ export function buildASVMonthlyTable(year) {
   const nameHeaders = modulated
     .map(
       (p) =>
-        `<th colspan="3" style="text-align:center;padding:6px 8px;border-bottom:1px solid var(--color-border);">${escapeHTML(p.short)}<br><span style="font-weight:400;font-size:10px;color:var(--color-text-muted);">quota ${formatNum(getASVQuota(p.id).monthly)}h/m</span></th>`
+        `<th colspan="3" style="text-align:center;padding:6px 8px;border-bottom:1px solid var(--color-border);">${escapeHTML(p.short)}<br><span style="font-weight:400;font-size:10px;color:var(--color-text-muted);">quota ${formatHHMM(getASVQuota(p.id).monthly)}/m</span></th>`
     )
     .join('');
   const subHeaders = modulated
@@ -898,9 +904,9 @@ export function buildASVMonthlyTable(year) {
         const pct = q.monthly > 0 ? w / q.monthly : 0;
         const icon = pct > 1.05 ? '🔴' : pct >= 0.9 ? '🟢' : w > 0 ? '🟡' : '';
         return (
-          `<td style="${TD}font-weight:700;">${icon} ${formatNum(w)}<span style="font-size:10px;font-weight:400;color:var(--color-text-muted);">h</span></td>` +
-          `<td style="${TD}color:var(--color-text-muted);">${fcast > 0 ? formatNum(fcast) + '<span style="font-size:10px;">h</span>' : '—'}</td>` +
-          `<td style="${TD}font-weight:700;color:${dColor(diff)};">${diff !== null ? (diff >= 0 ? '+' : '') + formatNum(diff) + 'h' : '—'}</td>`
+          `<td style="${TD}font-weight:700;">${icon} ${formatHHMM(w)}</td>` +
+          `<td style="${TD}color:var(--color-text-muted);">${fcast > 0 ? formatHHMM(fcast) : '—'}</td>` +
+          `<td style="${TD}font-weight:700;color:${dColor(diff)};">${diff !== null ? signedMinutes(diff) : '—'}</td>`
         );
       })
       .join('');
@@ -924,9 +930,9 @@ export function buildASVMonthlyTable(year) {
       const c = pct > 100 ? '#DC2626' : pct >= 90 ? '#F59E0B' : '#16A34A';
       const BT = 'border-top:2px solid var(--color-border);padding:6px 8px;text-align:right;font-weight:700;';
       return (
-        `<td style="${BT}"><span style="color:${c};">${formatNum(w)}h</span><br><span style="font-size:10px;font-weight:400;color:var(--color-text-muted);">${pct}% / ${formatNum(q.annual)}h</span></td>` +
-        `<td style="${BT}color:var(--color-text-muted);font-weight:400;">${fcastTotal > 0 ? formatNum(fcastTotal) + 'h' : '—'}</td>` +
-        `<td style="${BT}color:${dColor(diff)};">${diff !== null ? (diff >= 0 ? '+' : '') + formatNum(diff) + 'h' : '—'}</td>`
+        `<td style="${BT}"><span style="color:${c};">${formatHHMM(w)}</span><br><span style="font-size:10px;font-weight:400;color:var(--color-text-muted);">${pct}% / ${formatHHMM(q.annual)}</span></td>` +
+        `<td style="${BT}color:var(--color-text-muted);font-weight:400;">${fcastTotal > 0 ? formatHHMM(fcastTotal) : '—'}</td>` +
+        `<td style="${BT}color:${dColor(diff)};">${diff !== null ? signedMinutes(diff) : '—'}</td>`
       );
     })
     .join('');
