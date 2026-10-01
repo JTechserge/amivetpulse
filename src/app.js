@@ -1116,7 +1116,7 @@ setupAnnualView({
   saveData,
   snapshotBeforeChange,
 });
-setupForecast({ saveData, snapshotBeforeChange });
+setupForecast({ saveData, snapshotBeforeChange, canEditSlot });
 setupDashboard({
   openResetYearModal,
   saveViewState,

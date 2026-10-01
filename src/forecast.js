@@ -16,6 +16,7 @@ import {
   setupForecastSignatures,
 } from './forecast-signatures.js';
 import { showToast } from './ui.js';
+import { forecastAccess, defaultForecastPid } from './lib/forecast-access.js';
 
 const MAX_CP_WEEKS = 5;
 
@@ -144,10 +145,14 @@ export function computeBreakdown(pid, weeks) {
    ================================================================ */
 
 let _saveData, _snapshotBeforeChange;
+// Règle de droits du planning (app.js). Par défaut fermée : sans injection,
+// rien n'est modifiable plutôt que tout.
+let _canEditSlot = () => false;
 
-export function setupForecast({ saveData, snapshotBeforeChange }) {
+export function setupForecast({ saveData, snapshotBeforeChange, canEditSlot }) {
   _saveData = saveData;
   _snapshotBeforeChange = snapshotBeforeChange;
+  if (canEditSlot) _canEditSlot = canEditSlot;
 }
 
 /* ================================================================
@@ -160,11 +165,11 @@ export function setupForecast({ saveData, snapshotBeforeChange }) {
  */
 function _initPageState(year) {
   if (!store.forecastPageState) {
-    const firstActive = ASV_PEOPLE.find((p) => !p.archived);
     store.forecastPageState = {
       year,
       mode: 'asv',
-      currentPid: firstActive?.id || ASV_PEOPLE[0]?.id,
+      // Une ASV arrive sur sa propre fiche.
+      currentPid: defaultForecastPid(ASV_PEOPLE, _canEditSlot),
       quickValue: null,
     };
   } else {
@@ -173,7 +178,7 @@ function _initPageState(year) {
     // S'assurer que la personne sélectionnée existe toujours
     const pid = store.forecastPageState.currentPid;
     if (!ASV_PEOPLE.find((p) => p.id === pid && !p.archived)) {
-      store.forecastPageState.currentPid = ASV_PEOPLE.find((p) => !p.archived)?.id || ASV_PEOPLE[0]?.id;
+      store.forecastPageState.currentPid = defaultForecastPid(ASV_PEOPLE, _canEditSlot);
     }
   }
 }
@@ -294,16 +299,31 @@ function _renderASVContent(layout, year) {
   const pid = st.currentPid;
   const sig = getForecastSig(pid, year);
   const weeks = buildYearWeeks(year);
-  const isReadOnly = isForecastSigned(pid, year);
-  const canUnsign = store.currentUser?.role === 'vet' || store.currentUser?.role === 'admin';
+  const access = forecastAccess({
+    canEditPerson: _canEditSlot(pid),
+    signed: isForecastSigned(pid, year),
+    role: store.currentUser?.role,
+  });
+  const isReadOnly = access.readOnly;
+  const canUnsign = access.canUnsign;
 
   // Grouper les semaines par mois (mois du jeudi = .month)
   const byMonth = Array.from({ length: 12 }, () => []);
   weeks.forEach((wk) => byMonth[wk.month].push(wk));
 
+  // Fiche d'une collègue : consultation seule, sans barre de saisie.
+  const consultPerson = ASV_PEOPLE.find((p) => p.id === pid);
+  const consultHtml = `
+    <div class="forecast-quickbar">
+      <span class="forecast-quickbar-lbl">👀 Consultation — prévisionnel de ${escapeHTML(consultPerson?.short || pid)}. Vous ne pouvez modifier que le vôtre.</span>
+    </div>
+  `;
+
   // Chips valeurs rapides
   const quickValues = ['42', '39', '35', '28'];
-  const quickChipsHtml = `
+  const quickChipsHtml = access.consultOnly
+    ? consultHtml
+    : `
     <div class="forecast-quickbar">
       <span class="forecast-quickbar-lbl">Saisie rapide :</span>
       ${quickValues
@@ -351,7 +371,15 @@ function _renderASVContent(layout, year) {
     <aside class="forecast-summary" id="forecast-summary-panel"></aside>
   `;
 
-  _renderSummaryPanel(layout.querySelector('#forecast-summary-panel'), pid, year, weeks, sig, canUnsign, isReadOnly);
+  _renderSummaryPanel(
+    layout.querySelector('#forecast-summary-panel'),
+    pid,
+    year,
+    weeks,
+    sig,
+    canUnsign,
+    access.canRequestSignature
+  );
 
   // Chips → mise à jour quickValue
   layout.querySelectorAll('[data-qv]').forEach((btn) => {
@@ -369,7 +397,7 @@ function _renderASVContent(layout, year) {
   // Clic sur une ligne-semaine : applique quickValue
   layout.querySelectorAll('.forecast-wk[data-wk-monday]').forEach((row) => {
     row.addEventListener('click', (e) => {
-      if (!st.quickValue) return;
+      if (isReadOnly || !st.quickValue) return;
       if (e.target.closest('input, button')) return;
       const mon = row.dataset.wkMonday;
       _snapshotBeforeChange();
@@ -382,6 +410,7 @@ function _renderASVContent(layout, year) {
   // Inputs numériques
   layout.querySelectorAll('.forecast-h-input').forEach((inp) => {
     inp.addEventListener('change', () => {
+      if (isReadOnly) return;
       const { fmonday } = inp.dataset;
       const val = inp.value.trim() === '' ? null : parseFloat(inp.value);
       _snapshotBeforeChange();
@@ -394,6 +423,7 @@ function _renderASVContent(layout, year) {
   // Boutons CP par semaine
   layout.querySelectorAll('.forecast-wk-cp-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (isReadOnly) return;
       const { fmonday } = btn.dataset;
       const isCP = getForecastWeek(pid, fmonday) === 'CP';
       _snapshotBeforeChange();
@@ -836,7 +866,7 @@ function _renderWeekRow(wk, pid, isReadOnly, year) {
     </div>`;
 }
 
-function _renderSummaryPanel(panel, pid, year, weeks, sig, canUnsign, isReadOnly) {
+function _renderSummaryPanel(panel, pid, year, weeks, sig, canUnsign, canRequestSignature) {
   const totalH = computeAnnualTotal(pid, weeks);
   const cpCount = computeCPCount(pid, weeks);
   const cpLeft = MAX_CP_WEEKS - cpCount;
@@ -855,7 +885,7 @@ function _renderSummaryPanel(panel, pid, year, weeks, sig, canUnsign, isReadOnly
       </div>`
     : '';
 
-  const signBtnHtml = !isReadOnly
+  const signBtnHtml = canRequestSignature
     ? `<button class="forecast-sign-btn" id="forecast-sign-btn">Demander la signature</button>`
     : '';
   const printBtnHtml = `<button class="forecast-print-btn" id="forecast-print-btn">Imprimer le pr\xe9visionnel</button>`;
