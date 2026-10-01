@@ -12,6 +12,29 @@ une dette : c'est un défaut bloquant, signalé comme tel.
 
 ## Dette restante
 
+### Constatée par le chantier « guide utilisateur et email d'invitation » (2026-10-01)
+
+#### La vue Hebdomadaire ASV traite le vétérinaire salarié comme un associé
+
+- **Quoi** : un vétérinaire salarié voit dans ⏱️ Hebdomadaire le sélecteur d'ASV et peut y changer le poste O/F, les H.supp. et les H.manq. de n'importe quelle ASV, alors que le planning ASV lui est fermé.
+- **Où** : `src/week-view.js`, `isVetUser = effectiveRole() !== 'asv'` (vers les lignes 408-409 et 541-543), qui ne connaît que deux rôles.
+- **Conséquence** : le serveur refuse ces écritures (`validateVetEmployeWrite`, `src/lib/planning-auth.js`, couvert par `tests/unit/planning-auth.test.js`), donc aucune heure ASV n'est réellement modifiée — pas d'enjeu de paie. Mais le salarié voit sa saisie s'afficher localement, puis la synchronisation la rejette : il croit avoir corrigé des heures qui ne l'ont pas été.
+- **Coût de la laisser** : faible tant qu'il n'y a qu'un salarié prévenu ; à corriger avant d'en inviter d'autres. Le correctif est d'aligner la vue sur `canEditSlot`, comme le calendrier mensuel.
+
+#### Les textes d'aide intégrés au calendrier sont périmés
+
+- **Quoi** : la phrase sous chaque calendrier mensuel dit « Cliquez sur une cellule pour faire défiler Vide → Présent → Absent. Clic droit (ou appui long)… » à tous les rôles. C'est faux pour l'ASV et le salarié (barre d'outils), et le clic droit n'ouvre rien sur le calendrier vétérinaire (appui long seulement). La légende du calendrier vétérinaire décrit au salarié des boutons (🏥 ⏰ 💬 ✏️) qu'il n'a pas.
+- **Où** : `src/calendar.js`, texte `section-desc` (vers la ligne 1274) et légende (vers les lignes 1069-1076).
+- **Conséquence** : le guide (source unique `supabase/functions/_shared/user-guide.js`, corrigé le 01/10/2026) et l'écran se contredisent ; l'utilisateur lit l'écran en premier.
+- **Coût de la laisser** : confusion à chaque nouvel arrivant ; correction de quelques lignes, à faire par rôle.
+
+#### « Gérer les collaborateurs » s'affiche aux associés mais leur est refusé
+
+- **Quoi** : l'entrée ⚙️ → 👥 Gérer les collaborateurs est visible d'un vétérinaire associé, mais `manage-users` répond 403 « Accès réservé à l'administrateur » ; la liste ne se charge pas.
+- **Où** : menu construit par `buildSettingsMenuHtml` (`src/settings.js`) sur `canAccessSettings` ; garde serveur dans `supabase/functions/manage-users/index.ts`.
+- **Conséquence** : un associé croit pouvoir inviter quelqu'un et tombe sur une erreur. Le guide indique désormais « (admin) ».
+- **Coût de la laisser** : faible ; masquer l'entrée hors admin, ou décider que les associés peuvent inviter (décision de Jérémie, touche la sécurité).
+
 ### Constatée par le chantier « surfaces anon » (2026-09-05)
 
 **Le miroir `planning-auth` n'a pas de test de contrat, contrairement à `asv-hours`.**

@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { wrapEmailHtml, buttonHtml, APP_URL, COLORS } from '../_shared/email-template.ts';
+import { APP_URL } from '../_shared/email-template.ts';
+import { buildAccessEmail } from '../_shared/access-email.ts';
 
 const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY')!;
 
@@ -8,6 +9,26 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': 'https://jtechserge.github.io',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Envoi via Brevo, expéditeur unique de l'application. Lève une erreur lisible
+// si Brevo refuse : l'appelant décide si l'échec est bloquant.
+async function sendBrevoEmail(to: { email: string; name: string }, mail: { subject: string; html: string; text: string }) {
+  const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sender: { name: 'Amivet PULSE', email: 'jeremie.pvt@gmail.com' },
+      to: [to],
+      subject: mail.subject,
+      textContent: mail.text,
+      htmlContent: mail.html,
+    }),
+  });
+  if (!emailRes.ok) {
+    const errBody = await emailRes.text();
+    throw new Error(`Email non envoyé (Brevo HTTP ${emailRes.status}: ${errBody})`);
+  }
+}
 
 // ── Suppression définitive : ce que l'action `purge` détruit ────────────────
 //
@@ -125,14 +146,18 @@ serve(async (req) => {
         });
       }
 
-      // inviteUserByEmail utilise l'infrastructure email de Supabase — aucune restriction
-      // de domaine, fonctionne pour n'importe quelle adresse email.
-      const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-        redirectTo: APP_URL,
+      // generateLink crée le compte et rend le lien d'invitation SANS envoyer de
+      // mail : l'email part ensuite par Brevo, avec le guide utilisateur du rôle.
+      // (inviteUserByEmail envoyait le modèle générique de Supabase, qui ne peut
+      // pas embarquer de contenu propre au rôle.)
+      const { data: linkData, error: inviteError } = await adminClient.auth.admin.generateLink({
+        type: 'invite',
+        email,
+        options: { redirectTo: APP_URL },
       });
       if (inviteError) throw new Error(inviteError.message);
 
-      const userId = inviteData.user.id;
+      const userId = linkData.user.id;
 
       const { error: profileError } = await adminClient.from('user_profiles').upsert({
         id: userId,
@@ -144,9 +169,27 @@ serve(async (req) => {
       });
       if (profileError) throw new Error(profileError.message);
 
-      return new Response(JSON.stringify({ ok: true, user_id: userId }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      // Le compte existe désormais : un échec d'envoi ne doit pas faire croire au
+      // front que l'invitation a échoué, sinon il ne relierait pas la ligne de
+      // planning (person_id). On le signale, et l'email se renvoie depuis la
+      // fiche du collaborateur (« Envoyer l'invitation »).
+      let emailError: string | null = null;
+      try {
+        const mail = buildAccessEmail({
+          displayName: display_name,
+          accessLink: linkData.properties.action_link,
+          isInvite: true,
+          role,
+        });
+        await sendBrevoEmail({ email, name: display_name }, mail);
+      } catch (e) {
+        emailError = (e as Error).message;
+      }
+
+      return new Response(
+        JSON.stringify({ ok: true, user_id: userId, email_sent: emailError === null, email_error: emailError }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // --- UPDATE ---
@@ -207,7 +250,7 @@ serve(async (req) => {
 
       const { data: targetProfile } = await adminClient
         .from('user_profiles')
-        .select('display_name')
+        .select('display_name, role')
         .eq('id', user_id)
         .single();
       const displayName = targetProfile?.display_name || targetUserData.user.email || 'Collaborateur';
@@ -219,7 +262,7 @@ serve(async (req) => {
         email: targetEmail,
         options: { redirectTo: APP_URL },
       });
-      // inviteUserByEmail échoue si l'utilisateur est déjà enregistré → fallback recovery
+      // Un lien d'invitation échoue si le compte a déjà été activé → fallback recovery
       if (linkError && linkType === 'invite') {
         linkType = 'recovery';
         ({ data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
@@ -230,60 +273,16 @@ serve(async (req) => {
       }
       if (linkError) throw new Error(linkError.message);
 
-      const accessLink = linkData.properties.action_link;
-      const isInvite = linkType === 'invite';
-      const subject = isInvite
-        ? 'Amivet PULSE — Votre invitation'
-        : 'Amivet PULSE — Réinitialisation de votre mot de passe';
-      const title = isInvite ? '👋 Bienvenue sur Amivet PULSE' : '🔑 Réinitialisation de votre mot de passe';
-      const bodyText = isInvite
-        ? `Vous avez été invité(e) à rejoindre Amivet PULSE. Cliquez sur le bouton ci-dessous pour créer votre espace et choisir votre mot de passe.`
-        : `Une réinitialisation de votre mot de passe a été demandée. Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe.`;
-      const btnLabel = isInvite ? 'Créer mon espace' : 'Choisir mon nouveau mot de passe';
-
-      const html = wrapEmailHtml(`
-        <h1 style="font-size:18px;color:${COLORS.text};margin:0 0 4px;">${title}</h1>
-        <p style="font-size:14px;color:${COLORS.textMuted};line-height:1.6;margin:0 0 20px;">
-          Bonjour <strong>${displayName}</strong>,<br>
-          ${bodyText}
-        </p>
-        ${buttonHtml(accessLink, btnLabel)}
-        <p style="font-size:12.5px;color:${COLORS.textMuted};margin:0 0 8px;">
-          Ce lien est à usage unique. Si le bouton ne fonctionne pas, copiez ce lien :
-        </p>
-        <p style="font-size:12px;color:${COLORS.primary};word-break:break-all;margin:0 0 20px;">${accessLink}</p>
-        <p style="font-size:12px;color:${COLORS.textFaint};margin:0;">
-          Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.
-        </p>
-        <div style="display:none;font-size:1px;max-height:0;max-width:0;overflow:hidden;mso-hide:all;">&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>
-      `);
-
-      const textLines = [
-        `Bonjour ${displayName},`,
-        '',
-        bodyText,
-        '',
-        `${isInvite ? "Lien d'invitation" : 'Lien de réinitialisation'} (à usage unique) :`,
-        accessLink,
-        '',
-        '— Amivet PULSE',
-      ].join('\n');
-
-      const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sender: { name: 'Amivet PULSE', email: 'jeremie.pvt@gmail.com' },
-          to: [{ email: targetEmail, name: displayName }],
-          subject,
-          textContent: textLines,
-          htmlContent: html,
-        }),
+      const mail = buildAccessEmail({
+        displayName,
+        accessLink: linkData.properties.action_link,
+        // Le fallback recovery ne change pas l'intention : une invitation
+        // renvoyée à quelqu'un qui ne s'est jamais connecté reste un accueil, et
+        // garde le guide. Le lien recovery mène au même écran de mot de passe.
+        isInvite: emailType === 'invite',
+        role: targetProfile?.role,
       });
-      if (!emailRes.ok) {
-        const errBody = await emailRes.text();
-        throw new Error(`Email non envoyé (Brevo HTTP ${emailRes.status}: ${errBody})`);
-      }
+      await sendBrevoEmail({ email: targetEmail, name: displayName }, mail);
 
       return new Response(JSON.stringify({ ok: true, email: targetEmail }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -40,6 +40,7 @@ import { openNotificationSettingsModal } from './pwa.js';
 import { openFeedbackModal } from './feedback.js';
 import { renderLoginScreen } from './login.js';
 import { renderCalendarView } from './calendar.js';
+import { guideSections, renderGuideAppSection, SECTION_META } from '../supabase/functions/_shared/user-guide.js';
 
 // ── Callbacks injectés (fonctions/état restés dans app.js) ──────
 let _saveData, _renderCurrentView, _snapshotBeforeChange;
@@ -733,7 +734,13 @@ function openManageUsersModal() {
           box.querySelector('#invite-email').value = '';
           errEl.style.display = 'none';
           box.querySelector('#invite-btn').disabled = false;
-          showToast(`Invitation envoyée à ${email}`, '📧');
+          // Compte créé mais email refusé par Brevo : la ligne de planning est
+          // liée quand même, l'email se renvoie depuis la fiche du collaborateur.
+          if (inviteData.email_sent === false) {
+            showToast(`Compte créé, mais l'email n'est pas parti — renvoyez-le depuis la fiche de ${name}`, '⚠️');
+          } else {
+            showToast(`Invitation et guide envoyés à ${email}`, '📧');
+          }
           openManageUsersModal();
         } catch (e) {
           errEl.textContent = e.message;
@@ -1729,370 +1736,15 @@ function initSettingsMenu() {
 }
 
 function openHelpModal() {
-  const isAsv = _effectiveRole() === 'asv';
+  // Contenu : supabase/functions/_shared/user-guide.js, source unique partagée
+  // avec l'email d'invitation. Le rôle effectif suit la vue : un admin en vue
+  // ASV lit le guide ASV.
+  const role = _effectiveRole();
   document.getElementById('help-overlay-root')?.remove();
   const root = document.createElement('div');
   root.id = 'help-overlay-root';
 
-  /* ---- Contenu commun ---- */
-  const sectionIntroVet = `
-<h2 class="ho-title">🎯 À propos d'Amivet PULSE</h2>
-<p class="ho-lead">Amivet PULSE est l'outil de gestion RH et planning centralisé de la Clinique Vétérinaire Amivet. Il remplace les feuilles papier, emails et tableurs par une interface unique accessible depuis n'importe quel appareil.</p>
-<div class="ho-cards">
-  <div class="ho-card"><div class="ho-card-icon">📅</div><strong>Planning centralisé</strong><p>Présences, absences et congés de tous les collaborateurs (vétérinaires et ASV) en temps réel.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">⏱️</div><strong>Suivi des heures ASV</strong><p>Heures nominales par poste, H.supp. soir et midi, départs anticipés — calculés automatiquement chaque jour.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">✍️</div><strong>Signature électronique</strong><p>Les feuilles de présence ASV sont envoyées et signées électroniquement, avec horodatage et archivage.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">📋</div><strong>Gestion des congés</strong><p>Compteurs de CP, ancienneté et RTT tenus à jour automatiquement. Approbation des demandes en un clic.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">📣</div><strong>Communication interne</strong><p>Annonces ciblées par rôle (vétérinaires ou ASV) avec accusé de lecture intégré.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">🔐</div><strong>Accès sécurisé par rôle</strong><p>Trois niveaux d'accès : Admin, Vétérinaire, ASV. Chaque collaborateur voit uniquement ce qui le concerne.</p></div>
-</div>
-<div class="ho-info">
-  <strong>Qui utilise Amivet PULSE ?</strong><br>
-  • <strong>Admin</strong> : accès complet — gestion des comptes, paramétrage, toutes les vues.<br>
-  • <strong>Vétérinaires</strong> : gestion des plannings, approbation des congés, envoi des feuilles de présence ASV, tableau de bord.<br>
-  • <strong>ASV</strong> : consultation de leur propre planning, demandes d'absence, signature des feuilles de présence.
-</div>`;
-
-  const sectionIntroAsv = `
-<h2 class="ho-title">🎯 À propos d'Amivet PULSE</h2>
-<p class="ho-lead">Amivet PULSE est l'outil de gestion de planning de la Clinique Vétérinaire Amivet. Il vous permet de consulter votre planning en temps réel, de soumettre vos demandes d'absence et de signer électroniquement votre feuille de présence mensuelle.</p>
-<div class="ho-cards">
-  <div class="ho-card"><div class="ho-card-icon">📅</div><strong>Votre planning</strong><p>Consultez vos postes, présences et absences semaine par semaine ou mois par mois.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">⏱️</div><strong>Vos heures</strong><p>Visualisez vos heures travaillées, vos H.supp. et vos départs anticipés au quotidien.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">✍️</div><strong>Signature en ligne</strong><p>Recevez et signez votre feuille de présence mensuelle par email en quelques secondes.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">🏖️</div><strong>Demandes d'absence</strong><p>Soumettez vos congés, RTT ou absences directement depuis le planning.</p></div>
-</div>
-<div class="ho-info">
-  <strong>Ce que vous ne pouvez pas faire</strong> (réservé aux vétérinaires et à l'admin) :<br>
-  Saisir les postes d'autres ASV, approuver des demandes, envoyer des feuilles de présence, accéder au tableau de bord ou gérer les comptes.
-</div>`;
-
-  const sectionRoutineVet = `
-<h2 class="ho-title">📅 Routine d'utilisation</h2>
-<h3 class="ho-subtitle">Au quotidien</h3>
-<div class="ho-steps">
-  <div class="ho-step"><span class="ho-step-num">1</span><div><strong>Vérifier les badges rouges</strong> — Un badge sur le Tableau de bord ou les onglets signale une demande en attente ou une nouvelle annonce.</div></div>
-  <div class="ho-step"><span class="ho-step-num">2</span><div><strong>Saisir les absences imprévues</strong> — Une urgence, une maladie ? Allez dans 🩺 Vétérinaires > Calendrier mensuel et cliquez sur la case du jour pour enregistrer l'absence.</div></div>
-  <div class="ho-step"><span class="ho-step-num">3</span><div><strong>Approuver les demandes urgentes</strong> — Toute modification dans les 14 prochains jours apparaît en violet. Rendez-vous dans Tableau de bord > Demandes pour statuer.</div></div>
-</div>
-<h3 class="ho-subtitle">En cours de semaine</h3>
-<div class="ho-steps">
-  <div class="ho-step"><span class="ho-step-num">1</span><div><strong>Mettre à jour les postes ASV</strong> — Si le roulement change (O/F), aller dans 🐾 ASV > Vue hebdomadaire et ajuster le poste de chaque ASV pour les jours concernés.</div></div>
-  <div class="ho-step"><span class="ho-step-num">2</span><div><strong>Saisir les H.supp. et départs</strong> — En fin de journée ou le lendemain, saisir les heures supplémentaires de soirée, midi ou les départs anticipés de chaque ASV.</div></div>
-</div>
-<h3 class="ho-subtitle">En fin de mois (avant le 5 du mois suivant)</h3>
-<div class="ho-steps">
-  <div class="ho-step"><span class="ho-step-num">1</span><div><strong>Vérifier chaque ASV semaine par semaine</strong> — 🐾 ASV > Vue hebdomadaire, faire défiler toutes les semaines du mois pour s'assurer que postes, H.supp. et départs sont corrects.</div></div>
-  <div class="ho-step"><span class="ho-step-num">2</span><div><strong>Envoyer la feuille de présence</strong> — Bouton ✍️ dans la vue hebdomadaire → choisir le mois → l'email est envoyé automatiquement à l'ASV.</div></div>
-  <div class="ho-step"><span class="ho-step-num">3</span><div><strong>Suivre les signatures</strong> — Tableau de bord > Feuilles signées. L'ASV a 7 jours pour signer. Relancez si nécessaire en renvoyant la feuille.</div></div>
-</div>`;
-
-  const sectionRoutineAsv = `
-<h2 class="ho-title">📅 Routine d'utilisation</h2>
-<h3 class="ho-subtitle">En cours de mois</h3>
-<div class="ho-steps">
-  <div class="ho-step"><span class="ho-step-num">1</span><div><strong>Consulter votre planning</strong> — Chaque semaine, vérifiez votre poste (O ou F), vos H.supp. et votre total dans 🐾 ASV > Vue hebdomadaire.</div></div>
-  <div class="ho-step"><span class="ho-step-num">2</span><div><strong>Soumettre une absence</strong> — Besoin d'un congé ? Cliquez sur le jour dans la vue hebdomadaire ou mensuelle et soumettez votre demande.</div></div>
-  <div class="ho-step"><span class="ho-step-num">3</span><div><strong>Suivre l'approbation</strong> — Les cases violettes signalent une modification dans les 14 prochains jours en attente de validation. Une fois approuvée, la couleur change.</div></div>
-</div>
-<h3 class="ho-subtitle">En fin de mois</h3>
-<div class="ho-steps">
-  <div class="ho-step"><span class="ho-step-num">1</span><div><strong>Recevoir l'email de présence</strong> — Votre responsable vous envoie un récapitulatif complet (jours, H.supp., départs anticipés).</div></div>
-  <div class="ho-step"><span class="ho-step-num">2</span><div><strong>Vérifier les informations</strong> — Lisez attentivement le tableau détaillé. Si une erreur est présente, contactez votre responsable <em>avant</em> de signer.</div></div>
-  <div class="ho-step"><span class="ho-step-num">3</span><div><strong>Signer</strong> — Cliquez sur le bouton vert ✍️. Votre signature est horodatée et archivée. Le lien est à usage unique.</div></div>
-</div>`;
-
-  const sectionScenariosVet = `
-<h2 class="ho-title">🔄 Scénarios pas à pas</h2>
-
-<div class="ho-scenario">
-  <div class="ho-scenario-head">📌 Saisir une absence vétérinaire</div>
-  <div class="ho-scenario-body">
-    <div class="ho-step"><span class="ho-step-num">1</span><div>Aller dans <strong>🩺 Vétérinaires</strong> > <strong>Calendrier mensuel</strong></div></div>
-    <div class="ho-step"><span class="ho-step-num">2</span><div>Cliquer sur la case <strong>Matin</strong> ou <strong>Après-midi</strong> du jour concerné</div></div>
-    <div class="ho-step"><span class="ho-step-num">3</span><div>Sélectionner le type d'absence dans le menu : Congé annuel, RTT, Formation, Maladie, Récupération…</div></div>
-    <div class="ho-step"><span class="ho-step-num">4</span><div>Confirmer — la case prend la couleur du type d'absence et les compteurs se mettent à jour</div></div>
-    <div class="ho-tip">💡 Double-clic sur la colonne d'un jour ouvre l'édition rapide pour saisir matin ET après-midi en une seule fois, avec un champ commentaire.</div>
-  </div>
-</div>
-
-<div class="ho-scenario">
-  <div class="ho-scenario-head">📌 Saisir les heures d'une ASV sur la semaine</div>
-  <div class="ho-scenario-body">
-    <div class="ho-step"><span class="ho-step-num">1</span><div>Aller dans <strong>🐾 ASV</strong> > <strong>Vue hebdomadaire</strong></div></div>
-    <div class="ho-step"><span class="ho-step-num">2</span><div>Sélectionner l'ASV dans le menu déroulant en haut de la vue</div></div>
-    <div class="ho-step"><span class="ho-step-num">3</span><div>Pour chaque jour : cliquer sur la ligne pour ouvrir le panneau de saisie → choisir le poste <strong>O</strong> (Ouverture) ou <strong>F</strong> (Fermeture)</div></div>
-    <div class="ho-step"><span class="ho-step-num">4</span><div>Si H.supp. de soirée : saisir les minutes dépassées après 19h / 19h15</div></div>
-    <div class="ho-step"><span class="ho-step-num">5</span><div>Si H.supp. de midi : saisir les minutes de dépassement sur la pause déjeuner</div></div>
-    <div class="ho-step"><span class="ho-step-num">6</span><div>Si départ anticipé : saisir l'heure réelle de départ (ex : 18h30) — l'écart est calculé automatiquement</div></div>
-    <div class="ho-step"><span class="ho-step-num">7</span><div>Le total journalier et le total hebdomadaire se recalculent en temps réel</div></div>
-    <div class="ho-tip">💡 Double-clic sur une cellule mensuelle d'une ASV pour naviguer directement vers la vue hebdomadaire correspondante.</div>
-  </div>
-</div>
-
-<div class="ho-scenario">
-  <div class="ho-scenario-head">📌 Envoyer et suivre une feuille de présence</div>
-  <div class="ho-scenario-body">
-    <div class="ho-step"><span class="ho-step-num">1</span><div>Vérifier que toutes les semaines du mois sont correctement remplies pour l'ASV concernée</div></div>
-    <div class="ho-step"><span class="ho-step-num">2</span><div>🐾 ASV > Vue hebdomadaire → cliquer sur <strong>✍️ Envoyer la feuille</strong> (bouton en haut à droite)</div></div>
-    <div class="ho-step"><span class="ho-step-num">3</span><div>Sélectionner le mois à faire signer → confirmer</div></div>
-    <div class="ho-step"><span class="ho-step-num">4</span><div>L'ASV reçoit un email avec le récapitulatif détaillé (jours, postes, H.supp., départs, solde net)</div></div>
-    <div class="ho-step"><span class="ho-step-num">5</span><div>Suivre la signature dans <strong>📊 Tableau de bord</strong> > <strong>Feuilles signées</strong></div></div>
-    <div class="ho-step"><span class="ho-step-num">6</span><div>Si l'ASV n'a pas signé sous 7 jours : renvoyer la feuille depuis la vue hebdomadaire</div></div>
-    <div class="ho-tip">⚠️ Vérifiez bien les heures AVANT d'envoyer — l'ASV signe en certifiant que les données sont exactes.</div>
-  </div>
-</div>
-
-<div class="ho-scenario">
-  <div class="ho-scenario-head">📌 Approuver ou refuser une demande</div>
-  <div class="ho-scenario-body">
-    <div class="ho-step"><span class="ho-step-num">1</span><div>Un badge rouge apparaît sur l'onglet <strong>📊 Tableau de bord</strong> → cliquer sur l'onglet</div></div>
-    <div class="ho-step"><span class="ho-step-num">2</span><div>Aller dans <strong>Demandes de congé et de modification</strong></div></div>
-    <div class="ho-step"><span class="ho-step-num">3</span><div>Consulter la demande : date, type d'absence, collaborateur</div></div>
-    <div class="ho-step"><span class="ho-step-num">4</span><div>Cliquer <strong>✅ Approuver</strong> ou <strong>❌ Refuser</strong></div></div>
-    <div class="ho-step"><span class="ho-step-num">5</span><div>Le collaborateur voit immédiatement le statut mis à jour dans son planning</div></div>
-    <div class="ho-tip">💡 Les cellules violettes dans le planning ASV indiquent des modifications récentes en attente d'approbation (dans les 14 prochains jours).</div>
-  </div>
-</div>
-
-<div class="ho-scenario">
-  <div class="ho-scenario-head">📌 Inviter un nouveau collaborateur</div>
-  <div class="ho-scenario-body">
-    <div class="ho-step"><span class="ho-step-num">1</span><div>⚙️ → <strong>Gérer les collaborateurs</strong> → <strong>Inviter un collaborateur</strong></div></div>
-    <div class="ho-step"><span class="ho-step-num">2</span><div>Renseigner le prénom, l'email et le rôle (ASV ou Vétérinaire)</div></div>
-    <div class="ho-step"><span class="ho-step-num">3</span><div>Pour un rôle ASV : définir le temps de travail contractuel (Temps plein, ¾ temps, Mi-temps, Certains jours, Personnalisé)</div></div>
-    <div class="ho-step"><span class="ho-step-num">4</span><div>Cliquer <strong>Inviter</strong> → un email d'invitation est envoyé automatiquement</div></div>
-    <div class="ho-step"><span class="ho-step-num">5</span><div>Le collaborateur clique sur le lien dans l'email et choisit son mot de passe</div></div>
-    <div class="ho-step"><span class="ho-step-num">6</span><div>Il apparaît dans la liste des collaborateurs et accède immédiatement à l'app</div></div>
-  </div>
-</div>
-
-<div class="ho-scenario">
-  <div class="ho-scenario-head">📌 Consulter et ajuster les compteurs de congés</div>
-  <div class="ho-scenario-body">
-    <div class="ho-step"><span class="ho-step-num">1</span><div>Aller dans <strong>📊 Tableau de bord</strong> > <strong>Suivi vétérinaires</strong></div></div>
-    <div class="ho-step"><span class="ho-step-num">2</span><div>Chaque praticien affiche ses compteurs : CP acquis, pris, restants, ancienneté, récupération, jours travaillés vs objectif annuel</div></div>
-    <div class="ho-step"><span class="ho-step-num">3</span><div>Pour ajuster manuellement (report de congés, correction) : cliquer <strong>✎ Ajuster</strong> → saisir la valeur de correction et un commentaire</div></div>
-    <div class="ho-tip">💡 Les ajustements sont tracés avec la date et le commentaire pour l'historique RH.</div>
-  </div>
-</div>`;
-
-  const sectionScenariosAsv = `
-<h2 class="ho-title">🔄 Scénarios pas à pas</h2>
-
-<div class="ho-scenario">
-  <div class="ho-scenario-head">📌 Consulter mon planning de la semaine</div>
-  <div class="ho-scenario-body">
-    <div class="ho-step"><span class="ho-step-num">1</span><div>Aller dans <strong>🐾 ASV</strong> > <strong>Vue hebdomadaire</strong></div></div>
-    <div class="ho-step"><span class="ho-step-num">2</span><div>Votre nom est affiché en haut de la vue</div></div>
-    <div class="ho-step"><span class="ho-step-num">3</span><div>Utilisez les flèches ← → pour naviguer entre les semaines</div></div>
-    <div class="ho-step"><span class="ho-step-num">4</span><div>Chaque ligne correspond à un jour. La colonne <strong>Poste</strong> indique O (Ouverture) ou F (Fermeture)</div></div>
-    <div class="ho-step"><span class="ho-step-num">5</span><div>La dernière colonne <strong>Total</strong> affiche votre total journalier en heures</div></div>
-    <div class="ho-tip">💡 Double-clic sur un jour dans la vue mensuelle pour accéder directement à la semaine correspondante.</div>
-  </div>
-</div>
-
-<div class="ho-scenario">
-  <div class="ho-scenario-head">📌 Demander un congé ou signaler une absence</div>
-  <div class="ho-scenario-body">
-    <div class="ho-step"><span class="ho-step-num">1</span><div>Aller dans <strong>🐾 ASV</strong> > <strong>Vue hebdomadaire</strong> ou <strong>Calendrier mensuel</strong></div></div>
-    <div class="ho-step"><span class="ho-step-num">2</span><div>Cliquer sur la case du jour concerné (Matin ou Après-midi)</div></div>
-    <div class="ho-step"><span class="ho-step-num">3</span><div>Sélectionner le type d'absence : Congé annuel, RTT, Maladie, Congé sans solde…</div></div>
-    <div class="ho-step"><span class="ho-step-num">4</span><div>Confirmer la demande</div></div>
-    <div class="ho-step"><span class="ho-step-num">5</span><div>Si la date est dans les <strong>14 prochains jours</strong>, la case apparaît en <span style="color:#6D28D9;font-weight:600;">violet</span> — elle attend l'approbation de votre responsable</div></div>
-    <div class="ho-step"><span class="ho-step-num">6</span><div>Une fois approuvée, la case prend la couleur standard du type d'absence</div></div>
-    <div class="ho-tip">⚠️ Les repos planifiés (jours de repos définis dans votre roulement) ne nécessitent pas d'approbation.</div>
-  </div>
-</div>
-
-<div class="ho-scenario">
-  <div class="ho-scenario-head">📌 Signer ma feuille de présence</div>
-  <div class="ho-scenario-body">
-    <div class="ho-step"><span class="ho-step-num">1</span><div>En fin de mois, vous recevez un email intitulé <strong>"Signature de feuille de présence — [mois]"</strong></div></div>
-    <div class="ho-step"><span class="ho-step-num">2</span><div>Ouvrez l'email et lisez le <strong>récapitulatif du mois</strong> : jours ouvrés, jours travaillés, H.supp., départs anticipés, solde net</div></div>
-    <div class="ho-step"><span class="ho-step-num">3</span><div>Faites défiler pour consulter le <strong>tableau détaillé jour par jour</strong> : poste, matin, après-midi, H.supp., départ anticipé, total</div></div>
-    <div class="ho-step"><span class="ho-step-num">4</span><div>Si tout est correct, cliquez sur <strong>✍️ Je certifie et signe ma feuille de présence</strong></div></div>
-    <div class="ho-step"><span class="ho-step-num">5</span><div>Vous êtes redirigé vers une page de confirmation. Votre signature est enregistrée avec la date et l'heure</div></div>
-    <div class="ho-tip">⚠️ Le lien est à <strong>usage unique et valable 7 jours</strong>. En cas d'erreur dans les données, contactez votre responsable AVANT de signer — la signature certifie que les informations sont exactes.</div>
-  </div>
-</div>
-
-<div class="ho-scenario">
-  <div class="ho-scenario-head">📌 Comprendre ma feuille de présence</div>
-  <div class="ho-scenario-body">
-    <div class="ho-cards" style="margin-top:8px;">
-      <div class="ho-card"><div class="ho-card-icon">🟦</div><strong>Poste O — Ouverture</strong><p>8h30 → 19h00 (pause déjeuner 2h) = <strong>8h30 de travail effectif</strong></p></div>
-      <div class="ho-card"><div class="ho-card-icon">🟩</div><strong>Poste F — Fermeture</strong><p>9h00 → 19h15 (pause déjeuner 2h) = <strong>8h15 de travail effectif</strong></p></div>
-      <div class="ho-card"><div class="ho-card-icon">🟨</div><strong>Samedi</strong><p>9h00 → 16h30 = <strong>7h00 de travail effectif</strong> (convention clinique)</p></div>
-      <div class="ho-card"><div class="ho-card-icon">➕</div><strong>H.supp. soirée</strong><p>Chaque minute après 19h/19h15 est comptée en heure supplémentaire.</p></div>
-      <div class="ho-card"><div class="ho-card-icon">➕</div><strong>H.supp. midi</strong><p>Dépassement de la pause déjeuner standard (ex : retour en salle 30 min plus tôt).</p></div>
-      <div class="ho-card"><div class="ho-card-icon">➖</div><strong>Départ anticipé</strong><p>Départ avant 19h/19h15. L'écart est déduit du total du jour.</p></div>
-    </div>
-    <div class="ho-tip" style="margin-top:12px;">Le <strong>Solde net H.supp.</strong> en bas de votre feuille = total H.supp. − total départs anticipés sur le mois entier.</div>
-  </div>
-</div>`;
-
-  const sectionFeaturesVet = `
-<h2 class="ho-title">📖 Fonctionnalités détaillées</h2>
-<h3 class="ho-subtitle">📊 Tableau de bord</h3>
-<div class="ho-cards">
-  <div class="ho-card"><div class="ho-card-icon">🩺</div><strong>Suivi vétérinaires</strong><p>Compteurs annuels (CP, ancienneté, récupération), jours travaillés vs objectif 228j. Ajustement manuel des soldes avec historique tracé.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">🐾</div><strong>Suivi ASV</strong><p>Heures effectuées, H.supp. cumulées, départs anticipés et solde net par ASV sur la période choisie.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">📋</div><strong>Demandes</strong><p>Toutes les demandes de congé et modifications en attente. Approbation ou refus en un clic. Les modifications urgentes (violet) apparaissent en priorité.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">✍️</div><strong>Feuilles signées</strong><p>Historique complet des signatures électroniques ASV avec date, heure et identité du signataire.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">📝</div><strong>Entretiens annuels</strong><p>Suivi des entretiens annuels de chaque collaborateur.</p></div>
-</div>
-<h3 class="ho-subtitle">🩺 Vétérinaires</h3>
-<div class="ho-cards">
-  <div class="ho-card"><div class="ho-card-icon">📅</div><strong>Calendrier mensuel</strong><p>Saisie présences/absences par demi-journée. 15+ types d'absence (CP, RTT, Formation, Maladie…). Commentaires par jour. Impression A4.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">🗓️</div><strong>Vue annuelle</strong><p>Vue condensée 12 mois pour identifier les périodes creuses et les chevauchements d'absences.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">🔮</div><strong>Prévisionnel</strong><p>Planification prospective sur l'année N+1. Données isolées des totaux réels.</p></div>
-</div>
-<h3 class="ho-subtitle">🐾 ASV</h3>
-<div class="ho-cards">
-  <div class="ho-card"><div class="ho-card-icon">⏱️</div><strong>Vue hebdomadaire</strong><p>Poste O/F par jour, H.supp. soirée et midi en minutes, départ anticipé en heure réelle. Total auto. Bouton ✍️ envoi feuille de présence.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">📅</div><strong>Calendrier mensuel</strong><p>Vue consolidée toutes ASV ou par ASV. Double-clic → vue hebdomadaire. Impression mensuelle A4 disponible.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">🗓️</div><strong>Vue annuelle</strong><p>Présences annuelles et compteurs d'heures par ASV.</p></div>
-</div>
-<h3 class="ho-subtitle">⚙️ Réglages</h3>
-<div class="ho-cards">
-  <div class="ho-card"><div class="ho-card-icon">👥</div><strong>Collaborateurs</strong><p>Inviter, modifier (rôle, email, temps de travail), réinitialiser un compte ou le supprimer définitivement.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">🎨</div><strong>Couleurs</strong><p>Personnaliser la couleur d'affichage de chaque vétérinaire.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">📅</div><strong>Sync calendrier</strong><p>Lien iCal compatible Google Agenda, Apple Calendrier, Outlook.</p></div>
-  <div class="ho-card"><div class="ho-card-icon">⬇️⬆️</div><strong>Export / Import</strong><p>Sauvegarde complète JSON et restauration.</p></div>
-</div>`;
-
-  const sectionFaqVet = `
-<h2 class="ho-title">💬 Questions fréquentes</h2>
-<div class="ho-faq-list" id="ho-faq-list"></div>`;
-
-  const sectionFaqAsv = sectionFaqVet;
-
-  const faqDataVet = [
-    {
-      q: 'Comment approuver une demande de congé ?',
-      a: 'Tableau de bord → <strong>Demandes de congé et de modification</strong> → cliquez ✅ Approuver ou ❌ Refuser. Le collaborateur est notifié immédiatement.',
-    },
-    {
-      q: 'Comment envoyer une feuille de présence à une ASV ?',
-      a: "🐾 ASV > Vue hebdomadaire → sélectionner l'ASV → bouton <strong>✍️ Envoyer la feuille</strong> (haut à droite) → choisir le mois. L'email est envoyé automatiquement avec le récapitulatif détaillé.",
-    },
-    {
-      q: 'Que signifie la couleur violette sur une cellule ?',
-      a: "Une modification a été saisie dans les <strong>14 prochains jours</strong>. Elle est en attente de votre approbation dans Tableau de bord → Demandes. Tant qu'elle n'est pas approuvée, elle est considérée comme non officielle.",
-    },
-    {
-      q: 'Comment inviter un nouveau collaborateur ?',
-      a: "⚙️ → Gérer les collaborateurs → Inviter un collaborateur → renseigner prénom, email, rôle et (pour les ASV) le temps de travail contractuel. Un email d'invitation est envoyé automatiquement.",
-    },
-    {
-      q: "Comment réinitialiser le compte d'un collaborateur ?",
-      a: "⚙️ → Gérer les collaborateurs → cliquer sur le collaborateur → <strong>Réinitialiser le profil</strong>. Le compte de connexion est supprimé mais le planning et la ligne dans le calendrier sont conservés. Vous pourrez ensuite l'inviter avec un nouvel email.",
-    },
-    {
-      q: "Comment voir les heures supplémentaires d'une ASV ?",
-      a: 'Vue hebdomadaire ASV (colonne Total journalier et total semaine) ou Tableau de bord → <strong>Suivi ASV</strong> pour une synthèse sur la période choisie.',
-    },
-    {
-      q: 'Comment modifier les couleurs des vétérinaires ?',
-      a: '⚙️ → <strong>Couleurs des associés</strong> → cliquer sur la pastille de couleur à côté du nom de chaque praticien.',
-    },
-    {
-      q: 'Comment synchroniser avec Google Agenda ou Apple Calendrier ?',
-      a: '⚙️ → <strong>Synchronisation calendrier</strong> → copier le lien iCal et le coller dans votre application calendrier (Google : "Autres calendriers" → "Via une URL", Apple : "S\'abonner à un calendrier").',
-    },
-    {
-      q: 'Comment exporter les données de planning ?',
-      a: '⚙️ → <strong>Exporter JSON</strong>. Le fichier téléchargé contient toutes les données de planning. Pour restaurer : <strong>Importer JSON</strong> et sélectionner le fichier.',
-    },
-    {
-      q: 'Comment ajouter une annonce ?',
-      a: '📣 Annonces → <strong>+ Nouvelle annonce</strong> → rédiger le titre et le contenu → choisir les destinataires (Vétérinaires ou ASV) → <strong>Publier</strong>. Une annonce non publiée reste en brouillon.',
-    },
-    {
-      q: "Comment planifier les congés de l'année à venir ?",
-      a: '🩺 Vétérinaires (ou 🐾 ASV) → <strong>Prévisionnel</strong>. Les données saisies ici sont isolées du planning en cours et servent uniquement à la planification prospective.',
-    },
-    {
-      q: 'Comment imprimer le calendrier mensuel ?',
-      a: 'Dans les vues mensuelles, un bouton <strong>Imprimer</strong> est disponible en haut de la page. Le format est optimisé A4 portrait avec logo et mise en page N&B.',
-    },
-    {
-      q: "Comment demander la signature du prévisionnel d'une ASV ?",
-      a: "🐾 ASV > Vue hebdomadaire → sélectionner la semaine cible → bouton <strong>✉️ Demander la signature</strong>. Un email est envoyé à l'ASV avec le prévisionnel en <strong>PDF joint</strong>. Le lien de signature est à usage unique et valable 7 jours.",
-    },
-    {
-      q: 'Comment consulter les signatures de prévisionnels ?',
-      a: "Tableau de bord → onglet <strong>Signatures</strong>. Chaque ligne indique l'ASV, la période, la date et l'identité du signataire. Les prévisionnels non encore signés affichent le bouton <em>Demander la signature</em>.",
-    },
-    {
-      q: "Comment ajuster finement les heures supplémentaires ou manquantes d'une ASV ?",
-      a: "Vue hebdomadaire → lignes <strong>H.supp.</strong> et <strong>H.manq.</strong> : cliquer sur la valeur pour ouvrir un sélecteur au quart d'heure (0 min → 3h30 par pas de 15 min). Le total de la semaine se met à jour automatiquement.",
-    },
-  ];
-
-  const faqDataAsv = [
-    {
-      q: 'Comment demander un congé ?',
-      a: "Cliquer sur la cellule du jour dans la vue hebdomadaire ou le calendrier mensuel → sélectionner le type d'absence (Congé annuel, RTT, Maladie…) → confirmer. La demande part en attente d'approbation.",
-    },
-    {
-      q: 'Que signifie la cellule violette ?',
-      a: "Une modification a été saisie dans les <strong>14 prochains jours</strong>. Elle est en attente d'approbation de votre responsable. En attendant, la modification n'est pas encore officielle dans votre planning.",
-    },
-    {
-      q: 'Que signifient les postes O et F ?',
-      a: '<strong>O = Ouverture</strong> : 8h30 → 19h (8h30 de travail effectif). <strong>F = Fermeture</strong> : 9h → 19h15 (8h15 de travail effectif). Samedi : 9h → 16h30 (7h effectifs).',
-    },
-    {
-      q: 'Comment signer ma feuille de présence ?',
-      a: "Ouvrez l'email mensuel reçu d'Amivet PULSE → vérifier le récapitulatif → cliquer sur <strong>✍️ Je certifie et signe ma feuille de présence</strong>. Le lien est à usage unique et valable 7 jours.",
-    },
-    {
-      q: 'Que se passe-t-il si les données de ma feuille sont incorrectes ?',
-      a: 'Contactez votre responsable <strong>avant de signer</strong>. Une fois signée, la feuille est archivée. Votre responsable peut renvoyer une feuille corrigée si nécessaire.',
-    },
-    {
-      q: "Comment voir mon total d'heures sur la semaine ?",
-      a: '🐾 ASV > Vue hebdomadaire → la ligne <strong>Total</strong> en bas du tableau affiche le total de la semaine. Le détail H.supp. et départs anticipés est visible sur chaque ligne de jour.',
-    },
-    {
-      q: "Pourquoi je ne vois pas l'onglet Tableau de bord ?",
-      a: "Le Tableau de bord est réservé aux vétérinaires et à l'admin. En tant qu'ASV, vous accédez à votre planning personnel uniquement.",
-    },
-    {
-      q: "Comment consulter les annonces de l'équipe ?",
-      a: "Cliquer sur <strong>📣 Annonces</strong>. Le badge rouge indique le nombre d'annonces non lues.",
-    },
-    {
-      q: 'Mon mot de passe est perdu, que faire ?',
-      a: "Sur l'écran de connexion, cliquer sur <strong>Mot de passe oublié ?</strong> → entrer votre email → un lien de réinitialisation vous est envoyé.",
-    },
-    {
-      q: 'Comment signer mon prévisionnel ?',
-      a: "Votre responsable vous envoie un email avec le prévisionnel en <strong>PDF joint</strong>. Ouvrez l'email → vérifiez le document → cliquez sur <strong>✍️ Je certifie et signe mon prévisionnel</strong>. Le lien est à usage unique et valable 7 jours.",
-    },
-    {
-      q: 'Quelle différence entre la feuille de présence et le prévisionnel ?',
-      a: 'La <strong>feuille de présence</strong> (mensuelle) récapitule les heures <em>réellement effectuées</em> sur le mois écoulé. Le <strong>prévisionnel</strong> (hebdomadaire) présente les heures <em>planifiées à venir</em>. Les deux peuvent être signés électroniquement via un lien reçu par email.',
-    },
-  ];
-
-  const navItemsVet = [
-    { id: 'intro', label: '🎯 Présentation', content: sectionIntroVet },
-    { id: 'routine', label: '📅 Routine', content: sectionRoutineVet },
-    { id: 'scenarios', label: '🔄 Scénarios', content: sectionScenariosVet },
-    { id: 'features', label: '📖 Fonctionnalités', content: sectionFeaturesVet },
-    { id: 'faq', label: '💬 FAQ', content: sectionFaqVet },
-  ];
-  const navItemsAsv = [
-    { id: 'intro', label: '🎯 Présentation', content: sectionIntroAsv },
-    { id: 'routine', label: '📅 Routine', content: sectionRoutineAsv },
-    { id: 'scenarios', label: '🔄 Scénarios', content: sectionScenariosAsv },
-    { id: 'faq', label: '💬 FAQ', content: sectionFaqAsv },
-  ];
-  const navItems = isAsv ? navItemsAsv : navItemsVet;
-  const faqData = isAsv ? faqDataAsv : faqDataVet;
+  const navItems = guideSections(role).map((sec) => ({ id: sec.id, label: SECTION_META[sec.id].label, section: sec }));
 
   // eslint-disable-next-line no-unsanitized/property
   root.innerHTML = `
@@ -2105,12 +1757,10 @@ function openHelpModal() {
     </div>
     <div class="ho-main">
       <div class="ho-topbar">
-        <span id="ho-section-label" style="font-size:14px;font-weight:600;color:var(--color-text);">${navItems[0].label}</span>
+        <span id="ho-section-label" style="font-size:14px;font-weight:600;color:var(--color-text);"></span>
         <button id="ho-close-btn" class="btn" style="padding:5px 14px;font-size:13px;">✕ Fermer</button>
       </div>
-      <div class="ho-content" id="ho-content">
-        ${navItems[0].content}
-      </div>
+      <div class="ho-content" id="ho-content"></div>
     </div>
   `;
   document.body.appendChild(root);
@@ -2118,34 +1768,21 @@ function openHelpModal() {
   const content = root.querySelector('#ho-content');
 
   function renderSection(item) {
+    // Contenu statique du guide : les champs texte sont échappés au rendu.
     // eslint-disable-next-line no-unsanitized/property
-    content.innerHTML = item.content;
+    content.innerHTML = renderGuideAppSection(item.section);
     root.querySelector('#ho-section-label').textContent = item.label;
     content.scrollTop = 0;
-    if (item.id === 'faq') {
-      const list = content.querySelector('#ho-faq-list');
-      if (list) {
-        // eslint-disable-next-line no-unsanitized/property
-        list.innerHTML = faqData
-          .map(
-            (f, i) => `
-        <div class="ho-faq-item" data-i="${i}">
-          <button class="help-faq-q" aria-expanded="false"><span>${escapeHTML(f.q)}</span><span class="help-faq-chevron">▾</span></button>
-          <div class="help-faq-a" style="display:none;">${f.a}</div>
-        </div>`
-          )
-          .join('');
-      }
-      list?.querySelectorAll('.ho-faq-item').forEach((item) => {
-        item.querySelector('.help-faq-q').onclick = function () {
-          const open = this.getAttribute('aria-expanded') === 'true';
-          this.setAttribute('aria-expanded', String(!open));
-          item.querySelector('.help-faq-a').style.display = open ? 'none' : 'block';
-          item.querySelector('.help-faq-chevron').textContent = open ? '▾' : '▴';
-        };
-      });
-    }
+    content.querySelectorAll('.ho-faq-item').forEach((faqItem) => {
+      faqItem.querySelector('.help-faq-q').onclick = function () {
+        const open = this.getAttribute('aria-expanded') === 'true';
+        this.setAttribute('aria-expanded', String(!open));
+        faqItem.querySelector('.help-faq-a').style.display = open ? 'none' : 'block';
+        faqItem.querySelector('.help-faq-chevron').textContent = open ? '▾' : '▴';
+      };
+    });
   }
+  renderSection(navItems[0]);
 
   root.querySelectorAll('.ho-nav-btn').forEach((btn) => {
     btn.onclick = () => {
