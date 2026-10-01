@@ -12,7 +12,6 @@ import {
   PERSON_COLORS_KEY,
   allPeople,
 } from './config.js';
-import { ASV_STD_SAT_CARLA } from './lib/pay-constants.js';
 
 // ----------------------------------------------------------------
 // Roster ASV dynamique
@@ -65,22 +64,11 @@ export function loadASVRoster() {
             ...(p.lastName ? { lastName: p.lastName } : {}),
           })
         );
-        // Fusionner Carla si absente des données sauvegardées (migration)
-        if (!ASV_PEOPLE.find((p) => p.id === 'carla')) {
-          ASV_PEOPLE.push({
-            id: 'carla',
-            name: 'Carla',
-            short: 'Carla',
-            color: '#0EA5E9',
-            initial: 'Ca',
-            present: null,
-            // Dérivé de la constante, jamais recopié : 7h25 s'écrit 7 + 25/60,
-            // et un 7.25 recopié ici fausserait la proratisation de ses CP.
-            timeFraction: ASV_STD_SAT_CARLA / 35,
-            saturdayOnly: true,
-          });
-          saveASVRoster();
-        }
+        // Pas de ré-ajout d'une ASV absente de l'effectif enregistré : une
+        // migration de juillet 2026 réinjectait ici Carla à chaque démarrage, ce
+        // qui annulait sa suppression définitive au premier rafraîchissement.
+        // Tous les postes l'avaient reçue depuis ; un poste vierge part de
+        // l'effectif par défaut (config.js), qui la contient.
       }
     } else {
       // Premier lancement : persister l'effectif par défaut
