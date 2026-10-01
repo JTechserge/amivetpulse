@@ -304,6 +304,13 @@ export function computeOvertimeStats(year) {
   return stats;
 }
 
+// Heures arrondies à la minute. Les totaux étaient arrondis au dixième d'heure
+// (35h45 → 35,8 → affiché 35h48) : un écart de quelques minutes avec la vue
+// hebdomadaire, qui, elle, compte à la minute.
+function roundToMinute(h) {
+  return Math.round(h * 60) / 60;
+}
+
 export function getASVTimeFraction(personId) {
   return personOf(personId)?.timeFraction ?? 1.0;
 }
@@ -315,13 +322,13 @@ export function getASVQuota(personId) {
     return {
       annual: null,
       weekly: ASV_STD_SAT_CARLA,
-      monthly: Math.round(((ASV_STD_SAT_CARLA * 52) / 12) * 10) / 10,
+      monthly: roundToMinute((ASV_STD_SAT_CARLA * 52) / 12),
     };
   }
   return {
-    annual: Math.round(ANNUAL_FULLTIME_HOURS * f * 10) / 10,
+    annual: roundToMinute(ANNUAL_FULLTIME_HOURS * f),
     weekly: Math.round(35 * f * 100) / 100,
-    monthly: Math.round(((ANNUAL_FULLTIME_HOURS * f) / 12) * 10) / 10,
+    monthly: roundToMinute((ANNUAL_FULLTIME_HOURS * f) / 12),
   };
 }
 
@@ -339,7 +346,7 @@ export function computeASVWorkedHours(personId, year, month = null) {
       total += getOvertimeHours(iso, personId);
     }
   }
-  return Math.round(total * 10) / 10;
+  return roundToMinute(total);
 }
 
 // 1 jour de repos planifié ne compte PAS comme jour travaillé
@@ -359,7 +366,7 @@ export function computeASVWorkedHoursNew(personId, year, month = null) {
       total += getOvertimeHours(iso, personId);
     }
   }
-  return Math.round(total * 10) / 10;
+  return roundToMinute(total);
 }
 
 export function getWeekStart(date) {
@@ -381,7 +388,7 @@ export function computeASVWorkedHoursWeek(personId, weekStartDate) {
     if (isPresent) total += getDayNominal(iso, personId) + getDayAllOtH(iso, personId) - getDayDeficitH(iso, personId);
     total += getOvertimeHours(iso, personId);
   }
-  return Math.round(total * 10) / 10;
+  return roundToMinute(total);
 }
 
 export function buildOvertimeTableASV(year) {
@@ -899,7 +906,7 @@ export function buildASVMonthlyTable(year) {
         if (isFuture) return dash + dash + dash;
         const w = computeASVWorkedHoursNew(p.id, year, m);
         const fcast = computeASVForecastMonthH(p.id, year, m);
-        const diff = fcast > 0 ? Math.round((w - fcast) * 10) / 10 : null;
+        const diff = fcast > 0 ? roundToMinute(w - fcast) : null;
         const q = getASVQuota(p.id);
         const pct = q.monthly > 0 ? w / q.monthly : 0;
         const icon = pct > 1.05 ? '🔴' : pct >= 0.9 ? '🟢' : w > 0 ? '🟡' : '';
@@ -925,7 +932,7 @@ export function buildASVMonthlyTable(year) {
           Array.from({ length: 12 }, (_, m2) => computeASVForecastMonthH(p.id, year, m2)).reduce((a, b) => a + b, 0) *
             10
         ) / 10;
-      const diff = fcastTotal > 0 ? Math.round((w - fcastTotal) * 10) / 10 : null;
+      const diff = fcastTotal > 0 ? roundToMinute(w - fcastTotal) : null;
       const pct = q.annual > 0 ? Math.round((w / q.annual) * 100) : 0;
       const c = pct > 100 ? '#DC2626' : pct >= 90 ? '#F59E0B' : '#16A34A';
       const BT = 'border-top:2px solid var(--color-border);padding:6px 8px;text-align:right;font-weight:700;';
