@@ -24,12 +24,16 @@ updates:
         patterns:
           - '*'
 
-  # Actions GitHub (deploy, weekly-recap, security)
+  # Actions GitHub (deploy, backup, security…) : une seule PR par mois pour
+  # toutes les actions, sinon les PR s'accumulent et se marchent dessus.
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       time: '06:00'
       timezone: Europe/Paris
     open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - '*'
