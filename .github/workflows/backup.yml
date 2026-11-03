@@ -14,7 +14,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: '22'
 
       # Vérifie la présence de la clé de chiffrement AVANT d'exporter des données sensibles
       - name: Vérifier la clé de chiffrement age
