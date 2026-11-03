@@ -46,6 +46,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ── 3. Audit des dépendances npm ────────────────────────────────────────────
+  # Seuils différenciés : seul ce qui part en production (jspdf, html2canvas et
+  # leurs dépendances, dont dompurify) bloque dès la sévérité haute. Les outils
+  # de dev (vite, vitest, eslint, http-server…) ne sont jamais servis à la
+  # clinique : ils ne bloquent qu'en critique, et le reste est rapporté en
+  # avertissement dans le résumé du job, sans faire tomber le build.
   npm-audit:
     name: npm audit
     runs-on: ubuntu-latest
@@ -54,10 +59,26 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
 
       - run: npm ci
 
-      - name: Audit (critique + haute sévérité)
-        run: npm audit --audit-level=high
+      - name: Audit production (bloquant dès haute sévérité)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit complet (bloquant en critique)
+        run: npm audit --audit-level=critical
+
+      - name: Audit complet (rapport, non bloquant)
+        if: always()
+        run: |
+          if ! npm audit --audit-level=high > audit.txt 2>&1; then
+            echo "::warning title=npm audit::Vulnérabilités hautes en dépendances de dev — voir le résumé du job"
+          fi
+          {
+            echo '### npm audit complet'
+            echo '```'
+            cat audit.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

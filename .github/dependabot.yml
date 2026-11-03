@@ -17,6 +17,12 @@ updates:
           - '@playwright/*'
           - 'eslint*'
           - '@eslint/*'
+      # Correctifs de sécurité regroupés en une seule PR (exige les « Dependabot
+      # security updates » activées dans Settings → Code security).
+      security:
+        applies-to: security-updates
+        patterns:
+          - '*'
 
   # Actions GitHub (deploy, weekly-recap, security)
   - package-ecosystem: github-actions
