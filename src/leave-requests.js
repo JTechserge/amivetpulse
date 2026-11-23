@@ -9,6 +9,7 @@ import {
   asvCPEntitlement,
   asvCPAcquired,
 } from './lib/cp-quota.js';
+import { groupConsecutiveHalfDays, formatHalfDayRange, halfDayRank } from './lib/notification-batch.js';
 
 /** Date d'arrivée d'une ASV (YYYY-MM-DD), saisie à l'invitation ; null pour l'effectif historique. */
 export function getASVArrival(pid) {
@@ -123,6 +124,20 @@ export function collectAllChangeRequests() {
   return results.sort((a, b) => a.iso.localeCompare(b.iso));
 }
 
+/**
+ * Demandes de modification regroupées : une entrée par suite de demi-journées
+ * consécutives d'une même ASV, de même statut et de même nature (au lieu d'une
+ * carte par demi-journée). Triées par date de début.
+ */
+export function collectChangeRequestGroups() {
+  return groupConsecutiveHalfDays(
+    collectAllChangeRequests(),
+    (r) => `${r.personId}|${r.status}|${r.state}|${r.state === 'present' ? getShiftType(r.iso, r.personId) : r.label}`
+  )
+    .map((items) => ({ ...items[0], items }))
+    .sort((a, b) => halfDayRank(a.iso, a.slot) - halfDayRank(b.iso, b.slot));
+}
+
 export function sortLeaveGroups(groups) {
   const order = { pending: 0, approved: 1, rejected: 2 };
   return groups
@@ -132,7 +147,7 @@ export function sortLeaveGroups(groups) {
 
 export function countPendingLeaveRequests() {
   const leavePending = collectAllLeaveGroups().filter((g) => g.status === 'pending').length;
-  const changePending = collectAllChangeRequests().filter((r) => r.status === 'pending').length;
+  const changePending = collectChangeRequestGroups().filter((r) => r.status === 'pending').length;
   return leavePending + changePending;
 }
 
@@ -193,7 +208,7 @@ function cpQuotaMessage(o) {
 export function renderLeaveRequestsPage() {
   const container = document.getElementById('dash-sub-requests');
   const groups = sortLeaveGroups(collectAllLeaveGroups());
-  const changeReqs = collectAllChangeRequests();
+  const changeReqs = collectChangeRequestGroups();
   const statusLabel = { pending: 'En attente', approved: 'Approuvée', rejected: 'Refusée' };
   const statusClass = { pending: 'leave-pending', approved: 'leave-approved', rejected: 'leave-rejected' };
 
@@ -211,7 +226,11 @@ export function renderLeaveRequestsPage() {
   const changeRows = changeReqs
     .map((r, ci) => {
       const person = personOf(r.personId);
-      const dateStr = `${formatFR(r.iso)} (${SLOT_LABELS[r.slot]})`;
+      const last = r.items[r.items.length - 1];
+      const dateStr =
+        r.items.length === 1
+          ? `${formatFR(r.iso)} (${SLOT_LABELS[r.slot]})`
+          : formatHalfDayRange({ from: r, to: last }, formatFR) + ` · ${r.items.length} demi-journées`;
       const actions =
         r.status === 'pending'
           ? `
@@ -322,7 +341,7 @@ export function renderLeaveRequestsPage() {
     btn.addEventListener('click', () => {
       const r = changeReqs[parseInt(btn.dataset.chgApprove, 10)];
       _snapshotBeforeChange();
-      setChangeDecision(r.iso, r.personId, r.slot, null); // approuvé = flag retiré
+      r.items.forEach((it) => setChangeDecision(it.iso, it.personId, it.slot, null)); // approuvé = flag retiré
       _saveData();
       _renderDashboard();
       showToast('Modification approuvée', '✓');
@@ -332,7 +351,7 @@ export function renderLeaveRequestsPage() {
     btn.addEventListener('click', () => {
       const r = changeReqs[parseInt(btn.dataset.chgReject, 10)];
       _snapshotBeforeChange();
-      setChangeDecision(r.iso, r.personId, r.slot, 'rejected');
+      r.items.forEach((it) => setChangeDecision(it.iso, it.personId, it.slot, 'rejected'));
       _saveData();
       _renderDashboard();
       showToast('Modification refusée', '✕');

@@ -10,7 +10,7 @@ function dayIndex(iso) {
 }
 
 /** Rang continu d'une demi-journée, dimanches exclus de la numérotation. */
-function halfDayRank(iso, slot) {
+export function halfDayRank(iso, slot) {
   const d = dayIndex(iso);
   // 1970-01-04 (jour 3) est un dimanche : les dimanches sont les jours d ≡ 3 (mod 7).
   const sundaysUpTo = Math.floor((d - 3 + 7) / 7);
@@ -56,4 +56,25 @@ export function formatHalfDayRange(range, fmt) {
   const start = from.slot === 'AM' ? `${fmt(from.iso)} (${SLOT_TXT.AM})` : fmt(from.iso);
   const end = to.slot === 'M' ? `${fmt(to.iso)} (${SLOT_TXT.M})` : fmt(to.iso);
   return `du ${start} au ${end}`;
+}
+
+/**
+ * Regroupe des éléments portant une demi-journée ({iso, slot, ...}) en suites
+ * consécutives de même clé (ex. même personne, même statut, même nature).
+ * @template T
+ * @param {T[]} items
+ * @param {(item:T)=>string} keyOf
+ * @returns {T[][]}  groupes triés par clé puis par date
+ */
+export function groupConsecutiveHalfDays(items, keyOf) {
+  const withRank = items.map((it) => ({ it, key: keyOf(it), rank: halfDayRank(it.iso, it.slot) }));
+  withRank.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : a.rank - b.rank));
+  const groups = [];
+  let prev = null;
+  for (const cur of withRank) {
+    if (prev && prev.key === cur.key && cur.rank === prev.rank + 1) groups[groups.length - 1].push(cur.it);
+    else groups.push([cur.it]);
+    prev = cur;
+  }
+  return groups;
 }

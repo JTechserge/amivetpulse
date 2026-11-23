@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeHalfDayRanges, formatHalfDayRange } from '../../src/lib/notification-batch.js';
+import { mergeHalfDayRanges, formatHalfDayRange, groupConsecutiveHalfDays } from '../../src/lib/notification-batch.js';
 
 const fmt = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const hd = (iso, slot) => ({ iso, slot });
@@ -31,5 +31,30 @@ describe('regroupement des notifications de congé', () => {
   it('à cheval sur deux mois et deux années', () => {
     const r = mergeHalfDayRanges([hd('2026-12-31', 'AM'), hd('2027-01-01', 'M')]);
     expect(r).toHaveLength(1);
+  });
+});
+
+describe('regroupement des demandes de modification', () => {
+  const r = (personId, iso, slot, status = 'pending') => ({ personId, iso, slot, status });
+  const key = (x) => `${x.personId}|${x.status}`;
+  it('suite consécutive d’une même ASV → un seul groupe', () => {
+    const g = groupConsecutiveHalfDays(
+      [r('johanna', '2026-11-24', 'M'), r('johanna', '2026-11-23', 'AM'), r('johanna', '2026-11-23', 'M')],
+      key
+    );
+    expect(g).toHaveLength(1);
+    expect(g[0].map((x) => `${x.iso}${x.slot}`)).toEqual(['2026-11-23M', '2026-11-23AM', '2026-11-24M']);
+  });
+  it('ASV, statut ou dates différents → groupes séparés', () => {
+    const g = groupConsecutiveHalfDays(
+      [
+        r('johanna', '2026-11-23', 'M'),
+        r('julie', '2026-11-23', 'AM'),
+        r('johanna', '2026-11-23', 'AM', 'rejected'),
+        r('johanna', '2026-11-25', 'M'),
+      ],
+      key
+    );
+    expect(g).toHaveLength(4);
   });
 });
