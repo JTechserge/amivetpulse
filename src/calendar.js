@@ -683,7 +683,7 @@ function buildWeekGrid(year, month, people) {
   const personBlockMaps = isASV ? new Map(people.map((p) => [p.id, computeLeaveBlocks(p.id, year, month)])) : null;
 
   const weekBlocksHtml = weeks
-    .map((weekDays, weekIdx) => {
+    .map((weekDays) => {
       // Rangée d'en-têtes : jours seulement (sans bandes de personnes)
       const headerCols = weekDays
         .map((day, wd) => {
@@ -910,71 +910,55 @@ function buildWeekGrid(year, month, people) {
       // Barre heures ASV : toutes les semaines (y compris la dernière sans dimanche dans ce mois)
       let otBarHtml = '';
       if (isASV) {
-        const weekDayNums = weekDays.filter((d) => d !== null);
-        let extraDates = [];
-        if (weekIdx === 0) {
-          const firstInWeek = weekDays.find((d) => d !== null);
-          const firstDateInWeek = new Date(year, month, firstInWeek);
-          for (let i = isoWeekday(firstDateInWeek); i > 0; i--) {
-            const d = new Date(firstDateInWeek.getTime() - i * 86400000);
-            if (!isSunday(d)) extraDates.push(d);
-          }
-        }
         const isPresentWG = (iso, p) =>
           getSlotState(iso, p.id, 'M') === 'present' || getSlotState(iso, p.id, 'AM') === 'present';
-        const personOTs = people.map((p) => {
-          let ot = 0;
-          extraDates.forEach((d) => {
-            const iso = fmtISO(d);
-            if (!isSunday(d) && isPresentWG(iso, p))
-              ot += getDayAllOtH(iso, p.id) - getDayDeficitH(iso, p.id) + getOvertimeHours(iso, p.id);
-          });
-          weekDayNums.forEach((dn) => {
-            const d = new Date(year, month, dn);
-            const iso = fmtISO(d);
-            if (!isSunday(d) && isPresentWG(iso, p))
-              ot += getDayAllOtH(iso, p.id) - getDayDeficitH(iso, p.id) + getOvertimeHours(iso, p.id);
-          });
-          return { person: p, ot: roundTo15min(ot) };
-        });
-        const nonZero = personOTs.filter((e) => e.ot !== 0);
-        // Total heures réelles de la semaine par personne (utilise le lundi réel de la semaine)
+        // Une seule ligne « Total » par semaine : pour chaque ASV, heures réalisées,
+        // heures sup / déficit et écart avec le prévisionnel. Tout est calculé sur la
+        // semaine complète (lundi → samedi), même à cheval sur deux mois.
         const _firstDay = weekDays.find((d) => d !== null);
         const _mondayOfWeek = getWeekMondayDate(new Date(year, month, _firstDay));
-        const personWeekH = people.map((p) => {
-          const h = computeWeekTotalHours(p.id, _mondayOfWeek);
-          const fcast = parseForecastHours(getForecastWeek(p.id, fmtISO(_mondayOfWeek)));
-          return { person: p, h, fcast, delta: forecastDelta(h, fcast) };
-        });
-        const weekHLine = personWeekH
-          .map((e) => {
-            if (!e.h && e.delta === null) return null;
-            const over = !e.person.saturdayOnly && e.h >= WEEKLY_MAX_HOURS;
-            const fcastTitle = e.delta !== null ? ` · prévu ${formatHHMM(e.fcast)}, écart ${signedHHMM(e.delta)}` : '';
-            return (
-              `<span class="${over ? 'ot-neg' : 'ot-pos'}" title="${escapeHTML(e.person.short)} — ${formatHHMM(e.h)} cette semaine${fcastTitle}${over ? ' ⚠️ Plafond 42h' : ''}">` +
-              `${escapeHTML(e.person.short)} ${formatHHMM(e.h)}${over ? ' ⚠️' : ''}${forecastDeltaHtml(e.delta)}</span>`
-            );
+        const _mondayISO = fmtISO(_mondayOfWeek);
+        const weekEntries = people
+          .map((p) => {
+            const h = computeWeekTotalHours(p.id, _mondayOfWeek);
+            let ot = 0;
+            for (let i = 0; i < 6; i++) {
+              const iso = fmtISO(
+                new Date(_mondayOfWeek.getFullYear(), _mondayOfWeek.getMonth(), _mondayOfWeek.getDate() + i)
+              );
+              if (isPresentWG(iso, p))
+                ot += getDayAllOtH(iso, p.id) - getDayDeficitH(iso, p.id) + getOvertimeHours(iso, p.id);
+            }
+            const fcast = parseForecastHours(getForecastWeek(p.id, _mondayISO));
+            return { person: p, h, ot: roundTo15min(ot), fcast, delta: forecastDelta(h, fcast) };
           })
-          .filter(Boolean);
-        const weekHHtml = weekHLine.length
-          ? `<div class="cal-wg-week-ot" style="opacity:0.85;font-size:11px;">` +
-            `<span style="color:var(--color-text-muted);font-weight:600;margin-right:6px;">Total</span>` +
-            `<span class="ot-week-detail">${weekHLine.join('<span class="ot-sep">·</span>')}</span></div>`
-          : '';
-        if (nonZero.length > 0) {
-          const weekTotal = roundTo15min(personOTs.reduce((s, e) => s + e.ot, 0));
-          const detail = nonZero
-            .map(
-              (e) =>
-                `<span class="${e.ot < 0 ? 'ot-neg' : 'ot-pos'}">${escapeHTML(e.person.short)} ${signedHHMM(e.ot)}</span>`
-            )
-            .join('<span class="ot-sep">·</span>');
-          otBarHtml =
-            weekHHtml +
-            `<div class="cal-wg-week-ot"><span class="ot-week-detail">${detail}</span><span class="ot-week-sum${weekTotal < 0 ? ' ot-week-sum-neg' : ''}">${signedHHMM(weekTotal)}</span></div>`;
-        } else if (weekHHtml) {
-          otBarHtml = weekHHtml;
+          .filter((e) => e.h || e.ot || e.delta !== null);
+        if (weekEntries.length > 0) {
+          const items = weekEntries
+            .map((e) => {
+              const over = !e.person.saturdayOnly && e.h >= WEEKLY_MAX_HOURS;
+              const tip = [
+                `${e.person.short} — ${formatHHMM(e.h)} réalisées`,
+                e.ot ? `${e.ot > 0 ? 'heures sup' : 'déficit'} ${signedHHMM(e.ot)}` : '',
+                e.delta !== null ? `prévu ${formatHHMM(e.fcast)}, écart ${signedHHMM(e.delta)}` : '',
+                over ? '⚠️ plafond 42h' : '',
+              ]
+                .filter(Boolean)
+                .join(' · ');
+              const otTag = e.ot
+                ? `<span class="wk-tag ${e.ot > 0 ? 'wk-tag-sup' : 'wk-tag-def'}">${e.ot > 0 ? 'sup' : 'déf.'} ${signedHHMM(e.ot)}</span>`
+                : '';
+              return (
+                `<span class="wk-item" title="${escapeHTML(tip)}">` +
+                `<span class="wk-name" style="color:${e.person.color};">${escapeHTML(e.person.short)}</span>` +
+                `<span class="wk-h${over ? ' wk-h-over' : ''}">${formatHHMM(e.h)}${over ? ' ⚠️' : ''}</span>` +
+                otTag +
+                forecastTagHtml(e.delta) +
+                `</span>`
+              );
+            })
+            .join('');
+          otBarHtml = `<div class="cal-wg-week-ot wk-total"><span class="wk-total-lbl">Total</span>${items}</div>`;
         }
       }
 
@@ -1008,21 +992,23 @@ function buildWeekGrid(year, month, people) {
       const parts = monthTotals
         .map(
           (e) =>
-            `<span style="color:${e.person.color};font-weight:700;"${e.delta !== null ? ` title="Prévu ${formatHHMM(e.fcast)}, écart ${signedHHMM(e.delta)}"` : ''}>${escapeHTML(e.person.short)} ${formatHHMM(e.h)}${forecastDeltaHtml(e.delta)}</span>`
+            `<span class="wk-item"${e.delta !== null ? ` title="Prévu ${formatHHMM(e.fcast)}, écart ${signedHHMM(e.delta)}"` : ''}>` +
+            `<span class="wk-name" style="color:${e.person.color};">${escapeHTML(e.person.short)}</span>` +
+            `<span class="wk-h">${formatHHMM(e.h)}</span>${forecastTagHtml(e.delta)}</span>`
         )
-        .join('<span class="ot-sep">·</span>');
-      monthTotalHtml = `<div class="cal-wg-week-ot cal-month-total-bar"><span class="cal-month-total-lbl">Total du mois</span>${parts}</div>`;
+        .join('');
+      monthTotalHtml = `<div class="cal-wg-week-ot cal-month-total-bar wk-total"><span class="cal-month-total-lbl">Total du mois</span>${parts}</div>`;
     }
   }
 
   return `<div class="cal-wg${isASV ? '' : ' cal-wg--vet'}">${head}${legendHtml}${weekBlocksHtml}</div>${monthTotalHtml}`;
 }
 
-// Écart réalisé − prévisionnel, affiché après un total d'heures ASV.
-function forecastDeltaHtml(delta) {
+// Pastille « prév. ±XhYY » : écart réalisé − prévisionnel d'un total d'heures ASV.
+function forecastTagHtml(delta) {
   if (delta === null) return '';
-  const color = delta === 0 ? 'var(--color-text-muted)' : delta > 0 ? '#D97706' : '#DC2626';
-  return ` <span class="forecast-delta" style="font-weight:600;color:${color};" aria-label="écart avec le prévisionnel">(Δ ${signedHHMM(delta)})</span>`;
+  const cls = delta === 0 ? 'wk-tag-eq' : delta > 0 ? 'wk-tag-plus' : 'wk-tag-minus';
+  return `<span class="wk-tag ${cls}">prév. ${signedHHMM(delta)}</span>`;
 }
 
 function buildCalendarGrid(viewKey) {

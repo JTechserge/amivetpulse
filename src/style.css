@@ -1702,3 +1702,16 @@ body.no-dashboard [data-view="dashboard"]{display:none;}
     border-top:1px solid #CBD5E1;
   }
 }
+/* Ligne « Total » hebdomadaire ASV : réalisé · sup/déficit · écart prévisionnel */
+.wk-total{gap:4px 14px;font-size:11px;padding:4px 12px;}
+.wk-total-lbl{color:var(--color-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:10px;}
+.wk-item{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;}
+.wk-name{font-weight:700;}
+.wk-h{font-weight:800;color:var(--color-text);}
+.wk-h-over{color:#DC2626;}
+.wk-tag{font-size:10px;font-weight:700;padding:0 5px;border-radius:8px;line-height:16px;}
+.wk-tag-sup{background:#DCFCE7;color:#15803D;}
+.wk-tag-def{background:#FFEDD5;color:#C2410C;}
+.wk-tag-eq{background:var(--color-border);color:var(--color-text-muted);}
+.wk-tag-plus{background:#FEF3C7;color:#B45309;}
+.wk-tag-minus{background:#FEE2E2;color:#B91C1C;}
