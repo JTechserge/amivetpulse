@@ -181,6 +181,8 @@ export function triggerPushNotification({ type, title, body, targetUsers = [], d
     method: 'POST',
     headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ type, title, body, targetUsers, data, requireInteraction }),
+    // keepalive : l'envoi aboutit même si la page se ferme (notifications regroupées envoyées au départ).
+    keepalive: true,
   }).catch((e) => console.warn('Envoi notification push impossible (ignoré)', e));
 }
 

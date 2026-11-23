@@ -61,6 +61,7 @@ import {
 } from './slots.js';
 import { parseForecastHours, forecastDelta, forecastMonthTotal } from './lib/forecast-delta.js';
 import { isShiftAllowedOnSlot, SHIFT_SLOT_MESSAGE } from './lib/shift-rules.js';
+import { mergeHalfDayRanges, formatHalfDayRange } from './lib/notification-batch.js';
 import { computeLeaveBlocks } from './leave-blocks.js';
 import { getWeekAlerts, computeWeekTotalHours, renderWeekViewASV, openMonthPrintPopup } from './week-view.js';
 
@@ -1005,6 +1006,58 @@ function buildWeekGrid(year, month, people) {
   return `<div class="cal-wg${isASV ? '' : ' cal-wg--vet'}">${head}${legendHtml}${weekBlocksHtml}</div>${monthTotalHtml}`;
 }
 
+// ── Notifications de demandes de congé regroupées ──
+// Les demandes sont mises en file par ASV et envoyées 30 s après la dernière
+// saisie (ou quand on quitte la page) : une seule notification par suite de
+// demi-journées consécutives, au lieu d'une par demi-journée.
+const LEAVE_NOTIF_DELAY_MS = 30_000;
+const _leaveNotifQueue = new Map(); // personId → { short, items: [{ iso, slot, label, late }] }
+let _leaveNotifTimer = null;
+
+function queueLeaveNotification(person, slots, label, late) {
+  const entry = _leaveNotifQueue.get(person.id) || { short: person.short, items: [] };
+  slots.forEach(({ iso, slot }) => {
+    entry.items = entry.items.filter((it) => !(it.iso === iso && it.slot === slot));
+    entry.items.push({ iso, slot, label: label || '', late: !!late });
+  });
+  _leaveNotifQueue.set(person.id, entry);
+  clearTimeout(_leaveNotifTimer);
+  _leaveNotifTimer = setTimeout(flushLeaveNotifications, LEAVE_NOTIF_DELAY_MS);
+}
+
+function flushLeaveNotifications() {
+  clearTimeout(_leaveNotifTimer);
+  _leaveNotifTimer = null;
+  if (typeof triggerPushNotification !== 'function') return _leaveNotifQueue.clear();
+  _leaveNotifQueue.forEach(({ short, items }) => {
+    mergeHalfDayRanges(items).forEach((range) => {
+      const inRange = items.filter((it) => {
+        const k = `${it.iso}|${it.slot === 'M' ? 0 : 1}`;
+        return (
+          k >= `${range.from.iso}|${range.from.slot === 'M' ? 0 : 1}` &&
+          k <= `${range.to.iso}|${range.to.slot === 'M' ? 0 : 1}`
+        );
+      });
+      const labels = [...new Set(inRange.map((it) => it.label).filter(Boolean))];
+      const late = inRange.some((it) => it.late);
+      triggerPushNotification({
+        type: 'leave_request',
+        title: late ? '⚠️ Demande de congé hors délai' : 'Nouvelle demande de congé',
+        body: `${short} — ${formatHalfDayRange(range, formatFR)}${labels.length ? ' · ' + labels.join(', ') : ''}${late ? ' — hors délai 15j' : ''}`,
+        targetUsers: ['david', 'stephane'],
+        data: { type: 'leave_request' },
+      });
+    });
+  });
+  _leaveNotifQueue.clear();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && _leaveNotifQueue.size) flushLeaveNotifications();
+});
+window.addEventListener('pagehide', () => {
+  if (_leaveNotifQueue.size) flushLeaveNotifications();
+});
+
 // Pastille « prév. ±XhYY » : écart réalisé − prévisionnel d'un total d'heures ASV.
 function forecastTagHtml(delta) {
   if (delta === null) return '';
@@ -1610,15 +1663,7 @@ function openAbsenceLabelPopover(cell, forceAbsent) {
     setSlotLabel(iso, personId, slot, label);
     propagateLabelAcrossSunday(personId, [{ iso, slot }], label);
     _saveData();
-    if (isASV && typeof triggerPushNotification === 'function') {
-      triggerPushNotification({
-        type: 'leave_request',
-        title: isLateRequest ? '⚠️ Demande de congé hors délai' : 'Nouvelle demande de congé',
-        body: `${person.short} — ${formatFR(iso)} (${SLOT_LABELS[slot]})${label ? ' · ' + label : ''}${isLateRequest ? ' — hors délai 15j' : ''}`,
-        targetUsers: ['david', 'stephane'],
-        data: { type: 'leave_request' },
-      });
-    }
+    if (isASV) queueLeaveNotification(person, [{ iso, slot }], label, isLateRequest);
     if (viewKey) renderCalendarView(viewKey);
     close();
   };
@@ -1676,15 +1721,7 @@ function openAbsenceRangePopover(slots, personId, viewKey) {
     slots.forEach(({ iso, slot }) => setSlotLabel(iso, personId, slot, label));
     propagateLabelAcrossSunday(personId, slots, label);
     _saveData();
-    if (isASV && typeof triggerPushNotification === 'function') {
-      triggerPushNotification({
-        type: 'leave_request',
-        title: 'Nouvelle demande de congé',
-        body: `${person.short} — ${fromTxt}${slots.length > 1 ? ' → ' + toTxt : ''}${label ? ' · ' + label : ''}`,
-        targetUsers: ['david', 'stephane'],
-        data: { type: 'leave_request' },
-      });
-    }
+    if (isASV) queueLeaveNotification(person, slots, label, false);
     if (viewKey) renderCalendarView(viewKey);
     close();
   };
