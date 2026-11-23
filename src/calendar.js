@@ -60,6 +60,7 @@ import {
   getForecastWeek,
 } from './slots.js';
 import { parseForecastHours, forecastDelta, forecastMonthTotal } from './lib/forecast-delta.js';
+import { isShiftAllowedOnSlot, SHIFT_SLOT_MESSAGE } from './lib/shift-rules.js';
 import { computeLeaveBlocks } from './leave-blocks.js';
 import { getWeekAlerts, computeWeekTotalHours, renderWeekViewASV, openMonthPrintPopup } from './week-view.js';
 
@@ -248,8 +249,8 @@ function buildCalendarToolbar(viewKey) {
     ? `
     <div class="cal-paint-bar" id="cal-paint-bar-${viewKey}"${monthClosed && isCurrentUserASV ? ' style="opacity:0.4;pointer-events:none;" title="Mois clôturé"' : ''}>
       <span style="font-size:11px;font-weight:600;color:var(--color-text-muted);">Outil :</span>
-      <button class="paint-tool${store.calMonthPaintMode === 'opening' ? ' active' : ''}" data-paint="opening" title="Ouverture — Mat. 8h30→13h | A-m. 15h→19h">🟢 Ouverture</button>
-      <button class="paint-tool${store.calMonthPaintMode === 'closing' ? ' active' : ''}" data-paint="closing" title="Fermeture — Mat. 9h→13h | A-m. 15h→19h15">🌿 Fermeture</button>
+      <button class="paint-tool${store.calMonthPaintMode === 'opening' ? ' active' : ''}" data-paint="opening" title="Ouverture — le matin uniquement (8h30→13h)">🟢 Ouverture</button>
+      <button class="paint-tool${store.calMonthPaintMode === 'closing' ? ' active' : ''}" data-paint="closing" title="Fermeture — l’après-midi uniquement (15h→19h15)">🌿 Fermeture</button>
       <button class="paint-tool${store.calMonthPaintMode === 'demi' ? ' active' : ''}" data-paint="demi" title="Demi-journée — Mat. 9h→13h | A-m. 15h→19h">🩷 Demi-j.</button>
       <button class="paint-tool${store.calMonthPaintMode === 'conge' ? ' active' : ''}" data-paint="conge" title="Demande de congé (validation vétérinaires)">🔵 Congé</button>
       <button class="paint-tool${store.calMonthPaintMode === 'maladie' ? ' active' : ''}" data-paint="maladie" title="Arrêt maladie (direct, sans approbation)">🤒 Maladie</button>
@@ -1425,6 +1426,17 @@ function applyPaint(cell, value) {
       lc === 'accident'
     )
       return;
+  }
+  // Ouverture uniquement le matin, Fermeture uniquement l'après-midi (tous jours, toutes ASV).
+  const paintShift = dragCtx.paintMode === 'opening' ? 'O' : dragCtx.paintMode === 'closing' ? 'F' : null;
+  if (paintShift && !isShiftAllowedOnSlot(paintShift, slot)) {
+    if (!dragCtx.shiftWarned) {
+      dragCtx.shiftWarned = true;
+      showToast(SHIFT_SLOT_MESSAGE, '⛔');
+    }
+    cell.classList.add('cal-wg-half-refused');
+    setTimeout(() => cell.classList.remove('cal-wg-half-refused'), 900);
+    return;
   }
   dragCtx.touched.add(`${iso}|${personId}|${slot}`);
   if (dragCtx.paintMode === 'opening') {
