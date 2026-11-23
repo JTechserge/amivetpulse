@@ -1,14 +1,6 @@
-import {
-  ASV_PEOPLE,
-  PEOPLE,
-  allPeople,
-  SLOTS,
-  SLOT_LABELS,
-  getCurrentYear,
-  personOf,
-  SUPABASE_URL,
-} from './config.js';
+import { ASV_PEOPLE, PEOPLE, allPeople, SLOTS, SLOT_LABELS, getCurrentYear, personOf, SUPABASE_URL } from './config.js';
 import { CP_DAYS_PER_MONTH } from './lib/pay-constants.js';
+import { ASV_CP_DAYS_PER_YEAR, isCPLabel, countCPDays, requestDaysByYear, checkCPQuota } from './lib/cp-quota.js';
 import { escapeHTML, daysInMonth, fmtISO, formatFR } from './utils.js';
 import { store } from './store.js';
 import { supabaseHeaders } from './auth.js';
@@ -24,6 +16,7 @@ import {
   setChangeDecision,
   getShiftType,
   requiresLeaveApproval,
+  isASVPerson,
 } from './slots.js';
 import { triggerPushNotification } from './pwa.js';
 
@@ -139,6 +132,48 @@ export function decideLeaveGroup(group, decision, comment) {
   _saveData();
 }
 
+// ── Quota annuel de CP des ASV (25 j + report N-1 + ajustements) ──
+// Cache par année des lignes cp_adjustments : { [year]: { [personId]: row } }.
+const _cpAdjCache = {};
+async function loadCPAdjustments(year) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}cp_adjustments?year=eq.${year}&select=*`, { headers: supabaseHeaders() });
+    if (!res.ok) return _cpAdjCache[year] || null;
+    const map = {};
+    (await res.json()).forEach((a) => {
+      map[a.person_id] = a;
+    });
+    _cpAdjCache[year] = map;
+    return map;
+  } catch (e) {
+    console.warn('cp_adjustments inaccessibles', e);
+    return _cpAdjCache[year] || null;
+  }
+}
+
+/** Dépassements de quota qu'entraînerait l'approbation d'une demande (ASV, motif CP). */
+function cpQuotaOverruns(group) {
+  if (!isASVPerson(group.personId) || !isCPLabel(group.label)) return [];
+  const pending = group.slots.filter(({ iso, slot }) => getLeaveDecision(iso, group.personId, slot) !== 'approved');
+  return Object.entries(requestDaysByYear(pending))
+    .map(([y, requestedDays]) => {
+      const year = Number(y);
+      const adj = _cpAdjCache[year]?.[group.personId] || {};
+      const res = checkCPQuota({
+        approvedDays: countCPDays(store.DATA.slots, group.personId, year, 'approved'),
+        requestedDays,
+        carriedOver: parseFloat(adj.carried_over) || 0,
+        extra: parseFloat(adj.extra_days) || 0,
+      });
+      return { year, ...res };
+    })
+    .filter((r) => r.over > 0);
+}
+
+function cpQuotaMessage(o) {
+  return `Quota ${o.year} dépassé de ${o.over} j : ${o.after} j de CP validés après approbation pour ${o.limit} j autorisés.`;
+}
+
 // --- Sous-page "Demandes de congé" : liste groupée, triée en attente -> approuvées ->
 // refusées, avec actions d'approbation/refus (refus avec commentaire obligatoire). ---
 export function renderLeaveRequestsPage() {
@@ -195,9 +230,13 @@ export function renderLeaveRequestsPage() {
         first.iso === last.iso
           ? `${formatFR(first.iso)} (${SLOT_LABELS[first.slot]})`
           : `du ${formatFR(first.iso)} au ${formatFR(last.iso)}`;
+      const overruns = g.status === 'pending' ? cpQuotaOverruns(g) : [];
+      const quotaWarn = overruns.length
+        ? `<div class="cp-quota-warn" role="alert">⚠️ ${overruns.map((o) => escapeHTML(cpQuotaMessage(o))).join('<br>')}<br>Cette demande ne peut pas être approuvée en l'état.</div>`
+        : '';
       const actions =
         g.status === 'pending'
-          ? `
+          ? `${quotaWarn}
       <div class="flex gap-2" style="margin-top:8px;">
         <button class="btn btn-sm btn-primary" data-approve="${idx}">✓ Approuver</button>
         <button class="btn btn-sm btn-danger" data-reject="${idx}">✕ Refuser</button>
@@ -228,6 +267,26 @@ export function renderLeaveRequestsPage() {
     })
     .join('');
 
+  const overNames = [
+    ...new Set(
+      groups
+        .filter((g) => g.status === 'pending' && cpQuotaOverruns(g).length)
+        .map((g) => personOf(g.personId)?.short || g.personId)
+    ),
+  ];
+  const quotaBanner = overNames.length
+    ? `<div class="cp-quota-banner" role="alert">⚠️ ${overNames.map((n) => escapeHTML(n)).join(', ')} ${overNames.length > 1 ? 'demandent' : 'demande'} plus de congés payés que leur quota annuel (${ASV_CP_DAYS_PER_YEAR} j + report N-1). Les demandes concernées ne peuvent pas être approuvées.</div>`
+    : '';
+
+  // Le quota tient compte du report N-1 : on charge les ajustements des années
+  // affichées, puis on réaffiche si de nouvelles données sont arrivées.
+  const _yearsShown = [getCurrentYear(), getCurrentYear() + 1].filter((y) => !(y in _cpAdjCache));
+  if (_yearsShown.length) {
+    Promise.all(_yearsShown.map(loadCPAdjustments)).then((maps) => {
+      if (maps.some(Boolean) && document.getElementById('dash-sub-requests') === container) renderLeaveRequestsPage();
+    });
+  }
+
   // eslint-disable-next-line no-unsanitized/property
   container.innerHTML = `
     ${
@@ -239,6 +298,7 @@ export function renderLeaveRequestsPage() {
     `
         : ''
     }
+    ${quotaBanner}
     <p class="section-desc" style="margin-bottom:14px;">Demandes de congé — ${getCurrentYear()} et ${getCurrentYear() + 1}.</p>
     ${groups.length ? leaveRows : `<p class="text-muted">Aucune demande de congé pour le moment.</p>`}
   `;
@@ -267,8 +327,20 @@ export function renderLeaveRequestsPage() {
 
   // Handlers : demandes de congé classiques
   container.querySelectorAll('[data-approve]').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const g = groups[parseInt(btn.dataset.approve, 10)];
+      // Quota annuel de CP : vérifié avec les ajustements à jour, au moment du clic.
+      if (isASVPerson(g.personId) && isCPLabel(g.label)) {
+        btn.disabled = true;
+        await Promise.all(Object.keys(requestDaysByYear(g.slots)).map((y) => loadCPAdjustments(Number(y))));
+        btn.disabled = false;
+        const overruns = cpQuotaOverruns(g);
+        if (overruns.length) {
+          showToast(cpQuotaMessage(overruns[0]), '⛔');
+          renderLeaveRequestsPage();
+          return;
+        }
+      }
       decideLeaveGroup(g, 'approved', '');
       if (typeof triggerPushNotification === 'function') {
         triggerPushNotification({
@@ -399,6 +471,8 @@ export function cpPeriodISO(referenceYear) {
 }
 
 export function getCPAcquired(person, referenceYear) {
+  // ASV : 5 semaines = 25 j par an, quel que soit le temps de travail.
+  if (isASVPerson(person.id)) return ASV_CP_DAYS_PER_YEAR;
   const { start, end } = cpPeriodISO(referenceYear);
   const todayISO = fmtISO(today);
   const effectiveEnd = todayISO < end ? todayISO : end;
@@ -490,7 +564,7 @@ export function renderGroupConges(group, containerId) {
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
         <div>
           <div style="font-size:13.5px;font-weight:700;color:var(--color-text);">Période de référence : ${periodLabel}</div>
-          <div style="font-size:12px;color:var(--color-muted);">${CP_DAYS_PER_MONTH}j acquis/mois (proratisé selon le taux d'activité)</div>
+          <div style="font-size:12px;color:var(--color-muted);">${group === 'vets' ? `${CP_DAYS_PER_MONTH}j acquis/mois (proratisé selon le taux d'activité)` : `${ASV_CP_DAYS_PER_YEAR} j par an (5 semaines), quel que soit le temps de travail · validation bloquée au-delà`}</div>
         </div>
         <div style="display:flex;gap:6px;">${yearBtns}</div>
       </div>

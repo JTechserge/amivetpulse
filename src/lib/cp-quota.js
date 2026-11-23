@@ -1,0 +1,63 @@
+/* Quota annuel de congés payés des ASV.
+   Règle (Jérémie, 23/11/2026) : chaque ASV a droit à 5 semaines = 25 jours de CP
+   par année civile, quel que soit son temps de travail. Le report N-1 et les
+   ajustements manuels (table cp_adjustments) s'ajoutent à ce quota.
+   Un vétérinaire ne peut pas valider des CP au-delà. */
+
+export const ASV_CP_DAYS_PER_YEAR = 25;
+
+const CP_LABEL_RE = /cp|cong[eé]/i;
+
+/** Motif d'absence décompté comme congé payé. */
+export function isCPLabel(label) {
+  return CP_LABEL_RE.test(label || '');
+}
+
+/**
+ * Jours de CP d'une personne sur une année civile, d'après les demi-journées
+ * absentes à motif CP/Congé.
+ * @param {Record<string,string>} slots  store.DATA.slots
+ * @param {string} pid
+ * @param {number} year
+ * @param {'approved'|'pending'|'any'} status  'approved' = validés par un vétérinaire
+ * @returns {number} jours (une demi-journée = 0,5)
+ */
+export function countCPDays(slots, pid, year, status = 'approved') {
+  let halfDays = 0;
+  const prefix = `${year}-`;
+  for (const key of Object.keys(slots)) {
+    const m = key.match(/^(\d{4}-\d{2}-\d{2})_(.+)_(M|AM)$/);
+    if (!m || m[2] !== pid || !m[1].startsWith(prefix)) continue;
+    if (slots[key] !== 'absent') continue;
+    if (!isCPLabel(slots[`${key}_label`])) continue;
+    const decision = slots[`${key}_decision`] || 'pending';
+    if (status !== 'any' && decision !== status) continue;
+    halfDays++;
+  }
+  return halfDays / 2;
+}
+
+/**
+ * Jours d'une demande (liste de demi-journées) répartis par année civile.
+ * @param {{iso:string}[]} groupSlots
+ * @returns {Record<number, number>}
+ */
+export function requestDaysByYear(groupSlots) {
+  const out = {};
+  for (const { iso } of groupSlots) {
+    const y = Number(iso.slice(0, 4));
+    out[y] = (out[y] || 0) + 0.5;
+  }
+  return out;
+}
+
+/**
+ * Contrôle d'une demande de CP au regard du quota annuel.
+ * @param {{approvedDays:number, requestedDays:number, carriedOver?:number, extra?:number}} p
+ * @returns {{limit:number, after:number, over:number}}  over > 0 → dépassement
+ */
+export function checkCPQuota({ approvedDays, requestedDays, carriedOver = 0, extra = 0 }) {
+  const limit = ASV_CP_DAYS_PER_YEAR + (carriedOver || 0) + (extra || 0);
+  const after = approvedDays + requestedDays;
+  return { limit, after, over: Math.max(0, Math.round((after - limit) * 100) / 100) };
+}
