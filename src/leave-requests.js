@@ -15,7 +15,7 @@ import { groupConsecutiveHalfDays, formatHalfDayRange, halfDayRank } from './lib
 export function getASVArrival(pid) {
   return store.DATA.slots[`asv_arrival_${pid}`] || null;
 }
-import { escapeHTML, daysInMonth, fmtISO, formatFR } from './utils.js';
+import { escapeHTML, daysInMonth, fmtISO, formatFR, holidayName } from './utils.js';
 import { store } from './store.js';
 import { supabaseHeaders } from './auth.js';
 import { showToast } from './ui.js';
@@ -71,7 +71,13 @@ export function collectAllLeaveGroups() {
       for (let month = 0; month < 12; month++) {
         const nbDays = daysInMonth(year, month);
         for (let day = 1; day <= nbDays; day++) {
-          const iso = fmtISO(new Date(year, month, day));
+          const date = new Date(year, month, day);
+          const iso = fmtISO(date);
+          // Le dimanche, et un jour férié laissé vide, ne coupent pas une suite de
+          // congés : une semaine posée du lundi au samedi puis la suivante forment
+          // une seule demande, y compris d'un mois à l'autre.
+          const untouched = SLOTS.every((sl) => getSlotState(iso, person.id, sl) === 'empty');
+          if (untouched && (date.getDay() === 0 || holidayName(iso))) continue;
           SLOTS.forEach((slot) => {
             if (getSlotState(iso, person.id, slot) !== 'absent') {
               current = null;
