@@ -4,13 +4,20 @@
    ajustements manuels (table cp_adjustments) s'ajoutent à ce quota.
    Un vétérinaire ne peut pas valider des CP au-delà. */
 
+import { isReposLabel, isSickOrAccidentLabel } from './leave-utils.js';
+
 export const ASV_CP_DAYS_PER_YEAR = 25;
 
-const CP_LABEL_RE = /cp|cong[eé]/i;
+// Le motif d'une demande de congé est un texte libre (« Vacances », « SKI TIGNES »…).
+// Toute absence posée avec l'outil Congé compte comme congé payé, sauf repos,
+// maladie / accident (aucune validation) et les motifs qui ne sont pas des CP.
+const NON_CP_RE = /^(formation|congr[eè]s|rtt|rendez-vous m[eé]dical|r[eé]cup[eé]ration)\b/i;
 
 /** Motif d'absence décompté comme congé payé. */
 export function isCPLabel(label) {
-  return CP_LABEL_RE.test(label || '');
+  const lc = (label || '').trim();
+  if (isReposLabel(lc) || isSickOrAccidentLabel(lc)) return false;
+  return !NON_CP_RE.test(lc);
 }
 
 /**

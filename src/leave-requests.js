@@ -541,7 +541,12 @@ export function renderGroupConges(group, containerId) {
       .map((p) => {
         const adj = adjByPerson[p.id] || { carried_over: 0, extra_days: 0, extra_note: '' };
         const acquired = getCPAcquired(p, cpYear);
-        const taken = getCPTakenDays(p.id, startISO, endISO);
+        // ASV : jours de CP posés ET validés par un vétérinaire (même décompte que le quota).
+        const isAsvGroup = group !== 'vets';
+        const taken = isAsvGroup
+          ? countCPDays(store.DATA.slots, p.id, cpYear, 'approved')
+          : getCPTakenDays(p.id, startISO, endISO);
+        const pendingDays = isAsvGroup ? countCPDays(store.DATA.slots, p.id, cpYear, 'pending') : 0;
         const carriedOver = parseFloat(adj.carried_over) || 0;
         const extra = parseFloat(adj.extra_days) || 0;
         const balance = Math.round((acquired + carriedOver + extra - taken) * 100) / 100;
@@ -551,7 +556,7 @@ export function renderGroupConges(group, containerId) {
         return `<tr>
         <td style="padding:10px 12px;font-weight:600;">${swatch(p.color)}${escapeHTML(p.short || p.name)}</td>
         <td style="padding:10px 12px;text-align:center;">${acquired}j</td>
-        <td style="padding:10px 12px;text-align:center;">${taken}j</td>
+        <td style="padding:10px 12px;text-align:center;">${taken}j${pendingDays > 0 ? `<div style="font-size:11px;color:#CA8A04;font-weight:600;">+ ${pendingDays}j en attente</div>` : ''}</td>
         <td style="padding:10px 12px;text-align:center;">${carriedOver > 0 ? carriedOver + 'j' : '—'}</td>
         <td style="padding:10px 12px;text-align:center;">${extra !== 0 ? (extra > 0 ? '+' : '') + extra + 'j' : '—'}</td>
         ${group !== 'vets' ? `<td style="padding:10px 12px;text-align:center;font-weight:700;color:${balC};">${balance}j</td>` : ''}
@@ -587,7 +592,7 @@ export function renderGroupConges(group, containerId) {
           <thead><tr>
             <th style="text-align:left;">Personne</th>
             <th style="text-align:center;">Acquis</th>
-            <th style="text-align:center;">Posés</th>
+            <th style="text-align:center;">${group === 'vets' ? 'Posés' : 'Posés et validés'}</th>
             <th style="text-align:center;">Report N-1</th>
             <th style="text-align:center;">Ajust.</th>
             ${group !== 'vets' ? `<th style="text-align:center;">Solde</th>` : ''}
@@ -598,7 +603,7 @@ export function renderGroupConges(group, containerId) {
         </table>
       </div>
       <div style="font-size:11.5px;color:var(--color-muted);margin-top:8px;">
-        🟢 ≥ 10j &nbsp;🟡 5–9j &nbsp;🔴 &lt; 5j · Jours "posés" = absences marquées CP/Congé dans le calendrier.
+        🟢 ≥ 10j &nbsp;🟡 5–9j &nbsp;🔴 &lt; 5j · ${group === 'vets' ? 'Jours "posés" = absences marquées CP/Congé dans le calendrier.' : 'Posés et validés = congés approuvés par un vétérinaire (hors maladie, accident, formation, congrès, RTT, rendez-vous médical).'}
       </div>
     `;
 

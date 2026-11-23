@@ -20,13 +20,22 @@ describe('quota annuel de CP des ASV', () => {
     expect(ASV_CP_DAYS_PER_YEAR).toBe(25);
   });
 
-  it('reconnaît les motifs CP / Congé, pas Maladie ni Formation', () => {
-    expect(isCPLabel('CP')).toBe(true);
-    expect(isCPLabel('Congé payé')).toBe(true);
-    expect(isCPLabel('Conge')).toBe(true);
-    expect(isCPLabel('Arrêt maladie')).toBe(false);
-    expect(isCPLabel('Formation')).toBe(false);
-    expect(isCPLabel('')).toBe(false);
+  it('compte comme CP toute demande de congé, motif libre compris', () => {
+    for (const l of ['CP', 'Congé payé', 'Vacances', 'SKI TIGNES', 'GRÈCE', '']) expect(isCPLabel(l)).toBe(true);
+  });
+  it('exclut repos, maladie, accident et les motifs qui ne sont pas des CP', () => {
+    for (const l of [
+      'Repos',
+      'Arrêt maladie',
+      'Maladie',
+      'Accident du travail',
+      'Formation',
+      'Congrès',
+      'RTT',
+      'Rendez-vous médical',
+      'Récupération',
+    ])
+      expect(isCPLabel(l)).toBe(false);
   });
 
   it('compte les jours validés par statut, une demi-journée = 0,5 j', () => {
