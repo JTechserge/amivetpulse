@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import {
   timeToMins,
   getShiftType,
@@ -91,12 +91,8 @@ describe('getSlotNominalH', () => {
     // tableau de bord et la feuille signée.
     expect(getSlotNominalH({}, ISO_SAT, 'carla', 'M', 6)).toBeCloseTo(ASV_STD_SAT_CARLA, 10);
   });
-  it('autre ASV samedi Mat. → 7.0h', () => {
-    expect(getSlotNominalH({}, ISO_SAT, 'alice', 'M', 6)).toBe(7.0);
-  });
-  it('samedi A-m. → 0h (non travaillé)', () => {
+  it('Carla samedi A-m. → 0h (son contrat est porté par le matin)', () => {
     expect(getSlotNominalH({}, ISO_SAT, 'carla', 'AM', 6)).toBe(0);
-    expect(getSlotNominalH({}, ISO_SAT, 'alice', 'AM', 6)).toBe(0);
   });
 });
 
@@ -120,13 +116,7 @@ describe('getDayNominalH — modèle presence-aware (Lot 2)', () => {
     expect(getDayNominalH(slots, ISO_MON, 'alice', 1)).toBe(4.25);
   });
   it('Carla samedi Mat. présent → valeur contractuelle de config.js', () => {
-    expect(getDayNominalH(present(ISO_SAT, 'carla', 'M'), ISO_SAT, 'carla', 6)).toBeCloseTo(
-      ASV_STD_SAT_CARLA,
-      10
-    );
-  });
-  it('autre ASV samedi Mat. présent → 7.0h', () => {
-    expect(getDayNominalH(present(ISO_SAT, 'alice', 'M'), ISO_SAT, 'alice', 6)).toBe(7.0);
+    expect(getDayNominalH(present(ISO_SAT, 'carla', 'M'), ISO_SAT, 'carla', 6)).toBeCloseTo(ASV_STD_SAT_CARLA, 10);
   });
 });
 
@@ -165,7 +155,7 @@ describe('getLegacyOtH', () => {
 
 // ─── Garde-fou : 7h25 n'est pas 7,25 h ───────────────────────────────────────
 
-describe('cohérence de l\'heure du samedi de Carla', () => {
+describe("cohérence de l'heure du samedi de Carla", () => {
   it('vaut 7 h 25 min, et surtout PAS 7,25 h', () => {
     // Le piège qui a produit la divergence : « 7h25 » lu comme un décimal.
     // 7.25 h = 7 h 15 min, soit 10 minutes de moins par samedi.
@@ -178,5 +168,66 @@ describe('cohérence de l\'heure du samedi de Carla', () => {
     // Si ce test casse, le miroir Deno a divergé de la source de vérité :
     // le tableau de bord et la feuille signée ne comptent plus pareil.
     expect(getSlotNominalH({}, ISO_SAT, 'carla', 'M', 6)).toBeCloseTo(ASV_STD_SAT_CARLA, 10);
+  });
+});
+
+// ─── Samedi des ASV autres que Carla — front ET miroir Deno ──────────────────
+// Règle (Jérémie, 23/11/2026) : matin Ouverture 8h30→13h = 4h30, Demi-journée = 4h ;
+// après-midi Fermeture = 2h25, Demi-journée = 2h30. Les deux modules sont testés :
+// une divergence fausserait les récapitulatifs email de signature.
+
+const H2_25 = 2 + 25 / 60;
+
+describe.each([
+  ['front (src/lib/asv-hours.js)', () => import('../../src/lib/asv-hours.js')],
+  ['Edge (supabase/functions/_shared/asv-hours.ts)', () => import('../../supabase/functions/_shared/asv-hours.ts')],
+])('samedi hors Carla — %s', (_label, load) => {
+  let m;
+  beforeAll(async () => {
+    m = await load();
+  });
+  const sat = (extra) => ({ ...extra });
+
+  it('Mat. Ouverture → 4h30', () => {
+    expect(m.getSlotNominalH(sat(s(ISO_SAT, 'alice', 'M_shift', 'O')), ISO_SAT, 'alice', 'M', 6)).toBe(4.5);
+  });
+  it('Mat. sans poste saisi (Ouverture par défaut) → 4h30', () => {
+    expect(m.getSlotNominalH({}, ISO_SAT, 'alice', 'M', 6)).toBe(4.5);
+  });
+  it('Mat. Demi-journée → 4h00', () => {
+    expect(m.getSlotNominalH(s(ISO_SAT, 'alice', 'M_shift', 'D'), ISO_SAT, 'alice', 'M', 6)).toBe(4.0);
+  });
+  it('A-m. Fermeture → 2h25, et surtout PAS 2,25 h', () => {
+    const h = m.getSlotNominalH(s(ISO_SAT, 'alice', 'AM_shift', 'F'), ISO_SAT, 'alice', 'AM', 6);
+    expect(h).toBeCloseTo(H2_25, 10);
+    expect(Math.round(h * 60)).toBe(145);
+  });
+  it('A-m. Demi-journée → 2h30', () => {
+    expect(m.getSlotNominalH(s(ISO_SAT, 'alice', 'AM_shift', 'D'), ISO_SAT, 'alice', 'AM', 6)).toBe(2.5);
+  });
+  it("le poste du jour (clé _shift) s'applique aussi au samedi", () => {
+    expect(m.getSlotNominalH(s(ISO_SAT, 'alice', 'shift', 'F'), ISO_SAT, 'alice', 'AM', 6)).toBeCloseTo(H2_25, 10);
+  });
+  it('journée Ouverture matin + Fermeture après-midi → 6h55', () => {
+    const slots = {
+      ...present(ISO_SAT, 'alice', 'M', 'AM'),
+      ...s(ISO_SAT, 'alice', 'M_shift', 'O'),
+      ...s(ISO_SAT, 'alice', 'AM_shift', 'F'),
+    };
+    expect(Math.round(m.getDayNominalH(slots, ISO_SAT, 'alice', 6) * 60)).toBe(6 * 60 + 55);
+  });
+  it('Demi-journée matin seule, présente → 4h00', () => {
+    const slots = { ...present(ISO_SAT, 'alice', 'M'), ...s(ISO_SAT, 'alice', 'M_shift', 'D') };
+    expect(m.getDayNominalH(slots, ISO_SAT, 'alice', 6)).toBe(4.0);
+  });
+  it('absente → 0h, quel que soit le poste', () => {
+    expect(m.getDayNominalH(s(ISO_SAT, 'alice', 'M_shift', 'O'), ISO_SAT, 'alice', 6)).toBe(0);
+  });
+  it('Carla reste à 7h25 le samedi matin', () => {
+    expect(m.getDayNominalH(present(ISO_SAT, 'carla', 'M'), ISO_SAT, 'carla', 6)).toBeCloseTo(ASV_STD_SAT_CARLA, 10);
+  });
+  it('les jours de semaine ne bougent pas', () => {
+    expect(m.getSlotNominalH({}, ISO_MON, 'alice', 'M', 1)).toBe(4.5);
+    expect(m.getSlotNominalH(s(ISO_MON, 'alice', 'AM_shift', 'F'), ISO_MON, 'alice', 'AM', 1)).toBe(4.25);
   });
 });

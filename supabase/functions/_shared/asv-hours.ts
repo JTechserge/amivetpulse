@@ -20,6 +20,14 @@ const SATURDAY_HOURS_BY_PID: Record<string, number> = {
   carla: 7 + 25 / 60,
 };
 
+// Samedi des ASV autres que Carla — deux postes possibles, selon l'outil utilisé :
+// - matin : Ouverture 8h30→13h00 = 4h30 ; tout autre poste (Demi-journée…) = 4h00 ;
+// - après-midi : Fermeture = 2h25 (`2 + 25 / 60`, PAS 2.25) ; sinon Demi-journée = 2h30.
+const SATURDAY_SLOT_H: Record<string, Record<string, number>> = {
+  M: { O: 4.5, other: 4.0 },
+  AM: { F: 2 + 25 / 60, other: 2.5 },
+};
+
 // Heures par demi-journée selon type de poste (Lot 2)
 const SLOT_NOMINAL_H: Record<string, Record<string, number>> = {
   O: { M: 4.5, AM: 4.0 },
@@ -41,8 +49,19 @@ export function getSlotShiftType(slots: SlotsRecord, iso: string, pid: string, s
   return slots[`${iso}_${pid}_${slot}_shift`] || getShiftType(slots, iso, pid);
 }
 
+/** Heures d'une demi-journée de samedi (hors Carla) selon le poste. */
+export function getSaturdaySlotNominalH(shift: string, slot: string): number {
+  const t = SATURDAY_SLOT_H[slot];
+  if (!t) return 0;
+  return t[shift] ?? t.other;
+}
+
 export function getSlotNominalH(slots: SlotsRecord, iso: string, pid: string, slot: string, wd: number): number {
-  if (wd === 6) return slot === 'M' ? (SATURDAY_HOURS_BY_PID[pid] ?? 7.0) : 0;
+  if (wd === 6) {
+    // Carla : contrat de 7h25 porté par la demi-journée du matin, inchangé.
+    if (pid in SATURDAY_HOURS_BY_PID) return slot === 'M' ? SATURDAY_HOURS_BY_PID[pid] : 0;
+    return getSaturdaySlotNominalH(getSlotShiftType(slots, iso, pid, slot), slot);
+  }
   return (SLOT_NOMINAL_H[getSlotShiftType(slots, iso, pid, slot)] ?? SLOT_NOMINAL_H.O)[slot] ?? 4.0;
 }
 

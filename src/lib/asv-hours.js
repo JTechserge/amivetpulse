@@ -12,6 +12,14 @@
 // La cohérence avec config.js est vérifiée par tests/unit/asv-hours-contract.test.js.
 const SATURDAY_HOURS_BY_PID = { carla: 7 + 25 / 60 };
 
+// Samedi des ASV autres que Carla — deux postes possibles, selon l'outil utilisé :
+// - matin : Ouverture 8h30→13h00 = 4h30 ; tout autre poste (Demi-journée…) = 4h00 ;
+// - après-midi : Fermeture = 2h25 (`2 + 25 / 60`, PAS 2.25) ; sinon Demi-journée = 2h30.
+const SATURDAY_SLOT_H = {
+  M: { O: 4.5, other: 4.0 },
+  AM: { F: 2 + 25 / 60, other: 2.5 },
+};
+
 // Heures par demi-journée selon type de poste (Lot 2)
 const SLOT_NOMINAL_H = {
   O: { M: 4.5, AM: 4.0 },
@@ -33,8 +41,19 @@ export function getSlotShiftType(slots, iso, pid, slot) {
   return slots[`${iso}_${pid}_${slot}_shift`] || getShiftType(slots, iso, pid);
 }
 
+/** Heures d'une demi-journée de samedi (hors Carla) selon le poste. */
+export function getSaturdaySlotNominalH(shift, slot) {
+  const t = SATURDAY_SLOT_H[slot];
+  if (!t) return 0;
+  return t[shift] ?? t.other;
+}
+
 export function getSlotNominalH(slots, iso, pid, slot, wd) {
-  if (wd === 6) return slot === 'M' ? (SATURDAY_HOURS_BY_PID[pid] ?? 7.0) : 0;
+  if (wd === 6) {
+    // Carla : contrat de 7h25 porté par la demi-journée du matin, inchangé.
+    if (pid in SATURDAY_HOURS_BY_PID) return slot === 'M' ? SATURDAY_HOURS_BY_PID[pid] : 0;
+    return getSaturdaySlotNominalH(getSlotShiftType(slots, iso, pid, slot), slot);
+  }
   return (SLOT_NOMINAL_H[getSlotShiftType(slots, iso, pid, slot)] ?? SLOT_NOMINAL_H.O)[slot] ?? 4.0;
 }
 

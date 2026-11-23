@@ -1,5 +1,6 @@
 import { ASV_PEOPLE, SLOTS, personOf, isNonPartnerVet } from './config.js';
 import { ASV_STD_SAT_CARLA } from './lib/pay-constants.js';
+import { getSaturdaySlotNominalH } from './lib/asv-hours.js';
 import { store } from './store.js';
 
 /* ---------- Clés de stockage ---------- */
@@ -189,7 +190,11 @@ const SLOT_NOMINAL_H = {
 // Heures nominales d'un créneau selon poste et jour de semaine
 export function getSlotNominalH(iso, pid, slot) {
   const wd = new Date(iso + 'T00:00:00').getDay();
-  if (wd === 6) return slot === 'M' ? (personOf(pid)?.saturdayOnly ? ASV_STD_SAT_CARLA : 7.0) : 0;
+  if (wd === 6) {
+    // Carla (samedi uniquement) : contrat de 7h25 porté par le matin, inchangé.
+    if (personOf(pid)?.saturdayOnly) return slot === 'M' ? ASV_STD_SAT_CARLA : 0;
+    return getSaturdaySlotNominalH(getSlotShiftType(iso, pid, slot), slot);
+  }
   return (SLOT_NOMINAL_H[getSlotShiftType(iso, pid, slot)] ?? SLOT_NOMINAL_H.O)[slot] ?? 4.0;
 }
 
