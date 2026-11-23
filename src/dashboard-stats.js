@@ -38,6 +38,7 @@ import {
   getForecastWeek,
 } from './slots.js';
 import { getSignatureDetail } from './signatures.js';
+import { forecastMonthTotal } from './lib/forecast-delta.js';
 
 const today = new Date();
 
@@ -851,24 +852,7 @@ export function buildASVSaturdayEquityCard(year) {
 // ── Carte 4 : Heures mensuelles — tableau compact ──────────────
 // Lot 8 : calcule les heures prévisionnel pour un mois donné en sommant les semaines qui y tombent.
 function computeASVForecastMonthH(pid, year, month) {
-  let total = 0;
-  // Itérer sur toutes les semaines de l'année
-  let d = getWeekMondayDate(new Date(year, 0, 1));
-  const limit = new Date(year, 11, 31);
-  while (d <= limit) {
-    const mondayISO = fmtISO(d);
-    const v = getForecastWeek(pid, mondayISO);
-    if (v && v !== 'CP') {
-      // Associer la semaine au mois de son vendredi (cohérent avec buildASVForecastSection)
-      const friday = new Date(d);
-      friday.setDate(friday.getDate() + 4);
-      const mo = friday.getFullYear() === year ? friday.getMonth() : d.getFullYear() === year ? d.getMonth() : -1;
-      if (mo === month) total += parseFloat(v) || 0;
-    }
-    d = new Date(d);
-    d.setDate(d.getDate() + 7);
-  }
-  return total;
+  return forecastMonthTotal((mondayISO) => getForecastWeek(pid, mondayISO), year, month);
 }
 
 export function buildASVMonthlyTable(year) {

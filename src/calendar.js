@@ -57,7 +57,9 @@ import {
   setClinicEarlyClose,
   isMonthClosed,
   setMonthClosed,
+  getForecastWeek,
 } from './slots.js';
+import { parseForecastHours, forecastDelta, forecastMonthTotal } from './lib/forecast-delta.js';
 import { computeLeaveBlocks } from './leave-blocks.js';
 import { getWeekAlerts, computeWeekTotalHours, renderWeekViewASV, openMonthPrintPopup } from './week-view.js';
 
@@ -941,15 +943,17 @@ function buildWeekGrid(year, month, people) {
         const _mondayOfWeek = getWeekMondayDate(new Date(year, month, _firstDay));
         const personWeekH = people.map((p) => {
           const h = computeWeekTotalHours(p.id, _mondayOfWeek);
-          return { person: p, h };
+          const fcast = parseForecastHours(getForecastWeek(p.id, fmtISO(_mondayOfWeek)));
+          return { person: p, h, fcast, delta: forecastDelta(h, fcast) };
         });
         const weekHLine = personWeekH
           .map((e) => {
-            if (!e.h) return null;
+            if (!e.h && e.delta === null) return null;
             const over = !e.person.saturdayOnly && e.h >= WEEKLY_MAX_HOURS;
+            const fcastTitle = e.delta !== null ? ` · prévu ${formatHHMM(e.fcast)}, écart ${signedHHMM(e.delta)}` : '';
             return (
-              `<span class="${over ? 'ot-neg' : 'ot-pos'}" title="${escapeHTML(e.person.short)} — ${formatHHMM(e.h)} cette semaine${over ? ' ⚠️ Plafond 42h' : ''}">` +
-              `${escapeHTML(e.person.short)} ${formatHHMM(e.h)}${over ? ' ⚠️' : ''}</span>`
+              `<span class="${over ? 'ot-neg' : 'ot-pos'}" title="${escapeHTML(e.person.short)} — ${formatHHMM(e.h)} cette semaine${fcastTitle}${over ? ' ⚠️ Plafond 42h' : ''}">` +
+              `${escapeHTML(e.person.short)} ${formatHHMM(e.h)}${over ? ' ⚠️' : ''}${forecastDeltaHtml(e.delta)}</span>`
             );
           })
           .filter(Boolean);
@@ -995,14 +999,16 @@ function buildWeekGrid(year, month, people) {
             getDayDeficitH(iso, p.id) +
             getOvertimeHours(iso, p.id);
         }
-        return { person: p, h: Math.round(h * 100) / 100 };
+        const roundedH = Math.round(h * 100) / 100;
+        const fcast = forecastMonthTotal((mondayISO) => getForecastWeek(p.id, mondayISO), year, month);
+        return { person: p, h: roundedH, fcast, delta: forecastDelta(roundedH, fcast) };
       })
-      .filter((e) => e.h > 0);
+      .filter((e) => e.h > 0 || e.delta !== null);
     if (monthTotals.length > 0) {
       const parts = monthTotals
         .map(
           (e) =>
-            `<span style="color:${e.person.color};font-weight:700;">${escapeHTML(e.person.short)} ${formatHHMM(e.h)}</span>`
+            `<span style="color:${e.person.color};font-weight:700;"${e.delta !== null ? ` title="Prévu ${formatHHMM(e.fcast)}, écart ${signedHHMM(e.delta)}"` : ''}>${escapeHTML(e.person.short)} ${formatHHMM(e.h)}${forecastDeltaHtml(e.delta)}</span>`
         )
         .join('<span class="ot-sep">·</span>');
       monthTotalHtml = `<div class="cal-wg-week-ot cal-month-total-bar"><span class="cal-month-total-lbl">Total du mois</span>${parts}</div>`;
@@ -1010,6 +1016,13 @@ function buildWeekGrid(year, month, people) {
   }
 
   return `<div class="cal-wg${isASV ? '' : ' cal-wg--vet'}">${head}${legendHtml}${weekBlocksHtml}</div>${monthTotalHtml}`;
+}
+
+// Écart réalisé − prévisionnel, affiché après un total d'heures ASV.
+function forecastDeltaHtml(delta) {
+  if (delta === null) return '';
+  const color = delta === 0 ? 'var(--color-text-muted)' : delta > 0 ? '#D97706' : '#DC2626';
+  return ` <span class="forecast-delta" style="font-weight:600;color:${color};" aria-label="écart avec le prévisionnel">(Δ ${signedHHMM(delta)})</span>`;
 }
 
 function buildCalendarGrid(viewKey) {
