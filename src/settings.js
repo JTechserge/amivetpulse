@@ -527,6 +527,9 @@ function openManageUsersModal() {
         </div>
         <div id="invite-lastname-row" style="display:none;margin-bottom:8px;">
           <input type="text" id="invite-lastname" placeholder="Nom de famille (facultatif — pour les PDF signés)" style="width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;box-sizing:border-box;">
+          <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12.5px;color:var(--color-text-muted);">Date d'arrivée (congés payés au prorata l'année d'arrivée)
+            <input type="date" id="invite-arrival" value="${fmtISO(new Date())}" style="padding:6px 8px;border:1px solid var(--color-border);border-radius:7px;font-size:13px;font-family:inherit;">
+          </label>
         </div>
         <div id="invite-tf-row" style="display:none;margin-bottom:8px;">
           <label class="text-muted" style="font-size:12px;display:block;margin-bottom:6px;">Temps de travail contractuel</label>
@@ -713,6 +716,14 @@ function openManageUsersModal() {
                 saveASVRoster();
               }
               personId = asvPerson?.id || null;
+              // Date d'arrivée d'une nouvelle ASV : sert au prorata des congés payés
+              // de son année d'arrivée (à partir de 2027). Stockée dans les données
+              // partagées du planning, pas dans l'effectif local du poste.
+              const inviteArrival = (box.querySelector('#invite-arrival')?.value || '').trim();
+              if (asvPerson && !existing && /^\d{4}-\d{2}-\d{2}$/.test(inviteArrival)) {
+                store.DATA.slots[`asv_arrival_${asvPerson.id}`] = inviteArrival;
+                _saveData(false);
+              }
               // Appliquer le temps de travail choisi
               // `inviteTf` a été lu ET validé avant l'appel réseau : une fraction
               // nulle n'arrive jamais jusqu'ici.

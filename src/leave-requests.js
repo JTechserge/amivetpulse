@@ -1,6 +1,19 @@
 import { ASV_PEOPLE, PEOPLE, allPeople, SLOTS, SLOT_LABELS, getCurrentYear, personOf, SUPABASE_URL } from './config.js';
 import { CP_DAYS_PER_MONTH } from './lib/pay-constants.js';
-import { ASV_CP_DAYS_PER_YEAR, isCPLabel, countCPDays, requestDaysByYear, checkCPQuota } from './lib/cp-quota.js';
+import {
+  ASV_CP_DAYS_PER_YEAR,
+  isCPLabel,
+  countCPDays,
+  requestDaysByYear,
+  checkCPQuota,
+  asvCPEntitlement,
+  asvCPAcquired,
+} from './lib/cp-quota.js';
+
+/** Date d'arrivée d'une ASV (YYYY-MM-DD), saisie à l'invitation ; null pour l'effectif historique. */
+export function getASVArrival(pid) {
+  return store.DATA.slots[`asv_arrival_${pid}`] || null;
+}
 import { escapeHTML, daysInMonth, fmtISO, formatFR } from './utils.js';
 import { store } from './store.js';
 import { supabaseHeaders } from './auth.js';
@@ -164,6 +177,7 @@ function cpQuotaOverruns(group) {
         requestedDays,
         carriedOver: parseFloat(adj.carried_over) || 0,
         extra: parseFloat(adj.extra_days) || 0,
+        entitlement: asvCPEntitlement(year, getASVArrival(group.personId)),
       });
       return { year, ...res };
     })
@@ -232,13 +246,13 @@ export function renderLeaveRequestsPage() {
           : `du ${formatFR(first.iso)} au ${formatFR(last.iso)}`;
       const overruns = g.status === 'pending' ? cpQuotaOverruns(g) : [];
       const quotaWarn = overruns.length
-        ? `<div class="cp-quota-warn" role="alert">⚠️ ${overruns.map((o) => escapeHTML(cpQuotaMessage(o))).join('<br>')}<br>Cette demande ne peut pas être approuvée en l'état.</div>`
+        ? `<div class="cp-quota-warn" role="alert">⚠️ ${overruns.map((o) => escapeHTML(cpQuotaMessage(o))).join('<br>')}<br>Elle ne peut pas être approuvée : vous pouvez la refuser.</div>`
         : '';
       const actions =
         g.status === 'pending'
           ? `${quotaWarn}
       <div class="flex gap-2" style="margin-top:8px;">
-        <button class="btn btn-sm btn-primary" data-approve="${idx}">✓ Approuver</button>
+        <button class="btn btn-sm btn-primary" data-approve="${idx}"${overruns.length ? ' disabled title="Quota de congés payés dépassé"' : ''}>✓ Approuver</button>
         <button class="btn btn-sm btn-danger" data-reject="${idx}">✕ Refuser</button>
       </div>
       <div class="hidden" data-reject-form="${idx}" style="margin-top:8px;">
@@ -275,7 +289,7 @@ export function renderLeaveRequestsPage() {
     ),
   ];
   const quotaBanner = overNames.length
-    ? `<div class="cp-quota-banner" role="alert">⚠️ ${overNames.map((n) => escapeHTML(n)).join(', ')} ${overNames.length > 1 ? 'demandent' : 'demande'} plus de congés payés que leur quota annuel (${ASV_CP_DAYS_PER_YEAR} j + report N-1). Les demandes concernées ne peuvent pas être approuvées.</div>`
+    ? `<div class="cp-quota-banner" role="alert">⚠️ ${overNames.map((n) => escapeHTML(n)).join(', ')} ${overNames.length > 1 ? 'demandent' : 'demande'} plus de congés payés que leur quota annuel (${ASV_CP_DAYS_PER_YEAR} j + report N-1). Les demandes concernées ne peuvent pas être approuvées, mais peuvent être refusées.</div>`
     : '';
 
   // Le quota tient compte du report N-1 : on charge les ajustements des années
@@ -472,7 +486,7 @@ export function cpPeriodISO(referenceYear) {
 
 export function getCPAcquired(person, referenceYear) {
   // ASV : 5 semaines = 25 j par an, quel que soit le temps de travail.
-  if (isASVPerson(person.id)) return ASV_CP_DAYS_PER_YEAR;
+  if (isASVPerson(person.id)) return asvCPAcquired(referenceYear, getASVArrival(person.id), fmtISO(today));
   const { start, end } = cpPeriodISO(referenceYear);
   const todayISO = fmtISO(today);
   const effectiveEnd = todayISO < end ? todayISO : end;
@@ -564,7 +578,7 @@ export function renderGroupConges(group, containerId) {
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
         <div>
           <div style="font-size:13.5px;font-weight:700;color:var(--color-text);">Période de référence : ${periodLabel}</div>
-          <div style="font-size:12px;color:var(--color-muted);">${group === 'vets' ? `${CP_DAYS_PER_MONTH}j acquis/mois (proratisé selon le taux d'activité)` : `${ASV_CP_DAYS_PER_YEAR} j par an (5 semaines), quel que soit le temps de travail · validation bloquée au-delà`}</div>
+          <div style="font-size:12px;color:var(--color-muted);">${group === 'vets' ? `${CP_DAYS_PER_MONTH}j acquis/mois (proratisé selon le taux d'activité)` : ''}</div>
         </div>
         <div style="display:flex;gap:6px;">${yearBtns}</div>
       </div>

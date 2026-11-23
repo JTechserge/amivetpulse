@@ -56,8 +56,53 @@ export function requestDaysByYear(groupSlots) {
  * @param {{approvedDays:number, requestedDays:number, carriedOver?:number, extra?:number}} p
  * @returns {{limit:number, after:number, over:number}}  over > 0 → dépassement
  */
-export function checkCPQuota({ approvedDays, requestedDays, carriedOver = 0, extra = 0 }) {
-  const limit = ASV_CP_DAYS_PER_YEAR + (carriedOver || 0) + (extra || 0);
+export function checkCPQuota({
+  approvedDays,
+  requestedDays,
+  carriedOver = 0,
+  extra = 0,
+  entitlement = ASV_CP_DAYS_PER_YEAR,
+}) {
+  const limit = entitlement + (carriedOver || 0) + (extra || 0);
   const after = approvedDays + requestedDays;
   return { limit, after, over: Math.max(0, Math.round((after - limit) * 100) / 100) };
+}
+
+// ── Nouvelles arrivées (à partir de 2027) ──
+// Une ASV arrivée en cours d'année à partir de 2027 acquiert ses CP au prorata des
+// jours écoulés depuis son arrivée (25 j pour une année complète). Les années
+// suivantes, et pour l'effectif présent avant 2027, les 25 j sont dus dès janvier.
+export const CP_PRORATA_FROM_YEAR = 2027;
+
+const dayNum = (iso) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / 86400000;
+const daysInYear = (y) => dayNum(`${y}-12-31`) - dayNum(`${y}-01-01`) + 1;
+const round2 = (n) => Math.round(n * 100) / 100;
+
+function isProrataYear(year, arrivalISO) {
+  return !!arrivalISO && +arrivalISO.slice(0, 4) >= CP_PRORATA_FROM_YEAR && +arrivalISO.slice(0, 4) === year;
+}
+
+/**
+ * Droit annuel total de CP d'une ASV pour une année (quota de validation).
+ * @param {number} year
+ * @param {string|null} arrivalISO  date d'arrivée YYYY-MM-DD, ou null (effectif historique)
+ */
+export function asvCPEntitlement(year, arrivalISO) {
+  if (arrivalISO && +arrivalISO.slice(0, 4) > year) return 0;
+  if (!isProrataYear(year, arrivalISO)) return ASV_CP_DAYS_PER_YEAR;
+  return round2((ASV_CP_DAYS_PER_YEAR * (dayNum(`${year}-12-31`) - dayNum(arrivalISO) + 1)) / daysInYear(year));
+}
+
+/**
+ * CP acquis à une date donnée (colonne « Acquis » du tableau de bord).
+ * @param {number} year
+ * @param {string|null} arrivalISO
+ * @param {string} todayISO
+ */
+export function asvCPAcquired(year, arrivalISO, todayISO) {
+  if (todayISO < `${year}-01-01`) return 0;
+  if (!isProrataYear(year, arrivalISO)) return asvCPEntitlement(year, arrivalISO);
+  if (todayISO < arrivalISO) return 0;
+  const end = todayISO < `${year}-12-31` ? todayISO : `${year}-12-31`;
+  return round2((ASV_CP_DAYS_PER_YEAR * (dayNum(end) - dayNum(arrivalISO) + 1)) / daysInYear(year));
 }

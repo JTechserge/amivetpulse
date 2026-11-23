@@ -5,6 +5,8 @@ import {
   countCPDays,
   requestDaysByYear,
   checkCPQuota,
+  asvCPEntitlement,
+  asvCPAcquired,
 } from '../../src/lib/cp-quota.js';
 
 function cp(slots, iso, pid, slot, decision, label = 'Congé payé') {
@@ -62,5 +64,37 @@ describe('quota annuel de CP des ASV', () => {
 
   it('un ajustement négatif réduit le quota', () => {
     expect(checkCPQuota({ approvedDays: 24, requestedDays: 1, extra: -1 }).over).toBe(1);
+  });
+});
+
+describe('acquisition des CP : effectif actuel et nouvelles arrivées', () => {
+  it('effectif actuel (sans date d’arrivée) : 25 j dès janvier', () => {
+    expect(asvCPAcquired(2027, null, '2027-01-02')).toBe(25);
+    expect(asvCPEntitlement(2027, null)).toBe(25);
+  });
+  it('arrivée avant 2027 : 25 j dès janvier, pas de prorata', () => {
+    expect(asvCPAcquired(2026, '2026-06-01', '2026-06-02')).toBe(25);
+    expect(asvCPEntitlement(2026, '2026-06-01')).toBe(25);
+  });
+  it('arrivée le 1er janvier 2027 : prorata jour par jour, 25 j au 31 décembre', () => {
+    expect(asvCPAcquired(2027, '2027-01-01', '2027-12-31')).toBe(25);
+    expect(asvCPAcquired(2027, '2027-01-01', '2027-07-02')).toBe(12.53); // 183 j / 365
+    expect(asvCPEntitlement(2027, '2027-01-01')).toBe(25);
+  });
+  it('arrivée le 1er juillet 2027 : droit de l’année au prorata (≈ 12,6 j)', () => {
+    expect(asvCPEntitlement(2027, '2027-07-01')).toBe(12.6); // 184 j / 365
+    expect(asvCPAcquired(2027, '2027-07-01', '2027-06-30')).toBe(0);
+    expect(asvCPAcquired(2027, '2027-07-01', '2028-03-01')).toBe(12.6);
+  });
+  it('l’année suivant l’arrivée : 25 j dès janvier', () => {
+    expect(asvCPAcquired(2028, '2027-07-01', '2028-01-01')).toBe(25);
+    expect(asvCPEntitlement(2028, '2027-07-01')).toBe(25);
+  });
+  it('avant l’arrivée : aucun droit', () => {
+    expect(asvCPEntitlement(2027, '2028-02-01')).toBe(0);
+  });
+  it('le quota de validation suit le droit proratisé', () => {
+    const entitlement = asvCPEntitlement(2027, '2027-07-01');
+    expect(checkCPQuota({ approvedDays: 10, requestedDays: 3, entitlement }).over).toBe(0.4);
   });
 });
