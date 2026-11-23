@@ -3,7 +3,7 @@
  * et par le tableau de bord : elles passent par src/slots.js, pas par le module
  * partagé directement. Règle (Jérémie, 23/11/2026), ASV autres que Carla :
  *   matin  : Ouverture 8h30→13h = 4h30, Demi-journée = 4h00
- *   a-midi : Fermeture = 2h25, Demi-journée = 2h30
+ *   a-midi : Fermeture = 2h45, Demi-journée = 2h30
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 
@@ -44,9 +44,9 @@ describe('samedi — calendrier et tableau de bord', () => {
     sat('marie', { M: 'D' });
     expect(mins(getDayNominal(SAT, 'marie'))).toBe(240);
   });
-  it("Fermeture l'après-midi → 2h25", () => {
+  it("Fermeture l'après-midi → 2h45", () => {
     sat('marie', { AM: 'F' });
-    expect(mins(getDayNominal(SAT, 'marie'))).toBe(145);
+    expect(mins(getDayNominal(SAT, 'marie'))).toBe(165);
   });
   it("Demi-journée l'après-midi → 2h30", () => {
     sat('marie', { AM: 'D' });
@@ -60,6 +60,6 @@ describe('samedi — calendrier et tableau de bord', () => {
     sat('marie', { M: 'O' });
     sat('johanna', { AM: 'F' });
     expect(mins(computeASVWorkedHoursWeek('marie', new Date('2026-11-16T00:00:00')))).toBe(270);
-    expect(mins(computeASVWorkedHoursNew('johanna', 2026, 10))).toBe(145);
+    expect(mins(computeASVWorkedHoursNew('johanna', 2026, 10))).toBe(165);
   });
 });

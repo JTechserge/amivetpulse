@@ -173,10 +173,10 @@ describe("cohérence de l'heure du samedi de Carla", () => {
 
 // ─── Samedi des ASV autres que Carla — front ET miroir Deno ──────────────────
 // Règle (Jérémie, 23/11/2026) : matin Ouverture 8h30→13h = 4h30, Demi-journée = 4h ;
-// après-midi Fermeture = 2h25, Demi-journée = 2h30. Les deux modules sont testés :
+// après-midi Fermeture = 2h45, Demi-journée = 2h30. Les deux modules sont testés :
 // une divergence fausserait les récapitulatifs email de signature.
 
-const H2_25 = 2 + 25 / 60;
+const H2_45 = 2 + 45 / 60;
 
 describe.each([
   ['front (src/lib/asv-hours.js)', () => import('../../src/lib/asv-hours.js')],
@@ -197,24 +197,24 @@ describe.each([
   it('Mat. Demi-journée → 4h00', () => {
     expect(m.getSlotNominalH(s(ISO_SAT, 'alice', 'M_shift', 'D'), ISO_SAT, 'alice', 'M', 6)).toBe(4.0);
   });
-  it('A-m. Fermeture → 2h25, et surtout PAS 2,25 h', () => {
+  it('A-m. Fermeture → 2h45', () => {
     const h = m.getSlotNominalH(s(ISO_SAT, 'alice', 'AM_shift', 'F'), ISO_SAT, 'alice', 'AM', 6);
-    expect(h).toBeCloseTo(H2_25, 10);
-    expect(Math.round(h * 60)).toBe(145);
+    expect(h).toBeCloseTo(H2_45, 10);
+    expect(Math.round(h * 60)).toBe(165);
   });
   it('A-m. Demi-journée → 2h30', () => {
     expect(m.getSlotNominalH(s(ISO_SAT, 'alice', 'AM_shift', 'D'), ISO_SAT, 'alice', 'AM', 6)).toBe(2.5);
   });
   it("le poste du jour (clé _shift) s'applique aussi au samedi", () => {
-    expect(m.getSlotNominalH(s(ISO_SAT, 'alice', 'shift', 'F'), ISO_SAT, 'alice', 'AM', 6)).toBeCloseTo(H2_25, 10);
+    expect(m.getSlotNominalH(s(ISO_SAT, 'alice', 'shift', 'F'), ISO_SAT, 'alice', 'AM', 6)).toBeCloseTo(H2_45, 10);
   });
-  it('journée Ouverture matin + Fermeture après-midi → 6h55', () => {
+  it('journée Ouverture matin + Fermeture après-midi → 7h15', () => {
     const slots = {
       ...present(ISO_SAT, 'alice', 'M', 'AM'),
       ...s(ISO_SAT, 'alice', 'M_shift', 'O'),
       ...s(ISO_SAT, 'alice', 'AM_shift', 'F'),
     };
-    expect(Math.round(m.getDayNominalH(slots, ISO_SAT, 'alice', 6) * 60)).toBe(6 * 60 + 55);
+    expect(Math.round(m.getDayNominalH(slots, ISO_SAT, 'alice', 6) * 60)).toBe(7 * 60 + 15);
   });
   it('Demi-journée matin seule, présente → 4h00', () => {
     const slots = { ...present(ISO_SAT, 'alice', 'M'), ...s(ISO_SAT, 'alice', 'M_shift', 'D') };

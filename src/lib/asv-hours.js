@@ -14,10 +14,10 @@ const SATURDAY_HOURS_BY_PID = { carla: 7 + 25 / 60 };
 
 // Samedi des ASV autres que Carla — deux postes possibles, selon l'outil utilisé :
 // - matin : Ouverture 8h30→13h00 = 4h30 ; tout autre poste (Demi-journée…) = 4h00 ;
-// - après-midi : Fermeture = 2h25 (`2 + 25 / 60`, PAS 2.25) ; sinon Demi-journée = 2h30.
+// - après-midi : Fermeture = 2h45 (`2 + 45 / 60`) ; sinon Demi-journée = 2h30.
 const SATURDAY_SLOT_H = {
   M: { O: 4.5, other: 4.0 },
-  AM: { F: 2 + 25 / 60, other: 2.5 },
+  AM: { F: 2 + 45 / 60, other: 2.5 },
 };
 
 // Heures par demi-journée selon type de poste (Lot 2)
