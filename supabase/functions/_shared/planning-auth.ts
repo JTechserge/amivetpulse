@@ -98,7 +98,8 @@ export function patchToChangedKeys(patch: SlotsPatch, currentSlots: SlotsRecord)
 }
 
 /** Renvoie true si le profil a accès complet en écriture. */
-export function hasFullAccess(profile: UserProfile): boolean {
+export function hasFullAccess(profile: UserProfile | null | undefined): boolean {
+  if (!profile) return false;
   // Le vétérinaire salarié n'a JAMAIS l'accès complet : il passe toujours par
   // validateVetEmployeWrite. Test placé avant les flags, sinon un
   // can_edit_vet_calendar posé par erreur sur son profil lui ouvrirait l'ASV.
