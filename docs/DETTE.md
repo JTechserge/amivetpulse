@@ -12,6 +12,28 @@ une dette : c'est un défaut bloquant, signalé comme tel.
 
 ## Dette restante
 
+### Constatée par le chantier « bascule d'année » (2026-11-24)
+
+#### Sur un mois verrouillé, seules certaines saisies ASV sont bloquées à l'écran
+
+- **Quoi** : un non-associé est arrêté sur un mois ASV verrouillé quand il glisse avec la barre d'outils, vide le mois ou change les compteurs H.supp./H.manq. Il ne l'est pas quand il passe par le panneau du jour (✏️), les heures supplémentaires (⏰) ou le poste O/F de la vue hebdomadaire.
+- **Où** : `src/calendar.js` (`startDrag`, `cal-clear-month`) et `src/week-view.js` (`.week-counter-sel`) testent `isMonthClosed`. `openDaySidebar`, la saisie d'heures supplémentaires et le bouton O/F (`src/week-view.js`) ne le testent pas.
+- **Conséquence** : `save-planning` refuse ces clés en 423 et `dropLockedKeys` les ramène à la valeur du serveur. Aucune heure n'est donc modifiée et il n'y a pas d'enjeu de paie. Mais la saisie s'affiche, puis disparaît à la synchronisation.
+- **Coût de la laisser** : faible, borné à la fenêtre où un mois est verrouillé. Correction : un test `isMonthClosed && !isCurrentUserPartner()` à chacun de ces points d'entrée.
+
+#### Calendrier vétérinaire de l'année écoulée : consultable et modifiable
+
+- **Quoi** : depuis le lot 4, le calendrier courant navigue sur N-1 … N, pour que les ASV finissent décembre. Côté vétérinaires, aucun verrou n'a été décidé : l'année écoulée reste modifiable par qui pouvait la modifier avant la bascule.
+- **Où** : `changeMonth`, `src/calendar.js` (fenêtre `cfg.baseYear - 1 … cfg.baseYear`).
+- **Conséquence** : une absence de l'année écoulée peut être modifiée par erreur, y compris une absence de vétérinaire salarié déjà décomptée de ses congés. Avant le lot 4, N-1 était tout simplement inaccessible après la bascule.
+- **Coût de la laisser** : faible. Il n'y a pas de paie vétérinaire calculée ici. Décider s'il faut un verrou vétérinaire (Jérémie).
+
+#### Supprimer un collaborateur ramène la navigation sur l'année courante
+
+- **Quoi** : `store.CAL_VIEWS = _buildCalViews()` (`src/settings.js`, suppression définitive) reconstruit les vues avec `year = baseYear`. Si l'on consultait décembre N-1, l'écran affiche décembre N.
+- **Conséquence** : désorientation ponctuelle, sans perte de données.
+- **Coût de la laisser** : négligeable.
+
 ### Constatée par le chantier « guide utilisateur et email d'invitation » (2026-10-01)
 
 #### La vue Hebdomadaire ASV traite le vétérinaire salarié comme un associé
