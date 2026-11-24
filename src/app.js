@@ -19,7 +19,13 @@ import { getAuthSession, saveAuthSession, supabaseHeaders } from './auth.js';
 import { loadASVRoster, loadVetRosterCache, applyVetRosterRows } from './state.js';
 import { showToast, showSavedToast, openConfirmModal, loadPersonColors, applyPersonColorVars } from './ui.js';
 import { pushChangesToSupabase, syncFromSupabase, fetchVetRoster } from './api.js';
-import { buildPatch, applyPatch, resolveSyncBaseline, isPermanentRejection } from './lib/planning-auth.js';
+import {
+  buildPatch,
+  applyPatch,
+  resolveSyncBaseline,
+  isPermanentRejection,
+  dropLockedKeys,
+} from './lib/planning-auth.js';
 import { store } from './store.js';
 import { setupLogin, renderLoginScreen, renderSetPasswordScreen } from './login.js';
 import { initServiceWorker, showIOSInstallTip, updatePwaOfflineBanner } from './pwa.js';
@@ -422,7 +428,17 @@ function scheduleSupabasePush() {
       if (_editSeq === seqAtPush) _hasDirtyLocalData = false;
       else scheduleSupabasePush();
     } catch (e) {
-      if (isPermanentRejection(e?.status)) {
+      if (e?.status === 423 && e.lockedKeys?.length) {
+        // Verrou de fin d'année : seules les clés nommées sont refusées. On les
+        // ramène à l'état synchronisé et on renvoie le reste — surtout pas de
+        // discardLocal, qui ferait perdre janvier avec décembre.
+        console.warn('Clés verrouillées refusées par le serveur.', e.lockedKeys);
+        showToast(`Période verrouillée : ${e.lockedKeys.length} modification(s) non enregistrée(s).`, '🔒');
+        store.DATA = { version: 2, slots: dropLockedKeys(store.DATA.slots, _lastSyncedSlots, e.lockedKeys) };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(store.DATA));
+        renderCurrentView();
+        scheduleSupabasePush();
+      } else if (isPermanentRejection(e?.status)) {
         // Le serveur a refusé le patch ENTIER et n'a rien appliqué. Le garder en
         // attente le ferait réessayer à chaque modification et réappliquer par
         // dessus l'état distant à chaque pull : une seule clé refusée figeait

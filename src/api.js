@@ -28,6 +28,9 @@ export async function pushChangesToSupabase(changes) {
     // transitoire (réseau, 5xx) qu'il faut au contraire retenter.
     const err = new Error(body.error || `HTTP ${res.status}`);
     err.status = res.status;
+    // 423 : verrou de fin d'année — le serveur nomme les clés refusées, le reste
+    // du correctif est recevable une fois ces clés retirées.
+    if (Array.isArray(body.lockedKeys)) err.lockedKeys = body.lockedKeys;
     throw err;
   }
 }

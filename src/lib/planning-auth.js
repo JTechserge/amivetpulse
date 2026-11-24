@@ -5,6 +5,8 @@
    supabase/functions/_shared/planning-auth.ts (Deno TypeScript).
    ================================================================ */
 
+import { isAsvMonthLocked, isForecastYearLocked, forecastWeekYear, rolloverDate } from './clinic-year.js';
+
 /**
  * Extrait le person_id d'une clé de planning.
  * Formats reconnus :
@@ -264,4 +266,95 @@ export function validateAsvWrite(changedKeys, callerPersonId) {
     }
   }
   return null; // toutes les vérifications passées
+}
+
+/* ================================================================
+   Verrous de fin d'année (bascule calculée, voir clinic-year.js)
+   ================================================================ */
+
+/**
+ * Associé côté serveur : admin, ou vet — sauf si sa ligne vet_roster porte
+ * autre chose que partner = true. Un vet sans person_id ou hors roster reste
+ * associé (comptes historiques des deux associés).
+ * @param {{role:string, person_id?:string|null}|null} profile
+ * @param {Array<{id:string, partner?:boolean}>} vetRosterRows
+ * @returns {boolean}
+ */
+export function isPartnerProfile(profile, vetRosterRows) {
+  if (!profile) return false;
+  if (profile.role === 'admin') return true;
+  if (profile.role !== 'vet') return false;
+  if (!profile.person_id) return true;
+  const row = (vetRosterRows ?? []).find((r) => r.id === profile.person_id);
+  return !row || row.partner === true;
+}
+
+// Réglages de bascule et de clôture : écrits par un associé seulement.
+const PARTNER_ONLY_KEY_RE = /^(closed_month_|forecast_closed_|rollover_date_|asv_lock_date_)/;
+const ROLLOVER_KEY_RE = /^rollover_date_(\d{4})$/;
+const DATED_KEY_RE = /^(\d{4})-(\d{2})-\d{2}_([^_]+)/;
+const FORECAST_KEY_RE = /^forecast_(?!sig_)[^_]+_(\d{4}-\d{2}-\d{2})$/;
+
+/**
+ * Clés refusées pour cause de verrou de fin d'année. Un refus de verrou n'est
+ * PAS un refus définitif : save-planning répond 423 avec cette liste, le client
+ * retire ces clés et renvoie le reste (un envoi décembre + janvier ne perd pas
+ * janvier).
+ *
+ * Non-associé : cellules datées d'une ASV de la liste blanche dans un mois
+ * verrouillé, semaines de prévisionnel d'une année figée, réglages réservés.
+ * Tous : modification d'une date de bascule déjà atteinte.
+ *
+ * Limite assumée : les clés non datées (asv_arrival_*, asv_reliquat_*) et les ASV
+ * absentes de la liste blanche échappent au verrou.
+ *
+ * @param {Array<{key:string}>} changedKeys
+ * @param {{slots:Record<string,unknown>, todayIso:string, asvPersonIds:Set<string>|Array<string>, isPartner:boolean}} ctx
+ *   slots = état serveur AVANT application du correctif
+ * @returns {string[]} clés refusées, dans l'ordre reçu
+ */
+export function findYearLockViolations(changedKeys, { slots, todayIso, asvPersonIds, isPartner }) {
+  const asvIds = asvPersonIds instanceof Set ? asvPersonIds : new Set(asvPersonIds || []);
+  const locked = [];
+  for (const { key } of changedKeys) {
+    const roll = key.match(ROLLOVER_KEY_RE);
+    if (roll && todayIso >= rolloverDate(slots, Number(roll[1]))) {
+      locked.push(key);
+      continue;
+    }
+    if (isPartner) continue;
+    if (PARTNER_ONLY_KEY_RE.test(key)) {
+      locked.push(key);
+      continue;
+    }
+    const dated = key.match(DATED_KEY_RE);
+    if (dated) {
+      if (asvIds.has(dated[3]) && isAsvMonthLocked(slots, todayIso, Number(dated[1]), Number(dated[2]) - 1)) {
+        locked.push(key);
+      }
+      continue;
+    }
+    const fc = key.match(FORECAST_KEY_RE);
+    if (fc && isForecastYearLocked(slots, todayIso, forecastWeekYear(fc[1]))) locked.push(key);
+  }
+  return locked;
+}
+
+/**
+ * Côté client, après un refus 423 : ramène les clés verrouillées à leur valeur
+ * de référence (dernier état synchronisé), pour que le correctif suivant ne
+ * contienne plus que les modifications acceptables. Sans miroir Deno.
+ * @param {Record<string,unknown>} slots état local courant
+ * @param {Record<string,unknown>} baseline dernier état synchronisé
+ * @param {string[]} lockedKeys
+ * @returns {Record<string,unknown>} nouvel état local
+ */
+export function dropLockedKeys(slots, baseline, lockedKeys) {
+  const result = { ...(slots ?? {}) };
+  const base = baseline ?? {};
+  for (const key of lockedKeys ?? []) {
+    if (key in base) result[key] = base[key];
+    else delete result[key];
+  }
+  return result;
 }

@@ -627,3 +627,165 @@ describe.each(IMPLEMENTATIONS)('patchToChangedKeys — %s', (_label, m) => {
     });
   });
 });
+
+// ─── Bascule d'année : verrous serveur (chantier PROMPT-BASCULE-ANNEE, lot 3) ──
+// save-planning refuse ces écritures en 423 avec la liste des clés en cause ; le
+// client retire ces clés et renvoie le reste. Les dates de verrou viennent de
+// clinic-year (défaut : feuilles ASV de N-1 verrouillées au 31/01/N).
+describe.each(IMPLEMENTATIONS)('verrous de fin d’année — %s', (_label, m) => {
+  const { findYearLockViolations, isPartnerProfile } = m;
+  const ASV = new Set(['marie', 'johanna']);
+  const ch = (...keys) => keys.map((key) => ({ key, oldValue: undefined, newValue: 'x' }));
+  const nonPartner = (todayIso, slots = {}) => ({ slots, todayIso, asvPersonIds: ASV, isPartner: false });
+  const partner = (todayIso, slots = {}) => ({ slots, todayIso, asvPersonIds: ASV, isPartner: true });
+
+  describe('isPartnerProfile — associé côté serveur', () => {
+    const roster = [
+      { id: 'david', partner: true },
+      { id: 'paul', partner: false },
+    ];
+    it('admin → associé', () => {
+      expect(isPartnerProfile({ role: 'admin', person_id: null }, roster)).toBe(true);
+    });
+    it('vet associé au roster → associé', () => {
+      expect(isPartnerProfile({ role: 'vet', person_id: 'david' }, roster)).toBe(true);
+    });
+    it('vet présent au roster avec partner=false → non associé', () => {
+      expect(isPartnerProfile({ role: 'vet', person_id: 'paul' }, roster)).toBe(false);
+    });
+    it('vet présent au roster sans valeur partner → non associé (seul partner=true compte)', () => {
+      expect(isPartnerProfile({ role: 'vet', person_id: 'zoe' }, [{ id: 'zoe' }])).toBe(false);
+    });
+    it('vet sans person_id ou hors roster → associé', () => {
+      expect(isPartnerProfile({ role: 'vet', person_id: null }, roster)).toBe(true);
+      expect(isPartnerProfile({ role: 'vet', person_id: 'inconnu' }, roster)).toBe(true);
+    });
+    it('ASV chef (can_edit_all_asv) → non associé', () => {
+      expect(isPartnerProfile({ role: 'asv', person_id: 'marie', can_edit_all_asv: true }, roster)).toBe(false);
+    });
+    it('vet_employe et profil absent → non associé', () => {
+      expect(isPartnerProfile({ role: 'vet_employe', person_id: 'paul' }, roster)).toBe(false);
+      expect(isPartnerProfile(null, roster)).toBe(false);
+    });
+  });
+
+  describe('feuilles ASV de l’année écoulée', () => {
+    it('envoi mixte décembre + janvier après le 31/01 : seul décembre est refusé', () => {
+      const changed = ch('2026-12-28_marie_M', '2027-01-04_marie_M');
+      expect(findYearLockViolations(changed, nonPartner('2027-02-01'))).toEqual(['2026-12-28_marie_M']);
+    });
+    it('délai de grâce : décembre reste modifiable jusqu’au 30/01', () => {
+      expect(findYearLockViolations(ch('2026-12-28_marie_M'), nonPartner('2027-01-30'))).toEqual([]);
+    });
+    it('verrou au 31/01 inclus', () => {
+      expect(findYearLockViolations(ch('2026-12-28_marie_M'), nonPartner('2027-01-31'))).toEqual(['2026-12-28_marie_M']);
+    });
+    it('toutes les clés datées de la personne sont concernées (décision, heures sup, note)', () => {
+      const keys = ['2026-12-28_marie_M_decision', '2026-12-28_marie_plus_mins', '2026-12-28_marie_day_note'];
+      expect(findYearLockViolations(ch(...keys), nonPartner('2027-02-01'))).toEqual(keys);
+    });
+    it('une suppression est refusée comme une écriture', () => {
+      const changed = [{ key: '2026-12-28_marie_M', oldValue: 'absent', newValue: undefined }];
+      expect(findYearLockViolations(changed, nonPartner('2027-02-01'))).toEqual(['2026-12-28_marie_M']);
+    });
+    it('mois clôturé à la main (closed_month = true) : refusé avant la date de verrou', () => {
+      const slots = { closed_month_2026_11: 'true' };
+      expect(findYearLockViolations(ch('2026-12-05_marie_M'), nonPartner('2026-12-20', slots))).toEqual([
+        '2026-12-05_marie_M',
+      ]);
+    });
+    it('mois rouvert par un associé (closed_month = false) : accepté après la date de verrou', () => {
+      const slots = { closed_month_2026_11: 'false' };
+      expect(findYearLockViolations(ch('2026-12-05_marie_M'), nonPartner('2027-03-01', slots))).toEqual([]);
+    });
+    it('date de verrou avancée par réglage (asv_lock_date_2027)', () => {
+      const slots = { asv_lock_date_2027: '2027-01-10' };
+      expect(findYearLockViolations(ch('2026-12-28_marie_M'), nonPartner('2027-01-10', slots))).toEqual([
+        '2026-12-28_marie_M',
+      ]);
+    });
+    it('lignes vétérinaires et pseudo-personnes (commentaire, clinique fermée) hors verrou ASV', () => {
+      const keys = ['2026-12-28_david_M', '2026-12-28_comment', '2026-12-28_clinic_closed'];
+      expect(findYearLockViolations(ch(...keys), nonPartner('2027-02-01'))).toEqual([]);
+    });
+    it('ASV hors liste blanche : non verrouillée (limite documentée)', () => {
+      expect(findYearLockViolations(ch('2026-12-28_inconnue_M'), nonPartner('2027-02-01'))).toEqual([]);
+    });
+    it('un associé écrit dans un mois verrouillé', () => {
+      expect(findYearLockViolations(ch('2026-12-28_marie_M'), partner('2027-02-01'))).toEqual([]);
+    });
+  });
+
+  describe('prévisionnel ASV', () => {
+    it('semaine de l’année courante figée pour un non-associé', () => {
+      expect(findYearLockViolations(ch('forecast_marie_2027-01-04'), nonPartner('2027-01-10'))).toEqual([
+        'forecast_marie_2027-01-04',
+      ]);
+    });
+    it('semaine de l’année suivante libre', () => {
+      expect(findYearLockViolations(ch('forecast_marie_2028-01-03'), nonPartner('2027-01-10'))).toEqual([]);
+    });
+    it('semaine à cheval : rattachée à l’année de son jeudi (29/12/2025 → 2026)', () => {
+      // Lundi 29/12/2025, jeudi 01/01/2026 : semaine du prévisionnel 2026, figé en 2026.
+      expect(findYearLockViolations(ch('forecast_marie_2025-12-29'), nonPartner('2026-03-01'))).toEqual([
+        'forecast_marie_2025-12-29',
+      ]);
+      // Lundi 28/12/2026, jeudi 31/12/2026 : année 2026 également.
+      expect(findYearLockViolations(ch('forecast_marie_2026-12-28'), nonPartner('2026-03-01'))).toEqual([
+        'forecast_marie_2026-12-28',
+      ]);
+    });
+    it('prévisionnel rouvert par un associé (forecast_closed = false)', () => {
+      const slots = { forecast_closed_2027: 'false' };
+      expect(findYearLockViolations(ch('forecast_marie_2027-01-04'), nonPartner('2027-01-10', slots))).toEqual([]);
+    });
+    it('un associé modifie le prévisionnel figé', () => {
+      expect(findYearLockViolations(ch('forecast_marie_2027-01-04'), partner('2027-01-10'))).toEqual([]);
+    });
+    it('signature du prévisionnel hors périmètre de ce verrou', () => {
+      expect(findYearLockViolations(ch('forecast_sig_marie_2027'), nonPartner('2027-01-10'))).toEqual([]);
+    });
+  });
+
+  describe('réglages réservés aux associés', () => {
+    const settings = ['closed_month_2026_11', 'forecast_closed_2027', 'rollover_date_2028', 'asv_lock_date_2028'];
+    it('refusés à un non-associé', () => {
+      expect(findYearLockViolations(ch(...settings), nonPartner('2027-06-01'))).toEqual(settings);
+    });
+    it('acceptés pour un associé', () => {
+      expect(findYearLockViolations(ch(...settings), partner('2027-06-01'))).toEqual([]);
+    });
+    it('rollover_date déjà atteinte : refusée même à un associé', () => {
+      expect(findYearLockViolations(ch('rollover_date_2027'), partner('2027-01-05'))).toEqual(['rollover_date_2027']);
+    });
+    it('rollover_date anticipée déjà atteinte (15/12) : refusée', () => {
+      const slots = { rollover_date_2027: '2026-12-15' };
+      expect(findYearLockViolations(ch('rollover_date_2027'), partner('2026-12-20', slots))).toEqual([
+        'rollover_date_2027',
+      ]);
+    });
+    it('rollover_date à venir : modifiable par un associé', () => {
+      expect(findYearLockViolations(ch('rollover_date_2027'), partner('2026-11-24'))).toEqual([]);
+    });
+  });
+});
+
+describe('dropLockedKeys — le client retire les clés verrouillées et garde le reste', () => {
+  const { dropLockedKeys, buildPatch } = front;
+  it('envoi mixte décembre + janvier : janvier reste en attente, décembre revient à la référence', () => {
+    const baseline = { '2026-12-28_marie_M': 'present' };
+    const local = { '2026-12-28_marie_M': 'absent', '2027-01-04_marie_M': 'absent' };
+    const result = dropLockedKeys(local, baseline, ['2026-12-28_marie_M']);
+    expect(result).toEqual({ '2026-12-28_marie_M': 'present', '2027-01-04_marie_M': 'absent' });
+    expect(buildPatch(baseline, result)).toEqual({ '2027-01-04_marie_M': 'absent' });
+  });
+  it('clé absente de la référence : supprimée localement', () => {
+    const result = dropLockedKeys({ '2026-12-28_marie_M': 'absent' }, {}, ['2026-12-28_marie_M']);
+    expect(result).toEqual({});
+  });
+  it('ne modifie pas l’objet source', () => {
+    const local = { '2026-12-28_marie_M': 'absent' };
+    dropLockedKeys(local, {}, ['2026-12-28_marie_M']);
+    expect(local).toEqual({ '2026-12-28_marie_M': 'absent' });
+  });
+});

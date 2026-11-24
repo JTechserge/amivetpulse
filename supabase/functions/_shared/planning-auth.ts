@@ -2,6 +2,8 @@
 // Miroir TypeScript de src/lib/planning-auth.js (même logique, même règles).
 // Tout changement dans l'un doit être répercuté dans l'autre.
 
+import { isAsvMonthLocked, isForecastYearLocked, forecastWeekYear, rolloverDate } from './clinic-year.ts';
+
 export type SlotsRecord = Record<string, unknown>;
 
 export interface ChangedKey {
@@ -181,4 +183,76 @@ export function validateAsvWrite(changedKeys: ChangedKey[], callerPersonId: stri
     }
   }
   return null;
+}
+
+// ── Verrous de fin d'année (bascule calculée, voir clinic-year.ts) ──────────
+
+export interface VetRosterRow {
+  id: string;
+  partner?: boolean;
+}
+
+/**
+ * Associé côté serveur : admin, ou vet — sauf si sa ligne vet_roster porte
+ * autre chose que partner = true. Un vet sans person_id ou hors roster reste associé.
+ */
+export function isPartnerProfile(
+  profile: Pick<UserProfile, 'role' | 'person_id'> | null | undefined,
+  vetRosterRows: VetRosterRow[] | null | undefined
+): boolean {
+  if (!profile) return false;
+  if (profile.role === 'admin') return true;
+  if (profile.role !== 'vet') return false;
+  if (!profile.person_id) return true;
+  const row = (vetRosterRows ?? []).find((r) => r.id === profile.person_id);
+  return !row || row.partner === true;
+}
+
+const PARTNER_ONLY_KEY_RE = /^(closed_month_|forecast_closed_|rollover_date_|asv_lock_date_)/;
+const ROLLOVER_KEY_RE = /^rollover_date_(\d{4})$/;
+const DATED_KEY_RE = /^(\d{4})-(\d{2})-\d{2}_([^_]+)/;
+const FORECAST_KEY_RE = /^forecast_(?!sig_)[^_]+_(\d{4}-\d{2}-\d{2})$/;
+
+export interface YearLockContext {
+  slots: SlotsRecord; // état serveur AVANT application du correctif
+  todayIso: string;
+  asvPersonIds: Set<string> | string[];
+  isPartner: boolean;
+}
+
+/**
+ * Clés refusées pour cause de verrou de fin d'année (réponse 423, pas un refus
+ * définitif : le client retire ces clés et renvoie le reste).
+ * Non-associé : cellules datées d'une ASV de la liste blanche dans un mois
+ * verrouillé, semaines de prévisionnel d'une année figée, réglages réservés.
+ * Tous : modification d'une date de bascule déjà atteinte.
+ */
+export function findYearLockViolations(
+  changedKeys: Array<Pick<ChangedKey, 'key'>>,
+  { slots, todayIso, asvPersonIds, isPartner }: YearLockContext
+): string[] {
+  const asvIds = asvPersonIds instanceof Set ? asvPersonIds : new Set(asvPersonIds || []);
+  const locked: string[] = [];
+  for (const { key } of changedKeys) {
+    const roll = key.match(ROLLOVER_KEY_RE);
+    if (roll && todayIso >= rolloverDate(slots, Number(roll[1]))) {
+      locked.push(key);
+      continue;
+    }
+    if (isPartner) continue;
+    if (PARTNER_ONLY_KEY_RE.test(key)) {
+      locked.push(key);
+      continue;
+    }
+    const dated = key.match(DATED_KEY_RE);
+    if (dated) {
+      if (asvIds.has(dated[3]) && isAsvMonthLocked(slots, todayIso, Number(dated[1]), Number(dated[2]) - 1)) {
+        locked.push(key);
+      }
+      continue;
+    }
+    const fc = key.match(FORECAST_KEY_RE);
+    if (fc && isForecastYearLocked(slots, todayIso, forecastWeekYear(fc[1]))) locked.push(key);
+  }
+  return locked;
 }

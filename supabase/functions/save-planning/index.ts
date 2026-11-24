@@ -7,11 +7,15 @@ import {
   hasFullAccess,
   validateAsvWrite,
   validateVetEmployeWrite,
+  isPartnerProfile,
+  findYearLockViolations,
   applyPatch,
   patchToChangedKeys,
   type SlotsRecord,
   type SlotsPatch,
+  type VetRosterRow,
 } from '../_shared/planning-auth.ts';
+import { parisTodayIso } from '../_shared/clinic-year.ts';
 
 // Vétérinaires éligibles au push CalDAV (ceux dont les credentials peuvent être configurés).
 const VET_PERSONS = new Set(['david', 'stephane']);
@@ -125,27 +129,64 @@ Deno.serve(async (req) => {
     // par quelqu'un d'autre sont donc conservées.
     const nextSlots: SlotsRecord = isPatchMode ? applyPatch(currentSlots, changes!) : slots!;
 
-    if (profile.role === 'vet_employe') {
-      // Vétérinaire salarié : périmètre = lignes du calendrier vétérinaire.
-      // La liste vient de la table partagée vet_roster (lue en service_role) —
-      // pas d'une constante dupliquée qui pourrait diverger de config.js.
-      const rosterRes = await fetch(`${SUPABASE_URL}/rest/v1/vet_roster?select=id`, {
-        headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
-      });
+    // Diff calculé pour TOUS les rôles, mode { slots } compris : les verrous de
+    // fin d'année s'appliquent aussi aux profils à accès complet non associés.
+    const changedKeys = isPatchMode
+      ? patchToChangedKeys(changes!, currentSlots)
+      : findChangedKeys(currentSlots, slots!);
+
+    const serviceHeaders = { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` };
+
+    // Roster vétérinaire (table partagée vet_roster, lue en service_role) : périmètre
+    // du vétérinaire salarié, et statut associé d'un compte vet (partner).
+    let vetRoster: VetRosterRow[] = [];
+    if (profile.role === 'vet_employe' || profile.role === 'vet') {
+      const rosterRes = await fetch(`${SUPABASE_URL}/rest/v1/vet_roster?select=id,partner`, { headers: serviceHeaders });
       if (!rosterRes.ok) return json({ error: 'Roster vétérinaire illisible — écriture refusée.' }, 503);
-      const rosterRows: Array<{ id: string }> = await rosterRes.json();
-      const vetIds = new Set((rosterRows ?? []).map((r) => r.id));
-      const changedKeys = isPatchMode
-        ? patchToChangedKeys(changes!, currentSlots)
-        : findChangedKeys(currentSlots, slots!);
+      vetRoster = (await rosterRes.json()) ?? [];
+    }
+
+    if (profile.role === 'vet_employe') {
+      const vetIds = new Set(vetRoster.map((r) => r.id));
       const authError = validateVetEmployeWrite(changedKeys, vetIds, profile.can_edit_asv_calendar === true);
       if (authError) return json({ error: authError }, 403);
     } else if (!hasFullAccess(profile)) {
-      const changedKeys = isPatchMode
-        ? patchToChangedKeys(changes!, currentSlots)
-        : findChangedKeys(currentSlots, slots!);
       const authError = validateAsvWrite(changedKeys, profile.person_id);
       if (authError) return json({ error: authError }, 403);
+    }
+
+    // ── 4 bis. Verrous de fin d'année ────────────────────────────────────────
+    // Évalués sur l'état serveur AVANT le correctif. Refus 423 avec la liste des
+    // clés : le client les retire et renvoie le reste — jamais un rejet du patch
+    // entier, qui ferait perdre au poste ses saisies légitimes (janvier avec décembre).
+    const isPartner = isPartnerProfile(profile, vetRoster);
+    let asvPersonIds: string[] = [];
+    if (!isPartner && changedKeys.length > 0) {
+      // Liste blanche ASV : comptes role = 'asv'. Ne PAS déduire « absent du roster
+      // vétérinaire » : les pseudo-personnes (2026-12-24_comment, _clinic_closed)
+      // seraient prises pour des ASV.
+      const asvRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/user_profiles?role=eq.asv&person_id=not.is.null&select=person_id`,
+        { headers: serviceHeaders }
+      );
+      if (!asvRes.ok) return json({ error: 'Liste des ASV illisible — écriture refusée.' }, 503);
+      const asvRows: Array<{ person_id: string }> = (await asvRes.json()) ?? [];
+      asvPersonIds = asvRows.map((r) => r.person_id);
+    }
+    const lockedKeys = findYearLockViolations(changedKeys, {
+      slots: currentSlots,
+      todayIso: parisTodayIso(),
+      asvPersonIds,
+      isPartner,
+    });
+    if (lockedKeys.length > 0) {
+      return json(
+        {
+          error: `Période verrouillée : ${lockedKeys.length} modification(s) réservée(s) aux associés.`,
+          lockedKeys,
+        },
+        423
+      );
     }
 
     // ── 5. Écriture en service_role (bypass RLS) ─────────────────────────────
