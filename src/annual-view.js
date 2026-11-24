@@ -2,6 +2,7 @@ import { PEOPLE, WEEKDAY_NAMES, MONTH_SHORT } from './config.js';
 import { computeLeaveBlocks } from './leave-blocks.js';
 import { escapeHTML, daysInMonth, fmtISO, isoWeekday, holidayName, formatFR } from './utils.js';
 import { store } from './store.js';
+import { historyYears } from './lib/annual-history.js';
 import {
   requiresLeaveApproval,
   getSlotState,
@@ -329,21 +330,24 @@ export function openAnnualDayDetail(iso, people, viewKey) {
     <div style="margin:10px 0;">${personRows}</div>
     <div class="popover-actions">
       <button class="btn" id="popover-cancel">Fermer</button>
-      <button class="btn btn-primary" id="popover-edit">Éditer ce jour</button>
+      ${viewKey ? '<button class="btn btn-primary" id="popover-edit">Éditer ce jour</button>' : ''}
     </div>
   `;
   backdrop.classList.add('open');
   const close = () => backdrop.classList.remove('open');
   box.querySelector('#popover-cancel').onclick = close;
-  box.querySelector('#popover-edit').onclick = () => {
-    close();
-    const month = parseInt(iso.split('-')[1], 10) - 1;
-    store.CAL_VIEWS[viewKey].navState.month = month;
-    const group = viewKey.startsWith('asv') ? 'asv' : 'vets';
-    _switchSubPage(group, viewKey.endsWith('forecast') ? 'forecast' : 'calendar');
-    _switchView(group);
-    setTimeout(() => _openDaySidebar(iso, viewKey), 50);
-  };
+  const editBtn = box.querySelector('#popover-edit');
+  if (editBtn)
+    editBtn.onclick = () => {
+      close();
+      const month = parseInt(iso.split('-')[1], 10) - 1;
+      store.CAL_VIEWS[viewKey].year = parseInt(iso.slice(0, 4), 10);
+      store.CAL_VIEWS[viewKey].navState.month = month;
+      const group = viewKey.startsWith('asv') ? 'asv' : 'vets';
+      _switchSubPage(group, viewKey.endsWith('forecast') ? 'forecast' : 'calendar');
+      _switchView(group);
+      setTimeout(() => _openDaySidebar(iso, viewKey), 50);
+    };
   backdrop.onclick = (e) => {
     if (e.target === backdrop) close();
   };
@@ -353,31 +357,55 @@ export function openAnnualDayDetail(iso, people, viewKey) {
 export function renderAnnualViewForGroup(group) {
   const g = _GROUP_VIEWS[group];
   const container = document.getElementById(g.annualContainer);
-  const mode = store.annualYearState[group];
+  const currentCfg = store.CAL_VIEWS[g.calendarViewKey];
+  // L'année courante est l'année de base, pas celle où le calendrier a été
+  // déplacé (il peut afficher décembre N-1 pendant le délai de grâce).
+  const baseYear = currentCfg.baseYear ?? currentCfg.year;
+  // Historique : années passées ayant des données pour ce groupe, en consultation
+  // seule (le calendrier ne navigue que sur N-1 … N, l'édition passe par lui).
+  const pastYears = historyYears(
+    Object.keys(store.DATA.slots),
+    baseYear,
+    currentCfg.people.map((p) => p.id)
+  );
+  let mode = store.annualYearState[group];
+  const histMatch = /^h(\d{4})$/.exec(mode || '');
+  if (histMatch && !pastYears.includes(Number(histMatch[1]))) mode = 'current';
 
   // Pour ASV, la vue annuelle n'affiche que "Réalisé" (heatmap de l'année courante).
   // La sous-page "Prévisionnel" est gérée séparément par renderForecastPage (forecast.js).
-  if (group === 'asv' && mode === 'forecast') {
-    store.annualYearState['asv'] = 'current';
-  }
-  const effectiveMode = group === 'asv' ? 'current' : mode;
-  const effectiveViewKey = effectiveMode === 'current' ? g.calendarViewKey : g.forecastViewKey;
-  const effectiveCfg = store.CAL_VIEWS[effectiveViewKey];
+  if (group === 'asv' && mode === 'forecast') mode = 'current';
+  store.annualYearState[group] = mode;
+  const histYear = /^h\d{4}$/.test(mode) ? Number(mode.slice(1)) : null;
+  const effectiveMode = histYear ? 'history' : mode;
+  const effectiveViewKey =
+    effectiveMode === 'history' ? null : effectiveMode === 'current' ? g.calendarViewKey : g.forecastViewKey;
+  const effectiveCfg =
+    effectiveMode === 'history'
+      ? { year: histYear, people: currentCfg.people }
+      : effectiveMode === 'current'
+        ? { year: baseYear, people: currentCfg.people }
+        : store.CAL_VIEWS[effectiveViewKey];
 
+  const historyButtons = pastYears
+    .map((y) => `<button data-mode="h${y}" class="${histYear === y ? 'active' : ''}">${y}</button>`)
+    .join('');
   const yearToggle =
     group === 'vets'
       ? `<div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
-        <button data-mode="current" class="${effectiveMode === 'current' ? 'active' : ''}">${store.CAL_VIEWS[g.calendarViewKey].year}</button>
+        ${historyButtons}
+        <button data-mode="current" class="${effectiveMode === 'current' ? 'active' : ''}">${baseYear}</button>
         <button data-mode="forecast" class="${effectiveMode === 'forecast' ? 'active' : ''}">${store.CAL_VIEWS[g.forecastViewKey].year}</button>
       </div>`
       : `<div class="year-toggle" id="${group}-annual-year-toggle" style="margin-bottom:12px;">
-        <button data-mode="current" class="active">${store.CAL_VIEWS[g.calendarViewKey].year} — Réalisé</button>
+        ${historyButtons}
+        <button data-mode="current" class="${effectiveMode === 'current' ? 'active' : ''}">${baseYear} — Réalisé</button>
       </div>`;
 
   // eslint-disable-next-line no-unsanitized/property
   container.innerHTML = `
     <h2 class="section-title">Vue Annuelle ${effectiveCfg.year} — ${g.label}</h2>
-    <p class="section-desc" style="margin-bottom:12px;">Heatmap de présence — cliquez une cellule pour voir le détail du jour.</p>
+    <p class="section-desc" style="margin-bottom:12px;">Heatmap de présence — cliquez une cellule pour voir le détail du jour.${histYear ? ' Année passée : consultation seule.' : ''}</p>
     ${yearToggle}
     <div class="card" style="padding:14px;">${buildHeatmap(effectiveCfg.year, effectiveCfg.people)}</div>
     <div class="legend" style="margin-top:12px;padding:10px 16px;">${_buildLegendColors(effectiveCfg.people)}</div>
