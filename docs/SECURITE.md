@@ -210,6 +210,42 @@ comportement de Postgres : il n'existe pas de compte de test Supabase.
 
 ---
 
+## Verrous de fin d'année (chantier « bascule d'année », 24/11/2026) — ⏳ NON DÉPLOYÉ
+
+La bascule d'année est **calculée, pas exécutée** : année courante, gel du
+prévisionnel ASV et verrou des feuilles ASV de l'année écoulée se déduisent de la
+date du jour à Paris et de réglages de `planning_data.slots` (`rollover_date_<Y>`,
+`asv_lock_date_<Y>`, `closed_month_<Y>_<M0>`, `forecast_closed_<Y>`). Règle unique
+dans `src/lib/clinic-year.js` + miroir `_shared/clinic-year.ts`, contrat
+`tests/unit/clinic-year.test.js`.
+
+**Associé** (`isPartnerProfile`, contrat `tests/unit/planning-auth.test.js`) :
+`admin`, ou `vet` sauf si `vet_roster.partner = false`. Une ASV, même
+`can_edit_all_asv`, n'est pas associée.
+
+**Ce que `save-planning` refuse** (`findYearLockViolations`, le diff est calculé
+pour **tous** les rôles) :
+
+| Qui | Refusé |
+|---|---|
+| Tout le monde, associé compris | modifier une `rollover_date_<Y>` déjà atteinte |
+| Non-associé | toute écriture de `closed_month_*`, `forecast_closed_*`, `rollover_date_*`, `asv_lock_date_*` |
+| Non-associé | cellules datées d'une ASV (liste blanche `user_profiles` role `asv`) dans un mois verrouillé |
+| Non-associé | semaines `forecast_<pid>_<lundi>` d'une année figée |
+
+Le refus est un **423 + `lockedKeys`**, pas un refus définitif : le client ramène
+ces clés à la valeur du serveur (`dropLockedKeys`) et renvoie le reste. Il ne
+déclenche jamais `discardLocal` — un envoi décembre + janvier ne perd pas janvier.
+
+**Limites** : clés non datées (`asv_arrival_*`, `asv_reliquat_*`) hors verrou ; ASV
+sans compte hors liste blanche ; signature du prévisionnel non consultée (voir
+`docs/DETTE.md`).
+
+**Déploiement** : front d'abord (il sait traiter le 423), puis `save-planning`. Un
+onglet resté sur l'ancien front traite le 423 comme un refus définitif.
+
+---
+
 ## Suppression définitive d'un collaborateur (action `purge`)
 
 Chantier « suppression définitive d'un collaborateur » (16/08/2026). Procédure

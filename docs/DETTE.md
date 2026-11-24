@@ -34,6 +34,14 @@ une dette : c'est un défaut bloquant, signalé comme tel.
 - **Conséquence** : désorientation ponctuelle, sans perte de données.
 - **Coût de la laisser** : négligeable.
 
+#### Hors périmètre du chantier, relevé au cahier
+
+- **Signature du prévisionnel non contrôlée par `save-planning`.** Les signatures sont dans la table `forecast_signatures`, que `save-planning` ne consulte pas : un prévisionnel signé reste modifiable côté serveur tant que son année n'est pas figée (`forecast_closed_<Y>`). Conséquence : la version signée et la version stockée peuvent diverger sans trace. Coût : faible tant que le gel de l'année couvre le cas courant ; à reprendre si la signature doit valoir preuve.
+- **Code mort** : lecture de `forecast_sig_*` (`src/slots.js`, autour de la ligne 322), `YEARS` (`src/config.js`), `_seedDemoData`. Conséquence : bruit à la lecture, rien ne casse. Coût : négligeable, à retirer au prochain passage dans ces fichiers.
+- **`forecastMonthTotal` rattache une semaine au vendredi, `buildYearWeeks` au jeudi.** Une semaine à cheval sur deux mois peut être comptée dans un mois différent selon l'écran. Conséquence : totaux mensuels du prévisionnel ASV qui ne concordent pas d'une vue à l'autre (prévisionnel, pas heures réalisées : pas de paie directe). Coût : faible, mais à aligner avant toute exploitation du delta prévisionnel/réalisé.
+- **Bornes 2020…2030 en dur dans `src/calendar.js`** (sélecteurs d'année, autour des lignes 387-479). Conséquence : en 2031, l'année courante sort des sélecteurs. Coût : nul avant 2030, une ligne à changer d'ici là.
+- **Une ASV sans compte échappe au verrou serveur.** La liste blanche ASV de `save-planning` vient de `user_profiles` (role `asv`) : une personne du roster ASV sans compte n'y figure pas, ses cellules d'un mois verrouillé restent modifiables par un non-associé. Conséquence : le verrou ne tient qu'à l'affichage pour elle. Coût : faible (toutes les ASV en poste ont un compte), à revoir si un roster sans compte apparaît.
+
 ### Constatée par le chantier « guide utilisateur et email d'invitation » (2026-10-01)
 
 #### La vue Hebdomadaire ASV traite le vétérinaire salarié comme un associé
@@ -58,18 +66,6 @@ une dette : c'est un défaut bloquant, signalé comme tel.
 - **Coût de la laisser** : faible ; masquer l'entrée hors admin, ou décider que les associés peuvent inviter (décision de Jérémie, touche la sécurité).
 
 ### Constatée par le chantier « surfaces anon » (2026-09-05)
-
-**Le miroir `planning-auth` n'a pas de test de contrat, contrairement à `asv-hours`.**
-`src/lib/planning-auth.js` et `supabase/functions/_shared/planning-auth.ts` portent
-les mêmes règles d'autorisation du planning, mais rien ne vérifie qu'ils restent
-d'accord : `tests/unit/planning-auth.test.js:13` n'importe que la version front.
-Si les deux divergent, le navigateur autorisera un geste que l'Edge Function
-refusera — ou l'inverse, plus grave : l'écran interdira un geste que le serveur
-accepte encore, et la règle ne tiendra plus qu'à l'affichage. `asv-hours` a exactement
-ce garde-fou (`tests/unit/asv-hours-contract.test.js`, invariant non négociable) ;
-`planning-auth` non. Le laisser coûte peu tant que les deux fichiers ne bougent pas,
-et devient cher au premier changement d'autorisation : la divergence ne se voit
-qu'en production, sur un geste refusé sans message.
 
 **~~`send-leave-recap` est déclarée déployée mais n'a pas de source dans le dépôt.~~
 LEVÉE le 06/09/2026 — et le constat est pire que la dette.** `npx supabase
@@ -302,6 +298,22 @@ recours à la console sur `localStorage`. Le fermer suppose une saisie en heures
 et minutes plutôt qu'en pourcentage, ou un chemin explicite « rétablir la valeur
 contractuelle » — un lot en soi, pas une retouche.
 
+## Clos par le chantier « bascule d'année » (2026-11-24)
+
+**Le miroir `planning-auth` n'a pas de test de contrat, contrairement à `asv-hours`.**
+`src/lib/planning-auth.js` et `supabase/functions/_shared/planning-auth.ts` portent
+les mêmes règles d'autorisation du planning, mais rien ne vérifie qu'ils restent
+d'accord : `tests/unit/planning-auth.test.js:13` n'importe que la version front.
+Si les deux divergent, le navigateur autorisera un geste que l'Edge Function
+refusera — ou l'inverse, plus grave : l'écran interdira un geste que le serveur
+accepte encore, et la règle ne tiendra plus qu'à l'affichage. `asv-hours` a exactement
+ce garde-fou (`tests/unit/asv-hours-contract.test.js`, invariant non négociable) ;
+`planning-auth` non. Le laisser coûte peu tant que les deux fichiers ne bougent pas,
+et devient cher au premier changement d'autorisation : la divergence ne se voit
+qu'en production, sur un geste refusé sans message.
+
+Levée au lot 1 (`0bad885`) : `tests/unit/planning-auth.test.js` fait tourner les mêmes cas contre `src/lib/planning-auth.js` et `_shared/planning-auth.ts`. Il a aussitôt trouvé une divergence réelle (`hasFullAccess(null)` côté Deno), réalignée. `clinic-year` a reçu le même garde-fou dès sa création (`tests/unit/clinic-year.test.js`).
+
 ## Clos par le chantier « migration du roster ASV vers table partagée » (2026-08-16)
 
 ### 🔴 La fraction de temps de Carla est figée à 7,25 h dans le localStorage de production
@@ -467,6 +479,11 @@ compte orphelin ne se crée. Trois points complètent l'inversion :
 projet `ubowqtowyqmpraoxbaoo` : la production exécute le nouvel ordre. Vérifié
 au retour — la fonction répond `HTTP 200` et le CORS reste restreint à
 `https://jtechserge.github.io`.
+
+## Limites acceptées (décision du 24/11/2026)
+
+- **Les clés non datées échappent au verrou de fin d'année** (`asv_arrival_*`, `asv_reliquat_*`) : `findYearLockViolations` ne verrouille que les cellules datées et le prévisionnel. Assumé au cahier du chantier « bascule d'année ».
+- **Associé côté serveur = admin, ou vet sauf `vet_roster.partner = false`.** Resserrement volontaire : une ASV `can_edit_all_asv` ne peut plus clôturer un mois.
 
 ## Limites acceptées (décision du 16/08/2026)
 
