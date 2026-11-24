@@ -22,15 +22,15 @@ describe.each([
     });
   });
 
-  describe('rolloverDate — lundi de la semaine du 1er janvier, ou 1er lundi si week-end', () => {
+  describe('rolloverDate — lundi de la semaine du 1er janvier, ou lundi 2 si dimanche', () => {
     it.each([
       [2024, '2024-01-01', 'lundi → le 1er janvier lui-même'],
       [2030, '2029-12-31', 'mardi → lundi précédent'],
       [2025, '2024-12-30', 'mercredi → lundi précédent'],
       [2026, '2025-12-29', 'jeudi → lundi précédent'],
       [2027, '2026-12-28', 'vendredi → lundi précédent'],
-      [2028, '2028-01-03', 'samedi → premier lundi de janvier'],
-      [2023, '2023-01-02', 'dimanche → premier lundi de janvier'],
+      [2028, '2027-12-27', 'samedi → lundi précédent'],
+      [2023, '2023-01-02', 'dimanche → lundi 2 janvier'],
     ])('%i : %s (%s)', (year, expected) => {
       expect(m.rolloverDate({}, year)).toBe(expected);
     });
@@ -45,10 +45,13 @@ describe.each([
       expect(m.clinicCurrentYear('2026-12-28', {})).toBe(2027);
       expect(m.clinicCurrentYear('2027-01-01', {})).toBe(2027);
     });
-    it('2028 (1er janvier un samedi) : encore 2027 les 1er et 2 janvier, 2028 le lundi 3', () => {
-      expect(m.clinicCurrentYear('2028-01-01', {})).toBe(2027);
-      expect(m.clinicCurrentYear('2028-01-02', {})).toBe(2027);
-      expect(m.clinicCurrentYear('2028-01-03', {})).toBe(2028);
+    it('2028 (1er janvier un samedi) : bascule le lundi 27/12/2027', () => {
+      expect(m.clinicCurrentYear('2027-12-26', {})).toBe(2027);
+      expect(m.clinicCurrentYear('2027-12-27', {})).toBe(2028);
+    });
+    it('2023 (1er janvier un dimanche) : encore 2022 le 1er janvier, 2023 le lundi 2', () => {
+      expect(m.clinicCurrentYear('2023-01-01', {})).toBe(2022);
+      expect(m.clinicCurrentYear('2023-01-02', {})).toBe(2023);
     });
     it('2024 (1er janvier un lundi) : bascule le 1er janvier', () => {
       expect(m.clinicCurrentYear('2023-12-31', {})).toBe(2023);

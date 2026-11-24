@@ -20,10 +20,7 @@ export function parisTodayIso(now: Date = new Date()): string {
 export function rolloverDate(_slots: Slots, year: number): string {
   const jan1 = new Date(Date.UTC(year, 0, 1));
   const dow = jan1.getUTCDay();
-  let shift: number;
-  if (dow === 0) shift = 1;
-  else if (dow === 6) shift = 2;
-  else shift = 1 - dow;
+  const shift = dow === 0 ? 1 : 1 - dow;
   jan1.setUTCDate(jan1.getUTCDate() + shift);
   return jan1.toISOString().slice(0, 10);
 }

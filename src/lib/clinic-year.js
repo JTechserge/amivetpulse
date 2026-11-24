@@ -11,10 +11,9 @@
 //
 // Règles fixes (décision de Jérémie, 24/11/2026) :
 //   bascule vers Y  le lundi qui ouvre la semaine du 1er janvier si celui-ci tombe
-//                   du lundi au vendredi (ex. 1er janvier 2027 un vendredi → lundi
+//                   du lundi au samedi (ex. 1er janvier 2027 un vendredi → lundi
 //                   28/12/2026 : les ASV complètent la semaine à cheval dans la
-//                   nouvelle année) ; s'il tombe un samedi ou un dimanche, le
-//                   premier lundi de janvier.
+//                   nouvelle année) ; s'il tombe un dimanche, le lundi 2 janvier.
 //   verrou ASV      les feuilles de Y-1 se verrouillent le 15/01/Y.
 // Réglages tri-état restant dans planning_data.slots (posés par un associé) :
 //   closed_month_<Y>_<M0>  'true' = clôturé, 'false' = rouvert par un associé,
@@ -38,12 +37,9 @@ export function parisTodayIso(now = new Date()) {
 export function rolloverDate(_slots, year) {
   const jan1 = new Date(Date.UTC(year, 0, 1));
   const dow = jan1.getUTCDay(); // 0 = dimanche … 6 = samedi
-  let shift;
-  if (dow === 0)
-    shift = 1; // dimanche → lundi 2 janvier
-  else if (dow === 6)
-    shift = 2; // samedi → lundi 3 janvier
-  else shift = 1 - dow; // lundi → 0 ; mardi … vendredi → lundi précédent (décembre)
+  // Dimanche → lundi 2 janvier ; lundi → le 1er lui-même ; mardi … samedi →
+  // lundi précédent (décembre).
+  const shift = dow === 0 ? 1 : 1 - dow;
   jan1.setUTCDate(jan1.getUTCDate() + shift);
   return jan1.toISOString().slice(0, 10);
 }

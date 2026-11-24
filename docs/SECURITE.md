@@ -215,7 +215,7 @@ comportement de Postgres : il n'existe pas de compte de test Supabase.
 La bascule d'année est **calculée, pas exécutée** : année courante, gel du
 prévisionnel ASV et verrou des feuilles ASV de l'année écoulée se déduisent de la
 date du jour à Paris (bascule au lundi de la semaine du 1er janvier, ou au premier
-lundi de janvier si le 1er tombe un week-end ; verrou ASV au 15/01) et des réglages
+lundi 2 janvier si le 1er tombe un dimanche ; verrou ASV au 15/01) et des réglages
 tri-état `closed_month_<Y>_<M0>` / `forecast_closed_<Y>` de `planning_data.slots`. Règle unique
 dans `src/lib/clinic-year.js` + miroir `_shared/clinic-year.ts`, contrat
 `tests/unit/clinic-year.test.js`.
