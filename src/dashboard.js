@@ -8,6 +8,8 @@ import { getForecastSig, revokeForecastSig, loadForecastSignatures } from './for
 import { fetchSignatureArchive, fetchSignedStorageUrl } from './api.js';
 import { triggerPushNotification } from './pwa.js';
 import { isFeedbackAdmin, loadFeedback, renderDashboardFeedback } from './feedback.js';
+import { renderDashboardYear } from './dashboard-year.js';
+import { isCurrentUserPartner } from './slots.js';
 
 import {
   buildPersonCard,
@@ -105,6 +107,7 @@ export function renderDashboard() {
         <button class="sub-tab ${store.dashSubState.tab === 'signatures' ? 'active' : ''}" data-sub="signatures">✍️ Feuilles signées</button>
         <button class="sub-tab ${store.dashSubState.tab === 'interviews' ? 'active' : ''}" data-sub="interviews">📝 Entretiens annuels</button>
         ${isFeedbackAdmin() ? `<button class="sub-tab ${store.dashSubState.tab === 'feedback' ? 'active' : ''}" data-sub="feedback">🚩 Signalements</button>` : ''}
+        ${isCurrentUserPartner() ? `<button class="sub-tab ${store.dashSubState.tab === 'year' ? 'active' : ''}" data-sub="year">📆 Bascule d'année</button>` : ''}
       </div>
     </div>
     <div id="dash-sub-stats" class="sub-page ${store.dashSubState.tab !== 'stats' ? 'hidden' : ''}"></div>
@@ -113,6 +116,7 @@ export function renderDashboard() {
     <div id="dash-sub-signatures" class="sub-page ${store.dashSubState.tab !== 'signatures' ? 'hidden' : ''}"></div>
     <div id="dash-sub-interviews" class="sub-page ${store.dashSubState.tab !== 'interviews' ? 'hidden' : ''}"></div>
     ${isFeedbackAdmin() ? `<div id="dash-sub-feedback" class="sub-page ${store.dashSubState.tab !== 'feedback' ? 'hidden' : ''}"></div>` : ''}
+    ${isCurrentUserPartner() ? `<div id="dash-sub-year" class="sub-page ${store.dashSubState.tab !== 'year' ? 'hidden' : ''}"></div>` : ''}
   `;
   container.querySelector('#dash-sub-nav').addEventListener('click', (e) => {
     const btn = e.target.closest('.sub-tab');
@@ -126,10 +130,13 @@ export function renderDashboard() {
   // à une perte du rôle admin : sans ça, le dernier `else` renverrait sur les
   // demandes de congé avec un onglet actif fantôme.
   if (store.dashSubState.tab === 'feedback' && !isFeedbackAdmin()) store.dashSubState.tab = 'stats';
+  // Même garde pour l'onglet des associés.
+  if (store.dashSubState.tab === 'year' && !isCurrentUserPartner()) store.dashSubState.tab = 'stats';
   if (store.dashSubState.tab === 'stats') renderDashboardStats();
   else if (store.dashSubState.tab === 'hours') renderDashboardHours();
   else if (store.dashSubState.tab === 'signatures') renderDashboardSignatures();
   else if (store.dashSubState.tab === 'interviews') renderDashboardInterviews();
+  else if (store.dashSubState.tab === 'year') renderDashboardYear({ saveData: _saveData, onSaved: _renderCurrentView });
   else if (store.dashSubState.tab === 'feedback') {
     renderDashboardFeedback();
     loadFeedback().then(renderDashboardFeedback);
