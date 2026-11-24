@@ -19,6 +19,7 @@ import {
   setMinusMins,
   getOvertimeHours,
   isMonthClosed,
+  isCurrentUserPartner,
   getSlotNominalH,
   getSlotShiftType,
 } from './slots.js';
@@ -631,7 +632,7 @@ function renderWeekViewASV() {
   container.querySelectorAll('.week-counter-sel').forEach((sel) => {
     sel.addEventListener('change', () => {
       const { ciso, cpid, ctype } = sel.dataset;
-      if (_effectiveRole() === 'asv') {
+      if (_effectiveRole() === 'asv' || !isCurrentUserPartner()) {
         const [yr, mo] = ciso.split('-').map(Number);
         if (isMonthClosed(yr, mo - 1)) {
           showToast('Ce mois est clôturé — modifications ASV bloquées', '🔒');

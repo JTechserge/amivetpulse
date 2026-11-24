@@ -11,7 +11,6 @@ import {
   SUPABASE_AUTH_URL,
   SUPABASE_ANON_KEY,
   getCurrentYear,
-  setCurrentYear,
   personOf,
 } from './config.js';
 import { escapeHTML, fmtISO, daysInMonth, isoWeekday, isSunday, holidayName, getWeekMondayDate } from './utils.js';
@@ -63,9 +62,8 @@ import { setupIdleTimeout } from './idle-timeout.js';
 const today = new Date();
 
 // ----------------------------------------------------------------
-// Année "courante" / "prévisionnelle" — dynamiques plutôt que des littéraux figés, pour
-// que la bascule annuelle (voir performYearRollover) continue de fonctionner toute seule
-// chaque 1er janvier sans jamais avoir besoin de retoucher le code.
+// Année "courante" / "prévisionnelle" — calculées (voir syncClinicYear) : la bascule
+// se fait d'elle-même à la date de bascule, sans action ni retouche du code.
 // ----------------------------------------------------------------
 
 // Cal state + store.CAL_VIEWS → store.js (see initCalState() below)
@@ -74,6 +72,7 @@ function buildCalViews() {
   return {
     'vets-current': {
       year: cy,
+      baseYear: cy,
       people: PEOPLE,
       navState: store.calStateCurrent,
       todayNav: true,
@@ -94,6 +93,7 @@ function buildCalViews() {
     },
     'asv-current': {
       year: cy,
+      baseYear: cy,
       people: ASV_PEOPLE,
       navState: store.calStateAsvCurrent,
       todayNav: true,
@@ -149,43 +149,23 @@ initCalState();
 // vrai/faux (voir supabase-schema-3-password-security.sql).
 
 // ----------------------------------------------------------------
-// Bascule annuelle automatique (current -> current+1, forecast -> forecast+1)
+// Bascule d'année — calculée, jamais exécutée (lib/clinic-year.js)
 // ----------------------------------------------------------------
-function isYearRolloverDue() {
-  return today.getFullYear() > getCurrentYear();
-}
-function performYearRollover() {
-  const fromYear = getCurrentYear();
-  const toYear = fromYear + 1;
-  setCurrentYear(toYear);
-  store.CAL_VIEWS = buildCalViews();
-  store.calStateCurrent.month = 0;
-  store.calStateAsvCurrent.month = 0;
+// getCurrentYear() se déduit de la date du jour à Paris et du réglage
+// rollover_date_<Y>. À chaque rendu, si l'année calculée a changé (passage de
+// la date de bascule, réglage reçu du serveur), les vues sont reconstruites :
+// le prévisionnel devient le calendrier courant, l'année suivante est proposée
+// en prévisionnel. Rien n'est écrit, l'opération est idempotente.
+function syncClinicYear() {
+  const cy = getCurrentYear();
+  if (store.CAL_VIEWS?.['vets-current']?.baseYear === cy) return;
+  const m = today.getFullYear() === cy ? today.getMonth() : 0;
+  store.calStateCurrent.month = m;
+  store.calStateAsvCurrent.month = m;
   store.calStateForecast.month = 0;
   store.calStateAsvForecast.month = 0;
-  document.getElementById('rollover-banner')?.remove();
-  renderCurrentView();
-  showToast(`Calendrier basculé sur ${toYear}`, '🔄');
-}
-function renderRolloverBanner() {
-  if (!isYearRolloverDue()) return;
-  if (document.getElementById('rollover-banner')) return;
-  const fromYear = getCurrentYear(),
-    toYear = fromYear + 1;
-  const bar = document.createElement('div');
-  bar.id = 'rollover-banner';
-  bar.className = 'rollover-banner';
-  // eslint-disable-next-line no-unsanitized/property
-  bar.innerHTML = `
-    <span>📅 Nous sommes en ${today.getFullYear()} — le calendrier ${fromYear} peut basculer sur ${toYear} (le prévisionnel ${toYear} devient le calendrier courant, ${toYear + 1} est proposé en prévisionnel).</span>
-    <div class="rollover-actions">
-      <button class="btn btn-sm btn-primary" id="rollover-confirm">Basculer maintenant</button>
-      <button class="btn-icon" id="rollover-dismiss" aria-label="Plus tard">✕</button>
-    </div>
-  `;
-  document.getElementById('app-main').prepend(bar);
-  bar.querySelector('#rollover-confirm').onclick = performYearRollover;
-  bar.querySelector('#rollover-dismiss').onclick = () => bar.remove();
+  store.CAL_VIEWS = buildCalViews();
+  store.dashState.year = cy;
 }
 
 const UNDO_MAX = 30;
@@ -634,7 +614,7 @@ function _activeSubContainer(group) {
 // (vétérinaires), où le verrou doit s'afficher À L'INTÉRIEUR de la sous-page active sans
 // détruire la sous-navigation (sub-nav) ni les autres sous-pages masquées.
 function renderCurrentView() {
-  renderRolloverBanner();
+  syncClinicYear();
   const isForecastSubPage =
     (currentView === 'vets' && store.subNavState.vets === 'forecast') ||
     (currentView === 'asv' && store.subNavState.asv === 'forecast');

@@ -418,7 +418,8 @@ export function buildOvertimeTableASV(year) {
 
 // Vue d'ensemble des feuilles de présence signées par mois/ASV, avec annulation possible.
 export function buildHoursControlCard(year) {
-  const cy = today.getFullYear();
+  // Année de la clinique (bascule calculée), pas l'année civile du poste.
+  const cy = getCurrentYear();
   const cm = today.getMonth();
   const weekStart = getWeekStart(today);
   function alertClass(worked, quota) {

@@ -1,6 +1,8 @@
-import { ASV_PEOPLE, SLOTS, personOf, isNonPartnerVet } from './config.js';
+import { ASV_PEOPLE, PEOPLE, SLOTS, personOf, isNonPartnerVet } from './config.js';
 import { ASV_STD_SAT_CARLA } from './lib/pay-constants.js';
 import { getSaturdaySlotNominalH } from './lib/asv-hours.js';
+import { isAsvMonthLocked, isForecastYearLocked, parisTodayIso } from './lib/clinic-year.js';
+import { isPartnerProfile } from './lib/planning-auth.js';
 import { store } from './store.js';
 
 /* ---------- Clés de stockage ---------- */
@@ -335,16 +337,56 @@ export function setForecastSig(pid, year, sig) {
   else delete store.DATA.slots[forecastSigKey(pid, year)];
 }
 
-// ── Clôture de mois (Lot 6) ──────────────────────────────────────
+// ── Clôture de mois (Lot 6, tri-état depuis la bascule d'année) ──
 // month : 0-indexé (0=Jan … 11=Déc), cohérent avec cfg.navState.month et Date.getMonth().
+// closed_month_<Y>_<M0> : 'true' clôturé, 'false' rouvert par un associé, absent =
+// règle par défaut (verrouillé à partir de asv_lock_date_<Y+1>). La règle vit dans
+// lib/clinic-year.js, partagée avec save-planning qui refuse les mêmes écritures.
 export function closedMonthKey(year, month) {
   return `closed_month_${year}_${month}`;
 }
-export function isMonthClosed(year, month) {
-  return store.DATA.slots[closedMonthKey(year, month)] === 'true';
+export function isMonthClosed(year, month, todayIso = parisTodayIso()) {
+  return isAsvMonthLocked(store.DATA.slots, todayIso, year, month);
 }
-export function setMonthClosed(year, month, closed) {
+export function setMonthClosed(year, month, closed, todayIso = parisTodayIso()) {
   const key = closedMonthKey(year, month);
-  if (closed) store.DATA.slots[key] = 'true';
-  else delete store.DATA.slots[key];
+  if (closed) {
+    store.DATA.slots[key] = 'true';
+    return;
+  }
+  // Rouvrir n'écrit 'false' que pour l'emporter sur le verrou par défaut. Avant la
+  // date de verrou, la clé est retirée : un 'false' posé en cours d'année
+  // empêcherait le mois de se verrouiller de lui-même à la fin janvier.
+  delete store.DATA.slots[key];
+  if (isAsvMonthLocked(store.DATA.slots, todayIso, year, month)) store.DATA.slots[key] = 'false';
+}
+
+// ── Verrous de fin d'année : qui peut les lever ──────────────────
+// Associé = même définition que save-planning (isPartnerProfile, contrat front ↔
+// Edge Function) : admin, ou vétérinaire non marqué salarié au roster. Profil
+// réel (store.currentUser), pas l'impersonation : c'est lui que le serveur juge.
+export function isCurrentUserPartner() {
+  return isPartnerProfile(store.currentUser, PEOPLE);
+}
+
+// ── Prévisionnel ASV figé (forecast_closed_<Y>, tri-état) ─────────
+export function forecastClosedKey(year) {
+  return `forecast_closed_${year}`;
+}
+export function isForecastLocked(year, todayIso = parisTodayIso()) {
+  return isForecastYearLocked(store.DATA.slots, todayIso, year);
+}
+/** true si un associé a rouvert le prévisionnel de `year` malgré la règle par défaut. */
+export function isForecastReopened(year) {
+  return store.DATA.slots[forecastClosedKey(year)] === 'false';
+}
+/** Même logique que setMonthClosed : 'false' seulement pour l'emporter sur le défaut. */
+export function setForecastClosed(year, closed, todayIso = parisTodayIso()) {
+  const key = forecastClosedKey(year);
+  if (closed) {
+    store.DATA.slots[key] = 'true';
+    return;
+  }
+  delete store.DATA.slots[key];
+  if (isForecastYearLocked(store.DATA.slots, todayIso, year)) store.DATA.slots[key] = 'false';
 }

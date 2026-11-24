@@ -57,6 +57,7 @@ import {
   setClinicEarlyClose,
   isMonthClosed,
   setMonthClosed,
+  isCurrentUserPartner,
   getForecastWeek,
 } from './slots.js';
 import { parseForecastHours, forecastDelta, forecastMonthTotal } from './lib/forecast-delta.js';
@@ -80,16 +81,31 @@ function setupCalendar({ snapshotBeforeChange, saveData, switchSubPage, canEditS
   _getCurrentView = getCurrentView;
 }
 
+// Calendrier courant : la navigation couvre l'année écoulée et l'année courante
+// (cfg.baseYear - 1 … cfg.baseYear). Après la bascule, décembre reste atteignable
+// pour finir les feuilles ASV pendant le délai de grâce, puis en consultation une
+// fois verrouillé (isMonthClosed). Prévisionnel : une seule année, en boucle.
 function changeMonth(viewKey, delta) {
   const cfg = store.CAL_VIEWS[viewKey];
-  const m = cfg.navState.month + delta;
-  cfg.navState.month = ((m % 12) + 12) % 12;
+  if (cfg.baseYear) {
+    const first = cfg.baseYear - 1;
+    const idx = ((((cfg.year - first) * 12 + cfg.navState.month + delta) % 24) + 24) % 24;
+    cfg.year = first + Math.floor(idx / 12);
+    cfg.navState.month = idx % 12;
+  } else {
+    const m = cfg.navState.month + delta;
+    cfg.navState.month = ((m % 12) + 12) % 12;
+  }
   renderCalendarView(viewKey);
 }
 
 function goToToday(viewKey) {
   const cfg = store.CAL_VIEWS[viewKey];
-  cfg.navState.month = today.getFullYear() === cfg.year ? today.getMonth() : 0;
+  const ty = today.getFullYear();
+  // Bascule anticipée (ex. 15/12 avec rollover_date en décembre) : « aujourd'hui »
+  // tombe dans l'année écoulée, qui reste dans la fenêtre de navigation.
+  if (cfg.baseYear && (ty === cfg.baseYear || ty === cfg.baseYear - 1)) cfg.year = ty;
+  cfg.navState.month = ty === cfg.year ? today.getMonth() : 0;
   renderCalendarView(viewKey);
 }
 
@@ -244,11 +260,13 @@ function buildCalendarToolbar(viewKey) {
     // Le mode par défaut ('opening') n'existe pas dans son jeu d'outils réduit.
     store.calMonthPaintMode = 'presence';
   }
-  const isCurrentUserVetAdmin = store.currentUser?.role === 'admin' || store.currentUser?.role === 'vet';
+  // Verrou des feuilles ASV (clôture manuelle ou verrou de fin d'année, lib/clinic-year.js).
+  // Seul un associé le lève ou modifie un mois verrouillé — même règle que save-planning.
+  const isPartner = isCurrentUserPartner();
   const monthClosed = hasASV && isMonthClosed(cfg.year, cfg.navState.month);
   const paintBar = hasASV
     ? `
-    <div class="cal-paint-bar" id="cal-paint-bar-${viewKey}"${monthClosed && isCurrentUserASV ? ' style="opacity:0.4;pointer-events:none;" title="Mois clôturé"' : ''}>
+    <div class="cal-paint-bar" id="cal-paint-bar-${viewKey}"${monthClosed && !isPartner ? ' style="opacity:0.4;pointer-events:none;" title="Mois clôturé"' : ''}>
       <span style="font-size:11px;font-weight:600;color:var(--color-text-muted);">Outil :</span>
       <button class="paint-tool${store.calMonthPaintMode === 'opening' ? ' active' : ''}" data-paint="opening" title="Ouverture — le matin uniquement (8h30→13h)">🟢 Ouverture</button>
       <button class="paint-tool${store.calMonthPaintMode === 'closing' ? ' active' : ''}" data-paint="closing" title="Fermeture — l’après-midi uniquement (15h→19h15)">🌿 Fermeture</button>
@@ -273,14 +291,14 @@ function buildCalendarToolbar(viewKey) {
     <div class="cal-toolbar">
       <div class="cal-month-nav">
         <button class="btn-icon" id="cal-prev-${viewKey}" aria-label="Mois précédent">←</button>
-        <div class="cal-month-label">${monthLabel}${monthClosed ? ' <span class="badge-month-closed" title="Mois clôturé pour les ASV">🔒</span>' : ''}</div>
+        <div class="cal-month-label">${monthLabel}${monthClosed ? ' <span class="badge-month-closed" title="Mois clôturé — modifiable par les associés seulement">🔒</span>' : ''}</div>
         <button class="btn-icon" id="cal-next-${viewKey}" aria-label="Mois suivant">→</button>
         ${todayBtn}
       </div>
       <div class="cal-toolbar-actions">
         <button class="btn-icon undo-btn" id="cal-undo-${viewKey}" aria-label="Annuler la dernière action" title="Annuler la dernière action (Cmd/Ctrl+Z)" ${store.UNDO_STACK.length === 0 ? 'disabled' : ''}>↩️</button>
         ${canClearMonth ? `<button class="btn btn-sm btn-danger" id="cal-clear-month-${viewKey}" aria-label="Vider le mois affiché">🗑️ Vider le mois</button>` : ''}
-        ${hasASV && isCurrentUserVetAdmin ? `<button class="btn btn-sm${monthClosed ? ' btn-success' : ''}" id="cal-lock-month-${viewKey}" title="${monthClosed ? 'Réouvrir le mois pour les ASV' : 'Clôturer le mois — bloque les modifications ASV'}">${monthClosed ? '🔓 Réouvrir' : '🔒 Clôturer'}</button>` : ''}
+        ${hasASV && isPartner ? `<button class="btn btn-sm${monthClosed ? ' btn-success' : ''}" id="cal-lock-month-${viewKey}" title="${monthClosed ? 'Réouvrir le mois pour les ASV' : 'Clôturer le mois — bloque les modifications ASV'}">${monthClosed ? '🔓 Réouvrir' : '🔒 Clôturer'}</button>` : ''}
         ${cfg.printable ? `<button class="btn btn-sm" id="cal-print-${viewKey}" title="Imprimer les fiches mensuelles ASV">🖨️ Imprimer</button>` : ''}
       </div>
     </div>
@@ -1417,8 +1435,9 @@ function startDrag(cell) {
   const isVetEmployeDrag =
     store.currentUser?.role === 'vet_employe' && _getCurrentView() === 'vets' && isVetPerson(personId);
   const isToolDrag = isASVDrag || isVetEmployeDrag;
-  // Lot 6 : bloquer les modifications ASV sur un mois clôturé
-  if (isASVDrag) {
+  // Lot 6 : bloquer les modifications ASV sur un mois clôturé, sauf pour un
+  // associé (save-planning les lui accepte, et les refuse à tout autre).
+  if (isASVDrag && !isCurrentUserPartner()) {
     const [isoYear, isoMo] = iso.split('-').map(Number);
     if (isMonthClosed(isoYear, isoMo - 1)) {
       showToast('Ce mois est clôturé — modifications ASV bloquées', '🔒');
@@ -2333,6 +2352,7 @@ function initCalendarInteractions() {
       return;
     }
     if (e.target.id === `cal-lock-month-${viewKey}`) {
+      if (!isCurrentUserPartner()) return;
       const cfg2 = store.CAL_VIEWS[viewKey];
       const wasClosed = isMonthClosed(cfg2.year, cfg2.navState.month);
       setMonthClosed(cfg2.year, cfg2.navState.month, !wasClosed);

@@ -37,6 +37,31 @@ describe('forecastAccess', () => {
   });
 });
 
+describe('forecastAccess — prévisionnel figé à la bascule', () => {
+  const base = { canEditPerson: true, signed: false };
+
+  it('fige l’année verrouillée pour tous, associé compris', () => {
+    expect(forecastAccess({ ...base, role: 'asv', yearLocked: true }).readOnly).toBe(true);
+    expect(forecastAccess({ ...base, role: 'vet', yearLocked: true, partner: true }).readOnly).toBe(true);
+  });
+
+  it('ne propose « Rouvrir » qu’à un associé, et seulement sur une année figée', () => {
+    expect(forecastAccess({ ...base, role: 'vet', yearLocked: true, partner: true }).canReopenYear).toBe(true);
+    expect(forecastAccess({ ...base, role: 'asv', yearLocked: true, partner: false }).canReopenYear).toBe(false);
+    expect(forecastAccess({ ...base, role: 'vet_employe', yearLocked: true, partner: false }).canReopenYear).toBe(
+      false
+    );
+    expect(forecastAccess({ ...base, role: 'vet', yearLocked: false, partner: true }).canReopenYear).toBe(false);
+  });
+
+  it('propose « Figer à nouveau » à un associé sur une année rouverte', () => {
+    const a = forecastAccess({ ...base, role: 'vet', yearLocked: false, yearReopened: true, partner: true });
+    expect(a.readOnly).toBe(false);
+    expect(a.canRelockYear).toBe(true);
+    expect(forecastAccess({ ...base, role: 'asv', yearReopened: true }).canRelockYear).toBe(false);
+  });
+});
+
 describe('defaultForecastPid', () => {
   const people = [{ id: 'marie' }, { id: 'old', archived: true }, { id: 'johanna' }, { id: 'julie' }];
 

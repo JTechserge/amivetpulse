@@ -444,15 +444,6 @@ body.forecast-theme{background:var(--color-forecast);}
   padding:10px 16px;border-radius:var(--radius-btn);font-size:13px;font-weight:600;
   margin-bottom:18px;
 }
-.rollover-banner{
-  display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
-  background:var(--color-primary);color:#fff;
-  padding:12px 20px;border-radius:var(--radius-btn);font-size:13.5px;font-weight:600;
-  margin-bottom:18px;
-}
-.rollover-banner .rollover-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;}
-.rollover-banner #rollover-dismiss{color:#fff;}
-.rollover-banner #rollover-dismiss:hover{background:rgba(255,255,255,0.15);}
 /* ============================================================
    Toolbar calendrier (mois, filtres, navigation)
    ============================================================ */
@@ -1691,7 +1682,7 @@ body.no-dashboard [data-view="dashboard"]{display:none;}
 :root[data-theme="dark"] .forecast-signed-banner{background:var(--color-cp);color:var(--color-cp-text);}
 
 @media print{
-  .app-header,.sub-nav-row,.legend,.section-desc,.rollover-banner,.forecast-banner,
+  .app-header,.sub-nav-row,.legend,.section-desc,.forecast-banner,
   .cal-toolbar-actions,.cal-col-tools,#toast-container,.signature-panel{display:none!important;}
   .cal-month-nav button{display:none!important;}
   body{background:#fff;}

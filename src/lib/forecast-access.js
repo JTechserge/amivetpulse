@@ -11,20 +11,37 @@
  * @param {boolean} p.canEditPerson  canEditSlot(pid) pour l'utilisateur courant
  * @param {boolean} p.signed         fiche déjà signée pour l'année
  * @param {string|null|undefined} p.role  rôle réel (store.currentUser.role)
- * @returns {{ readOnly: boolean, consultOnly: boolean, canRequestSignature: boolean, canUnsign: boolean }}
+ * @param {boolean} [p.yearLocked]   prévisionnel de l'année figé (isForecastYearLocked)
+ * @param {boolean} [p.yearReopened] figé par défaut mais rouvert par un associé
+ * @param {boolean} [p.partner]      utilisateur associé (isPartnerProfile)
+ * @returns {{ readOnly: boolean, consultOnly: boolean, canRequestSignature: boolean, canUnsign: boolean,
+ *   yearLocked: boolean, canReopenYear: boolean, canRelockYear: boolean }}
  */
-export function forecastAccess({ canEditPerson, signed, role }) {
+export function forecastAccess({
+  canEditPerson,
+  signed,
+  role,
+  yearLocked = false,
+  yearReopened = false,
+  partner = false,
+}) {
   const manager = role === 'vet' || role === 'admin';
   return {
-    // Une fiche signée est figée pour tout le monde ; sinon, seul qui peut
-    // modifier la ligne de cette personne peut modifier sa fiche.
-    readOnly: signed || !canEditPerson,
+    // Une fiche signée est figée pour tout le monde ; une année figée aussi
+    // (référence du suivi des heures : save-planning refuse ces semaines à un
+    // non-associé, et un associé doit d'abord rouvrir l'année, explicitement).
+    // Sinon, seul qui peut modifier la ligne de cette personne modifie sa fiche.
+    readOnly: signed || yearLocked || !canEditPerson,
     // Fiche d'une collègue : l'écran le dit, plutôt que de laisser des
     // commandes grisées sans explication.
     consultOnly: !canEditPerson,
     // request-forecast-signature est réservée aux associés et à l'admin.
     canRequestSignature: manager && !signed,
     canUnsign: manager,
+    yearLocked,
+    // Lever ou remettre le gel de l'année : associés seulement, comme le serveur.
+    canReopenYear: partner && yearLocked,
+    canRelockYear: partner && !yearLocked && yearReopened,
   };
 }
 

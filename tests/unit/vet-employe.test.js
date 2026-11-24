@@ -18,7 +18,7 @@ import { requiresLeaveApproval, isASVPerson, setSlotState, getLeaveDecision } fr
 import { collectAllLeaveGroups, getCPTakenDays } from '../../src/leave-requests.js';
 import { buildRecapTable } from '../../src/dashboard-stats.js';
 
-// getCurrentYear() lit localStorage, absent de l'environnement Node.
+// localStorage est absent de l'environnement Node.
 const memoryStore = {};
 globalThis.localStorage = {
   getItem: (k) => memoryStore[k] ?? null,
@@ -28,7 +28,11 @@ globalThis.localStorage = {
   removeItem: (k) => delete memoryStore[k],
 };
 
-const YEAR = 2026; // année par défaut de getCurrentYear()
+// getCurrentYear() se déduit de la date du jour (lib/clinic-year.js) : on fige
+// l'horloge en cours d'année 2026 pour que les récapitulatifs portent sur YEAR.
+vi.useFakeTimers({ toFake: ['Date'] });
+vi.setSystemTime(new Date('2026-06-15T10:00:00Z'));
+const YEAR = 2026;
 
 // Effectif de test : on ajoute un salarié aux deux associés par défaut.
 const SALARIE = {
@@ -63,6 +67,7 @@ beforeEach(() => {
 });
 
 afterAll(() => {
+  vi.useRealTimers();
   useRoster(ORIGINAL_VETS);
   ASV_PEOPLE.length = 0;
   ORIGINAL_ASV.forEach((p) => ASV_PEOPLE.push(p));

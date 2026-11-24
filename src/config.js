@@ -3,10 +3,12 @@
    Libellés, rosters par défaut, clés de stockage, endpoints.
    Les constantes de paie (heures, plafonds, CP) vivent dans
    src/lib/pay-constants.js — ne pas en réintroduire ici.
-   Seule dépendance : lib/pay-constants.js. Importé par app.js
+   Dépendances : lib/pay-constants.js, lib/clinic-year.js, store.js. Importé par app.js
    et les modules métier.
    ================================================================ */
 import { ASV_STD_SAT_CARLA } from './lib/pay-constants.js';
+import { clinicCurrentYear, parisTodayIso } from './lib/clinic-year.js';
+import { store } from './store.js';
 
 // ----------------------------------------------------------------
 // Personnes
@@ -183,15 +185,13 @@ export const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVib3dxdG93eXFtcHJhb3hiYW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MzkzNjksImV4cCI6MjA5ODIxNTM2OX0.cC7vTWrK-Ykii5dtlg_6lA5quHe6rv78IRxZT-ArV_8';
 
 // ----------------------------------------------------------------
-// Année courante (clé localStorage + accesseurs)
+// Année courante de la clinique — calculée, identique sur tous les postes
 // ----------------------------------------------------------------
-const CURRENT_YEAR_KEY = 'amivet_current_year';
+// Déduite de la date du jour à Paris et du réglage rollover_date_<Y> (voir
+// lib/clinic-year.js). Remplace l'ancienne valeur par poste en localStorage
+// (amivet_current_year), qui pouvait diverger d'un poste à l'autre.
 export function getCurrentYear() {
-  const stored = parseInt(localStorage.getItem(CURRENT_YEAR_KEY), 10);
-  return Number.isInteger(stored) ? stored : 2026;
-}
-export function setCurrentYear(y) {
-  localStorage.setItem(CURRENT_YEAR_KEY, String(y));
+  return clinicCurrentYear(parisTodayIso(), store.DATA?.slots);
 }
 
 // ----------------------------------------------------------------

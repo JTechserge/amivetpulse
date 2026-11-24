@@ -19,6 +19,9 @@ import {
   setForecastWeek,
   getForecastSig,
   setForecastSig,
+  isForecastLocked,
+  setForecastClosed,
+  forecastClosedKey,
 } from '../../src/slots.js';
 import { isSickOrAccidentLabel } from '../../src/leave-requests.js';
 
@@ -26,12 +29,15 @@ function resetStore() {
   store.DATA = { version: 2, slots: {} };
 }
 
-// ── Lot 6 : clôture de mois ───────────────────────────────────────
+// ── Lot 6 : clôture de mois (tri-état, bascule d'année) ───────────
+// Date de verrou par défaut des feuilles 2026 : 31/01/2027 (asvLockDate).
 describe('isMonthClosed / setMonthClosed (Lot 6)', () => {
   beforeEach(resetStore);
+  const IN_YEAR = '2026-11-24';
+  const AFTER_LOCK = '2027-02-15';
 
-  it('retourne false par défaut', () => {
-    expect(isMonthClosed(2026, 0)).toBe(false);
+  it('retourne false par défaut en cours d’année', () => {
+    expect(isMonthClosed(2026, 0, IN_YEAR)).toBe(false);
   });
 
   it('clé générée correctement', () => {
@@ -39,26 +45,71 @@ describe('isMonthClosed / setMonthClosed (Lot 6)', () => {
   });
 
   it('setMonthClosed(true) → isMonthClosed = true', () => {
-    setMonthClosed(2026, 6, true);
-    expect(isMonthClosed(2026, 6)).toBe(true);
+    setMonthClosed(2026, 6, true, IN_YEAR);
+    expect(isMonthClosed(2026, 6, IN_YEAR)).toBe(true);
   });
 
   it('setMonthClosed(false) → isMonthClosed = false', () => {
-    setMonthClosed(2026, 6, true);
-    setMonthClosed(2026, 6, false);
-    expect(isMonthClosed(2026, 6)).toBe(false);
+    setMonthClosed(2026, 6, true, IN_YEAR);
+    setMonthClosed(2026, 6, false, IN_YEAR);
+    expect(isMonthClosed(2026, 6, IN_YEAR)).toBe(false);
   });
 
   it('clôture isolée — les autres mois restent ouverts', () => {
-    setMonthClosed(2026, 5, true);
-    expect(isMonthClosed(2026, 4)).toBe(false);
-    expect(isMonthClosed(2026, 6)).toBe(false);
+    setMonthClosed(2026, 5, true, IN_YEAR);
+    expect(isMonthClosed(2026, 4, IN_YEAR)).toBe(false);
+    expect(isMonthClosed(2026, 6, IN_YEAR)).toBe(false);
   });
 
-  it('la clé est supprimée du store quand on réouvre', () => {
-    setMonthClosed(2026, 0, true);
-    setMonthClosed(2026, 0, false);
+  it('réouverture en cours d’année : la clé est retirée, le mois se verrouillera de lui-même', () => {
+    setMonthClosed(2026, 0, true, IN_YEAR);
+    setMonthClosed(2026, 0, false, IN_YEAR);
     expect(store.DATA.slots[closedMonthKey(2026, 0)]).toBeUndefined();
+    expect(isMonthClosed(2026, 0, AFTER_LOCK)).toBe(true);
+  });
+
+  it('après la date de verrou, un mois sans réglage est verrouillé', () => {
+    expect(isMonthClosed(2026, 11, AFTER_LOCK)).toBe(true);
+    expect(isMonthClosed(2027, 0, AFTER_LOCK)).toBe(false);
+  });
+
+  it('réouverture après la date de verrou : écrit « false », qui l’emporte sur le verrou', () => {
+    setMonthClosed(2026, 11, false, AFTER_LOCK);
+    expect(store.DATA.slots[closedMonthKey(2026, 11)]).toBe('false');
+    expect(isMonthClosed(2026, 11, AFTER_LOCK)).toBe(false);
+  });
+
+  it('re-clôture d’un mois rouvert : écrit « true »', () => {
+    setMonthClosed(2026, 11, false, AFTER_LOCK);
+    setMonthClosed(2026, 11, true, AFTER_LOCK);
+    expect(store.DATA.slots[closedMonthKey(2026, 11)]).toBe('true');
+    expect(isMonthClosed(2026, 11, AFTER_LOCK)).toBe(true);
+  });
+});
+
+// ── Prévisionnel figé à la bascule (forecast_closed_<Y>, tri-état) ──
+describe('isForecastLocked / setForecastClosed', () => {
+  beforeEach(resetStore);
+
+  it('le prévisionnel 2027 est ouvert avant la bascule, figé à partir du 01/01/2027', () => {
+    expect(isForecastLocked(2027, '2026-12-31')).toBe(false);
+    expect(isForecastLocked(2027, '2027-01-01')).toBe(true);
+  });
+
+  it('rouvrir une année figée écrit « false », figer à nouveau écrit « true »', () => {
+    setForecastClosed(2027, false, '2027-02-01');
+    expect(store.DATA.slots[forecastClosedKey(2027)]).toBe('false');
+    expect(isForecastLocked(2027, '2027-02-01')).toBe(false);
+    setForecastClosed(2027, true, '2027-02-01');
+    expect(store.DATA.slots[forecastClosedKey(2027)]).toBe('true');
+    expect(isForecastLocked(2027, '2027-02-01')).toBe(true);
+  });
+
+  it('rouvrir avant la bascule retire la clé : le gel par défaut s’appliquera', () => {
+    setForecastClosed(2027, true, '2026-11-24');
+    setForecastClosed(2027, false, '2026-11-24');
+    expect(store.DATA.slots[forecastClosedKey(2027)]).toBeUndefined();
+    expect(isForecastLocked(2027, '2027-01-01')).toBe(true);
   });
 });
 

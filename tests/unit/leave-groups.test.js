@@ -2,7 +2,7 @@
  * Regroupement des demandes de congé (page Demandes) : le dimanche et un jour
  * férié laissé vide ne coupent pas une suite, y compris d'un mois à l'autre.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 
 // leave-requests.js importe pwa.js (window au chargement du module).
 vi.mock('../../src/pwa.js', () => ({ triggerPushNotification: vi.fn() }));
@@ -18,7 +18,11 @@ globalThis.localStorage = {
 
 const { store } = await import('../../src/store.js');
 const { collectAllLeaveGroups } = await import('../../src/leave-requests.js');
-const { setCurrentYear } = await import('../../src/config.js');
+// getCurrentYear() se déduit de la date du jour (lib/clinic-year.js) : on fige
+// l'horloge en 2026 pour que les demandes listées portent sur 2026 et 2027.
+vi.useFakeTimers({ toFake: ['Date'] });
+vi.setSystemTime(new Date('2026-06-15T10:00:00Z'));
+afterAll(() => vi.useRealTimers());
 
 function leave(iso, label = 'Vacances') {
   for (const slot of ['M', 'AM']) {
@@ -40,7 +44,6 @@ const johanna = () => collectAllLeaveGroups().filter((g) => g.personId === 'joha
 
 beforeEach(() => {
   store.DATA = { slots: {} };
-  setCurrentYear(2026);
 });
 
 describe('suites de congés', () => {

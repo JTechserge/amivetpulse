@@ -7,7 +7,14 @@ import { ASV_PEOPLE, MONTH_NAMES, MONTH_SHORT } from './config.js';
 import { ANNUAL_FULLTIME_HOURS } from './lib/pay-constants.js';
 import { escapeHTML, asvFullName } from './utils.js';
 import { store } from './store.js';
-import { getForecastWeek, setForecastWeek } from './slots.js';
+import {
+  getForecastWeek,
+  setForecastWeek,
+  isForecastLocked,
+  isForecastReopened,
+  setForecastClosed,
+  isCurrentUserPartner,
+} from './slots.js';
 import {
   isForecastSigned,
   getForecastSig,
@@ -303,6 +310,9 @@ function _renderASVContent(layout, year) {
     canEditPerson: _canEditSlot(pid),
     signed: isForecastSigned(pid, year),
     role: store.currentUser?.role,
+    yearLocked: isForecastLocked(year),
+    yearReopened: isForecastReopened(year),
+    partner: isCurrentUserPartner(),
   });
   const isReadOnly = access.readOnly;
   const canUnsign = access.canUnsign;
@@ -319,11 +329,32 @@ function _renderASVContent(layout, year) {
     </div>
   `;
 
+  // Année figée (bascule passée ou gel manuel) : c'est la référence du suivi des
+  // heures ASV. Seul un associé peut la rouvrir, et le serveur applique la même règle.
+  const lockHtml = access.yearLocked
+    ? `
+    <div class="forecast-quickbar">
+      <span class="forecast-quickbar-lbl">🔒 Prévisionnel ${year} figé — il sert de référence au suivi des heures.</span>
+      ${access.canReopenYear ? '<button class="btn btn-sm" id="forecast-reopen-year-btn">🔓 Rouvrir</button>' : ''}
+    </div>
+  `
+    : access.canRelockYear
+      ? `
+    <div class="forecast-quickbar">
+      <span class="forecast-quickbar-lbl">🔓 Prévisionnel ${year} rouvert par un associé.</span>
+      <button class="btn btn-sm" id="forecast-relock-year-btn">🔒 Figer à nouveau</button>
+    </div>
+  `
+      : '';
+
   // Chips valeurs rapides
   const quickValues = ['42', '39', '35', '28'];
-  const quickChipsHtml = access.consultOnly
-    ? consultHtml
-    : `
+  const quickChipsHtml = access.yearLocked
+    ? lockHtml
+    : access.consultOnly
+      ? lockHtml + consultHtml
+      : lockHtml +
+        `
     <div class="forecast-quickbar">
       <span class="forecast-quickbar-lbl">Saisie rapide :</span>
       ${quickValues
@@ -380,6 +411,19 @@ function _renderASVContent(layout, year) {
     canUnsign,
     access.canRequestSignature
   );
+
+  layout.querySelector('#forecast-reopen-year-btn')?.addEventListener('click', () => {
+    setForecastClosed(year, false);
+    _saveData();
+    _renderASVContent(layout, year);
+    showToast(`Prévisionnel ${year} rouvert`, '🔓');
+  });
+  layout.querySelector('#forecast-relock-year-btn')?.addEventListener('click', () => {
+    setForecastClosed(year, true);
+    _saveData();
+    _renderASVContent(layout, year);
+    showToast(`Prévisionnel ${year} figé`, '🔒');
+  });
 
   // Chips → mise à jour quickValue
   layout.querySelectorAll('[data-qv]').forEach((btn) => {
