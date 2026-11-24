@@ -214,8 +214,9 @@ comportement de Postgres : il n'existe pas de compte de test Supabase.
 
 La bascule d'année est **calculée, pas exécutée** : année courante, gel du
 prévisionnel ASV et verrou des feuilles ASV de l'année écoulée se déduisent de la
-date du jour à Paris et de réglages de `planning_data.slots` (`rollover_date_<Y>`,
-`asv_lock_date_<Y>`, `closed_month_<Y>_<M0>`, `forecast_closed_<Y>`). Règle unique
+date du jour à Paris (bascule au lundi de la semaine du 1er janvier, ou au premier
+lundi de janvier si le 1er tombe un week-end ; verrou ASV au 15/01) et des réglages
+tri-état `closed_month_<Y>_<M0>` / `forecast_closed_<Y>` de `planning_data.slots`. Règle unique
 dans `src/lib/clinic-year.js` + miroir `_shared/clinic-year.ts`, contrat
 `tests/unit/clinic-year.test.js`.
 
@@ -228,8 +229,7 @@ pour **tous** les rôles) :
 
 | Qui | Refusé |
 |---|---|
-| Tout le monde, associé compris | modifier une `rollover_date_<Y>` déjà atteinte |
-| Non-associé | toute écriture de `closed_month_*`, `forecast_closed_*`, `rollover_date_*`, `asv_lock_date_*` |
+| Non-associé | toute écriture de `closed_month_*`, `forecast_closed_*` |
 | Non-associé | cellules datées d'une ASV (liste blanche `user_profiles` role `asv`) dans un mois verrouillé |
 | Non-associé | semaines `forecast_<pid>_<lundi>` d'une année figée |
 

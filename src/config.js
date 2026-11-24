@@ -187,7 +187,7 @@ export const SUPABASE_ANON_KEY =
 // ----------------------------------------------------------------
 // Année courante de la clinique — calculée, identique sur tous les postes
 // ----------------------------------------------------------------
-// Déduite de la date du jour à Paris et du réglage rollover_date_<Y> (voir
+// Déduite de la date du jour à Paris (règle fixe de bascule, voir
 // lib/clinic-year.js). Remplace l'ancienne valeur par poste en localStorage
 // (amivet_current_year), qui pouvait diverger d'un poste à l'autre.
 export function getCurrentYear() {

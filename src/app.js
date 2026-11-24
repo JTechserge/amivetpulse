@@ -151,9 +151,9 @@ initCalState();
 // ----------------------------------------------------------------
 // Bascule d'année — calculée, jamais exécutée (lib/clinic-year.js)
 // ----------------------------------------------------------------
-// getCurrentYear() se déduit de la date du jour à Paris et du réglage
-// rollover_date_<Y>. À chaque rendu, si l'année calculée a changé (passage de
-// la date de bascule, réglage reçu du serveur), les vues sont reconstruites :
+// getCurrentYear() se déduit de la date du jour à Paris (règle fixe de
+// lib/clinic-year.js). À chaque rendu, si l'année calculée a changé (passage de
+// la date de bascule), les vues sont reconstruites :
 // le prévisionnel devient le calendrier courant, l'année suivante est proposée
 // en prévisionnel. Rien n'est écrit, l'opération est idempotente.
 function syncClinicYear() {

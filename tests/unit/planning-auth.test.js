@@ -670,15 +670,17 @@ describe.each(IMPLEMENTATIONS)('verrous de fin d’année — %s', (_label, m) =
   });
 
   describe('feuilles ASV de l’année écoulée', () => {
-    it('envoi mixte décembre + janvier après le 31/01 : seul décembre est refusé', () => {
+    it('envoi mixte décembre + janvier après le 15/01 : seul décembre est refusé', () => {
       const changed = ch('2026-12-28_marie_M', '2027-01-04_marie_M');
       expect(findYearLockViolations(changed, nonPartner('2027-02-01'))).toEqual(['2026-12-28_marie_M']);
     });
-    it('délai de grâce : décembre reste modifiable jusqu’au 30/01', () => {
-      expect(findYearLockViolations(ch('2026-12-28_marie_M'), nonPartner('2027-01-30'))).toEqual([]);
+    it('délai de grâce : décembre reste modifiable jusqu’au 14/01', () => {
+      expect(findYearLockViolations(ch('2026-12-28_marie_M'), nonPartner('2027-01-14'))).toEqual([]);
     });
-    it('verrou au 31/01 inclus', () => {
-      expect(findYearLockViolations(ch('2026-12-28_marie_M'), nonPartner('2027-01-31'))).toEqual(['2026-12-28_marie_M']);
+    it('verrou au 15/01 inclus', () => {
+      expect(findYearLockViolations(ch('2026-12-28_marie_M'), nonPartner('2027-01-15'))).toEqual([
+        '2026-12-28_marie_M',
+      ]);
     });
     it('toutes les clés datées de la personne sont concernées (décision, heures sup, note)', () => {
       const keys = ['2026-12-28_marie_M_decision', '2026-12-28_marie_plus_mins', '2026-12-28_marie_day_note'];
@@ -697,12 +699,6 @@ describe.each(IMPLEMENTATIONS)('verrous de fin d’année — %s', (_label, m) =
     it('mois rouvert par un associé (closed_month = false) : accepté après la date de verrou', () => {
       const slots = { closed_month_2026_11: 'false' };
       expect(findYearLockViolations(ch('2026-12-05_marie_M'), nonPartner('2027-03-01', slots))).toEqual([]);
-    });
-    it('date de verrou avancée par réglage (asv_lock_date_2027)', () => {
-      const slots = { asv_lock_date_2027: '2027-01-10' };
-      expect(findYearLockViolations(ch('2026-12-28_marie_M'), nonPartner('2027-01-10', slots))).toEqual([
-        '2026-12-28_marie_M',
-      ]);
     });
     it('lignes vétérinaires et pseudo-personnes (commentaire, clinique fermée) hors verrou ASV', () => {
       const keys = ['2026-12-28_david_M', '2026-12-28_comment', '2026-12-28_clinic_closed'];
@@ -748,24 +744,12 @@ describe.each(IMPLEMENTATIONS)('verrous de fin d’année — %s', (_label, m) =
   });
 
   describe('réglages réservés aux associés', () => {
-    const settings = ['closed_month_2026_11', 'forecast_closed_2027', 'rollover_date_2028', 'asv_lock_date_2028'];
+    const settings = ['closed_month_2026_11', 'forecast_closed_2027'];
     it('refusés à un non-associé', () => {
       expect(findYearLockViolations(ch(...settings), nonPartner('2027-06-01'))).toEqual(settings);
     });
     it('acceptés pour un associé', () => {
       expect(findYearLockViolations(ch(...settings), partner('2027-06-01'))).toEqual([]);
-    });
-    it('rollover_date déjà atteinte : refusée même à un associé', () => {
-      expect(findYearLockViolations(ch('rollover_date_2027'), partner('2027-01-05'))).toEqual(['rollover_date_2027']);
-    });
-    it('rollover_date anticipée déjà atteinte (15/12) : refusée', () => {
-      const slots = { rollover_date_2027: '2026-12-15' };
-      expect(findYearLockViolations(ch('rollover_date_2027'), partner('2026-12-20', slots))).toEqual([
-        'rollover_date_2027',
-      ]);
-    });
-    it('rollover_date à venir : modifiable par un associé', () => {
-      expect(findYearLockViolations(ch('rollover_date_2027'), partner('2026-11-24'))).toEqual([]);
     });
   });
 });

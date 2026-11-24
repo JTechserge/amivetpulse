@@ -91,9 +91,9 @@ describe('isMonthClosed / setMonthClosed (Lot 6)', () => {
 describe('isForecastLocked / setForecastClosed', () => {
   beforeEach(resetStore);
 
-  it('le prévisionnel 2027 est ouvert avant la bascule, figé à partir du 01/01/2027', () => {
-    expect(isForecastLocked(2027, '2026-12-31')).toBe(false);
-    expect(isForecastLocked(2027, '2027-01-01')).toBe(true);
+  it('le prévisionnel 2027 est ouvert avant la bascule, figé à partir du lundi 28/12/2026', () => {
+    expect(isForecastLocked(2027, '2026-12-27')).toBe(false);
+    expect(isForecastLocked(2027, '2026-12-28')).toBe(true);
   });
 
   it('rouvrir une année figée écrit « false », figer à nouveau écrit « true »', () => {

@@ -102,7 +102,7 @@ function changeMonth(viewKey, delta) {
 function goToToday(viewKey) {
   const cfg = store.CAL_VIEWS[viewKey];
   const ty = today.getFullYear();
-  // Bascule anticipée (ex. 15/12 avec rollover_date en décembre) : « aujourd'hui »
+  // Bascule en décembre (ex. lundi 28/12/2026 pour 2027) : « aujourd'hui »
   // tombe dans l'année écoulée, qui reste dans la fenêtre de navigation.
   if (cfg.baseYear && (ty === cfg.baseYear || ty === cfg.baseYear - 1)) cfg.year = ty;
   cfg.navState.month = ty === cfg.year ? today.getMonth() : 0;

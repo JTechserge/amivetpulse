@@ -1,13 +1,11 @@
 // Année de la clinique et verrous de fin d'année — runtime Deno (save-planning).
 //
-// MIROIR de src/lib/clinic-year.js : même logique, mêmes réglages, mêmes bornes.
+// MIROIR de src/lib/clinic-year.js : même logique, mêmes règles (voir son en-tête).
 // tests/unit/clinic-year.test.js fait tourner les mêmes cas contre les deux.
 // L'Edge Function tourne en UTC : ne JAMAIS utiliser getFullYear() sur la date
 // du jour, toujours parisTodayIso().
 
 type Slots = Record<string, unknown> | null | undefined;
-
-const ISO_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** Date du jour à Paris, 'YYYY-MM-DD', quel que soit le fuseau de la machine. */
 export function parisTodayIso(now: Date = new Date()): string {
@@ -19,19 +17,15 @@ export function parisTodayIso(now: Date = new Date()): string {
   }).format(now);
 }
 
-function validIsoBetween(value: unknown, min: string, max: string): string | null {
-  if (typeof value !== 'string') return null;
-  const match = value.match(ISO_RE);
-  if (!match) return null;
-  const [y, m, d] = [Number(match[1]), Number(match[2]), Number(match[3])];
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
-  return value >= min && value <= max ? value : null;
-}
-
-export function rolloverDate(slots: Slots, year: number): string {
-  const v = validIsoBetween(slots?.[`rollover_date_${year}`], `${year - 1}-12-01`, `${year}-01-31`);
-  return v ?? `${year}-01-01`;
+export function rolloverDate(_slots: Slots, year: number): string {
+  const jan1 = new Date(Date.UTC(year, 0, 1));
+  const dow = jan1.getUTCDay();
+  let shift: number;
+  if (dow === 0) shift = 1;
+  else if (dow === 6) shift = 2;
+  else shift = 1 - dow;
+  jan1.setUTCDate(jan1.getUTCDate() + shift);
+  return jan1.toISOString().slice(0, 10);
 }
 
 export function clinicCurrentYear(todayIso: string, slots: Slots): number {
@@ -41,11 +35,8 @@ export function clinicCurrentYear(todayIso: string, slots: Slots): number {
   return y;
 }
 
-export function asvLockDate(slots: Slots, year: number): string {
-  const v = validIsoBetween(slots?.[`asv_lock_date_${year}`], `${year}-01-01`, `${year}-03-31`);
-  const lock = v ?? `${year}-01-31`;
-  const roll = rolloverDate(slots, year);
-  return lock > roll ? lock : roll;
+export function asvLockDate(_slots: Slots, year: number): string {
+  return `${year}-01-15`;
 }
 
 export function isAsvMonthLocked(slots: Slots, todayIso: string, year: number, month0: number): boolean {

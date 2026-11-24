@@ -340,7 +340,7 @@ export function setForecastSig(pid, year, sig) {
 // ── Clôture de mois (Lot 6, tri-état depuis la bascule d'année) ──
 // month : 0-indexé (0=Jan … 11=Déc), cohérent avec cfg.navState.month et Date.getMonth().
 // closed_month_<Y>_<M0> : 'true' clôturé, 'false' rouvert par un associé, absent =
-// règle par défaut (verrouillé à partir de asv_lock_date_<Y+1>). La règle vit dans
+// règle par défaut (verrouillé à partir du 15/01/<Y+1>). La règle vit dans
 // lib/clinic-year.js, partagée avec save-planning qui refuse les mêmes écritures.
 export function closedMonthKey(year, month) {
   return `closed_month_${year}_${month}`;

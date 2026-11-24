@@ -5,7 +5,7 @@
    supabase/functions/_shared/planning-auth.ts (Deno TypeScript).
    ================================================================ */
 
-import { isAsvMonthLocked, isForecastYearLocked, forecastWeekYear, rolloverDate } from './clinic-year.js';
+import { isAsvMonthLocked, isForecastYearLocked, forecastWeekYear } from './clinic-year.js';
 
 /**
  * Extrait le person_id d'une clé de planning.
@@ -289,9 +289,8 @@ export function isPartnerProfile(profile, vetRosterRows) {
   return !row || row.partner === true;
 }
 
-// Réglages de bascule et de clôture : écrits par un associé seulement.
-const PARTNER_ONLY_KEY_RE = /^(closed_month_|forecast_closed_|rollover_date_|asv_lock_date_)/;
-const ROLLOVER_KEY_RE = /^rollover_date_(\d{4})$/;
+// Réglages de clôture (mois ASV, prévisionnel) : écrits par un associé seulement.
+const PARTNER_ONLY_KEY_RE = /^(closed_month_|forecast_closed_)/;
 const DATED_KEY_RE = /^(\d{4})-(\d{2})-\d{2}_([^_]+)/;
 const FORECAST_KEY_RE = /^forecast_(?!sig_)[^_]+_(\d{4}-\d{2}-\d{2})$/;
 
@@ -303,7 +302,6 @@ const FORECAST_KEY_RE = /^forecast_(?!sig_)[^_]+_(\d{4}-\d{2}-\d{2})$/;
  *
  * Non-associé : cellules datées d'une ASV de la liste blanche dans un mois
  * verrouillé, semaines de prévisionnel d'une année figée, réglages réservés.
- * Tous : modification d'une date de bascule déjà atteinte.
  *
  * Limite assumée : les clés non datées (asv_arrival_*, asv_reliquat_*) et les ASV
  * absentes de la liste blanche échappent au verrou.
@@ -317,11 +315,6 @@ export function findYearLockViolations(changedKeys, { slots, todayIso, asvPerson
   const asvIds = asvPersonIds instanceof Set ? asvPersonIds : new Set(asvPersonIds || []);
   const locked = [];
   for (const { key } of changedKeys) {
-    const roll = key.match(ROLLOVER_KEY_RE);
-    if (roll && todayIso >= rolloverDate(slots, Number(roll[1]))) {
-      locked.push(key);
-      continue;
-    }
     if (isPartner) continue;
     if (PARTNER_ONLY_KEY_RE.test(key)) {
       locked.push(key);
