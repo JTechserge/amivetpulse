@@ -3,7 +3,7 @@
    Pas de dépendance sur l'état global ou le réseau.
    Importé par app.js.
    ================================================================ */
-import { allPeople, PERSON_COLORS_KEY } from './config.js';
+import { allPeople } from './config.js';
 
 // ----------------------------------------------------------------
 // Toasts — utilise textContent pour les arguments afin d'éviter
@@ -57,15 +57,4 @@ export function openConfirmModal({title, message, confirmLabel='Confirmer', dang
 // ----------------------------------------------------------------
 export function applyPersonColorVars(){
   allPeople().forEach(p=> document.documentElement.style.setProperty(`--color-${p.id}`, p.color));
-}
-
-export function loadPersonColors(){
-  try{
-    const raw = localStorage.getItem(PERSON_COLORS_KEY);
-    if(raw){
-      const colors = JSON.parse(raw);
-      allPeople().forEach(p=>{ if(colors[p.id]) p.color = colors[p.id]; });
-    }
-  }catch(e){ console.warn('Couleurs personnalisées illisibles, valeurs par défaut conservées.', e); }
-  applyPersonColorVars();
 }

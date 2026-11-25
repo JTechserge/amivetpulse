@@ -137,7 +137,15 @@ export const ANNONCE_CATEGORIES = {
 // ----------------------------------------------------------------
 // Rosters dynamiques
 // ----------------------------------------------------------------
+// Effectif ASV HISTORIQUE, propre à chaque poste jusqu'à la v22. Plus jamais
+// écrit : c'est la sauvegarde de retour arrière (redéployer la v22 le relit
+// tel quel). Lu seulement pour amorcer l'affichage et avertir d'un écart.
 export const ASV_ROSTER_KEY = 'amivet_asv_roster';
+// Cache local de la table partagée `asv_roster`, qui fait foi (v23+).
+export const ASV_ROSTER_CACHE_KEY = 'amivet_asv_roster_cache';
+// Posé une fois l'effectif historique comparé à la base sans écart (ou l'écart
+// signalé et lu) : l'avertissement ne revient pas à chaque démarrage.
+export const ASV_LEGACY_CHECKED_KEY = 'amivet_asv_roster_legacy_checked';
 // Cache local du roster vétérinaire. La source de vérité est la table partagée
 // `vet_roster` (Supabase) ; le cache sert au démarrage et hors connexion, pour
 // que le calendrier s'affiche avant/sans la réponse réseau.
@@ -169,7 +177,8 @@ export const STORAGE_KEY = 'amivet_planning_data';
 // attente d'une valeur simplement lue à la session précédente (voir
 // resolveSyncBaseline dans lib/planning-auth.js).
 export const SYNC_BASELINE_KEY = 'amivet_sync_baseline';
-export const PERSON_COLORS_KEY = 'amivet_person_colors';
+// `amivet_person_colors` (surcharge locale des couleurs) n'est plus lue depuis
+// la v23 : les couleurs vivent dans asv_roster.color / vet_roster.color.
 export const VIEW_STATE_KEY = 'amivet_view_state';
 export const AUTH_SESSION_KEY = 'amivet_auth_session';
 

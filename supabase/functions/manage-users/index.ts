@@ -12,7 +12,10 @@ const corsHeaders = {
 
 // Envoi via Brevo, expéditeur unique de l'application. Lève une erreur lisible
 // si Brevo refuse : l'appelant décide si l'échec est bloquant.
-async function sendBrevoEmail(to: { email: string; name: string }, mail: { subject: string; html: string; text: string }) {
+async function sendBrevoEmail(
+  to: { email: string; name: string },
+  mail: { subject: string; html: string; text: string }
+) {
   const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
@@ -367,6 +370,11 @@ serve(async (req) => {
       if (person_id) {
         const { error: rosterError } = await adminClient.from('vet_roster').delete().eq('id', person_id);
         if (rosterError) throw new Error(`Effectif vétérinaire : ${rosterError.message}`);
+        // Effectif ASV partagé (v23) : même règle, en tout dernier. Un
+        // person_id n'existe que dans l'une des deux tables (trigger
+        // roster_id_unique_across) ; l'autre suppression ne touche rien.
+        const { error: asvRosterError } = await adminClient.from('asv_roster').delete().eq('id', person_id);
+        if (asvRosterError) throw new Error(`Effectif ASV : ${asvRosterError.message}`);
       }
 
       return new Response(JSON.stringify({ ok: true }), {

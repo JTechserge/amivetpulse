@@ -149,6 +149,15 @@ describe('purge — ordre et échecs', () => {
     expect(PURGE_BLOCK).toMatch(/rosterError\)\s*throw new Error/);
   });
 
+  it('retire la ligne asv_roster en dernier, après vet_roster, et rend son échec fatal', () => {
+    // Effectif ASV partagé depuis la v23 : sans cette suppression, une ASV
+    // purgée réapparaîtrait sur tous les postes au rechargement suivant.
+    const iVet = PURGE_BLOCK.indexOf("from('vet_roster').delete()");
+    const iAsv = PURGE_BLOCK.indexOf("from('asv_roster').delete()");
+    expect(iAsv).toBeGreaterThan(iVet);
+    expect(PURGE_BLOCK).toMatch(/asvRosterError\)\s*throw new Error/);
+  });
+
   it('lit le résultat de chaque suppression au lieu de l’ignorer', () => {
     // Le bug d'origine : Promise.all sur des requêtes dont personne ne
     // regardait le retour, et un ok:true renvoyé malgré l'échec.

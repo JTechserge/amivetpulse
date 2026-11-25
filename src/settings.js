@@ -14,12 +14,13 @@ import { showToast, applyPersonColorVars, openConfirmModal } from './ui.js';
 import { supabaseHeaders, getAuthSession, authUpdatePassword } from './auth.js';
 import {
   reindexPresentShades,
-  saveASVRoster,
-  savePersonColors,
+  saveASVRosterCache,
+  applyASVRosterRow,
   reindexVetPresentShades,
   saveVetRosterCache,
 } from './state.js';
-import { apiUpsertVetPerson } from './api.js';
+import { apiUpsertVetPerson, apiInsertASVPerson, apiPatchASVPerson, apiSetVetColor } from './api.js';
+import { asvChangedColumns, asvPersonToInsertRow } from './lib/asv-roster.js';
 import {
   countCollaboratorFootprint,
   requiresSecondConfirmation,
@@ -45,7 +46,7 @@ import { guideSections, renderGuideAppSection, SECTION_META } from '../supabase/
 // ── Callbacks injectés (fonctions/état restés dans app.js) ──────
 let _saveData, _renderCurrentView, _snapshotBeforeChange;
 let _canAccessSettings, _effectiveRole, _applyRoleToDOM, _openASVImpersonationPicker;
-let _authSignOut, _authRefreshSession, _buildCalViews, _activeCalendarViewKey;
+let _authSignOut, _authRefreshSession, _buildCalViews, _activeCalendarViewKey, _reloadASVRoster;
 
 function setupSettings({
   saveData,
@@ -59,6 +60,7 @@ function setupSettings({
   authRefreshSession,
   buildCalViews,
   activeCalendarViewKey,
+  reloadASVRoster,
 }) {
   _saveData = saveData;
   _renderCurrentView = renderCurrentView;
@@ -71,6 +73,7 @@ function setupSettings({
   _authRefreshSession = authRefreshSession;
   _buildCalViews = buildCalViews;
   _activeCalendarViewKey = activeCalendarViewKey;
+  _reloadASVRoster = reloadASVRoster;
 
   // Listener global persistant pour le bouton Se déconnecter.
   // Indépendant de tout re-init du menu, ajouté une seule fois.
@@ -99,32 +102,106 @@ function pickDefaultASVColor() {
   return free || '#64748B';
 }
 
-function _setASVTimeFraction(personId, fraction) {
-  const p = ASV_PEOPLE.find((x) => x.id === personId);
-  if (p) {
-    p.timeFraction = fraction;
-    saveASVRoster();
+// ── Écritures de l'effectif partagé ─────────────────────────────
+// asv_roster fait foi (v23+). Règles issues de la contre-expertise du
+// 25/11/2026 : une personne à la fois, seulement les colonnes modifiées, sous
+// contrôle de concurrence optimiste ; hors ligne, refus explicite. Le local
+// n'est modifié qu'APRÈS l'accord de la base, à partir de la ligne renvoyée.
+
+function rosterOfflineReason() {
+  return typeof navigator !== 'undefined' && navigator.onLine === false
+    ? 'Hors ligne : modification de l’effectif impossible. Reconnectez-vous puis recommencez.'
+    : null;
+}
+
+/**
+ * Enregistre `changes` (champs en mémoire : color, timeFraction, workingDays,
+ * lastName…) sur une ASV. Renvoie null si tout est passé, sinon le motif du
+ * refus (déjà affiché). Sur conflit, l'effectif est rechargé depuis la base.
+ */
+async function saveASVPersonChanges(person, changes) {
+  const columns = asvChangedColumns(person, changes);
+  if (!Object.keys(columns).length) return null;
+  const offline = rosterOfflineReason();
+  if (offline) {
+    showToast(offline, '⚠️');
+    return offline;
+  }
+  if (!person.updatedAt) {
+    const msg = `Effectif ASV pas encore chargé depuis le serveur : rechargez la page avant de modifier ${person.short}.`;
+    showToast(msg, '⚠️');
+    _reloadASVRoster?.();
+    return msg;
+  }
+  try {
+    const row = await apiPatchASVPerson(person.id, person.updatedAt, columns);
+    applyASVRosterRow(row);
+    applyPersonColorVars();
+    return null;
+  } catch (e) {
+    const msg = e.conflict
+      ? `${person.short} a été modifiée entre-temps sur un autre poste : effectif rechargé, refaites la modification.`
+      : `Enregistrement de ${person.short} impossible : ${e.message}`;
+    showToast(msg, '⚠️');
+    if (e.conflict) await _reloadASVRoster?.();
+    return msg;
   }
 }
 
-function addASVPerson(name, lastName = '') {
+/** Couleur d'un vétérinaire, écrite dans vet_roster.color. Même contrat. */
+async function saveVetColor(person, color) {
+  if (person.color.toLowerCase() === color.toLowerCase()) return null;
+  const offline = rosterOfflineReason();
+  if (offline) {
+    showToast(offline, '⚠️');
+    return offline;
+  }
+  try {
+    await apiSetVetColor(person.id, color);
+    person.color = color;
+    saveVetRosterCache();
+    applyPersonColorVars();
+    return null;
+  } catch (e) {
+    const msg = `Couleur de ${person.short} non enregistrée : ${e.message}`;
+    showToast(msg, '⚠️');
+    return msg;
+  }
+}
+
+/**
+ * Crée une ASV dans l'effectif partagé, fraction de temps comprise. Renvoie
+ * null si la base refuse : mieux vaut une invitation sans person_id qu'une
+ * ligne visible seulement sur ce poste.
+ */
+async function addASVPerson(name, lastName = '', tf = null) {
   name = (name || '').trim();
   if (!name) return null;
+  const offline = rosterOfflineReason();
+  if (offline) {
+    showToast(offline, '⚠️');
+    return null;
+  }
   const person = {
     id: uniqueASVId(slugifyName(name)),
     name,
     short: name,
     initial: name.slice(0, 2).toUpperCase(),
     color: pickDefaultASVColor(),
-    present: null,
+    timeFraction: tf?.fraction ?? 1,
+    workingDays: tf?.workingDays ?? null,
+    sortOrder: ASV_PEOPLE.reduce((m, p) => Math.max(m, p.sortOrder ?? 0), -1) + 1,
     ...(lastName ? { lastName: lastName.trim() } : {}),
   };
-  ASV_PEOPLE.push(person);
-  reindexPresentShades();
-  saveASVRoster();
-  savePersonColors();
-  applyPersonColorVars();
-  return person;
+  try {
+    const row = await apiInsertASVPerson(asvPersonToInsertRow(person));
+    const created = applyASVRosterRow(row);
+    applyPersonColorVars();
+    return created;
+  } catch (e) {
+    showToast(`Création de l’ASV impossible : ${e.message}`, '⚠️');
+    return null;
+  }
 }
 
 function uniqueVetId(base) {
@@ -165,7 +242,6 @@ async function addVetEmployePerson(name) {
   PEOPLE.push(person);
   reindexVetPresentShades();
   saveVetRosterCache();
-  savePersonColors();
   applyPersonColorVars();
   return person;
 }
@@ -204,7 +280,7 @@ function openColorPickerModal() {
   backdrop.classList.add('open');
   const close = () => backdrop.classList.remove('open');
   box.querySelector('#modal-cancel').onclick = close;
-  box.querySelector('#color-save').onclick = () => {
+  box.querySelector('#color-save').onclick = async () => {
     const all = allPeople();
     const newColors = {};
     all.forEach((p) => {
@@ -233,10 +309,25 @@ function openColorPickerModal() {
       errorEl.style.display = 'block';
       return;
     }
-    all.forEach((p) => (p.color = newColors[p.id]));
-    savePersonColors();
+    // Une écriture par personne modifiée, arrêt au premier refus : les
+    // couleurs déjà enregistrées restent, les suivantes ne partent pas.
+    const saveBtn = box.querySelector('#color-save');
+    saveBtn.disabled = true;
+    let failure = null;
+    for (const p of all) {
+      const color = newColors[p.id];
+      if (color.toLowerCase() === p.color.toLowerCase()) continue;
+      failure = ASV_PEOPLE.includes(p) ? await saveASVPersonChanges(p, { color }) : await saveVetColor(p, color);
+      if (failure) break;
+    }
     applyPersonColorVars();
     _renderCurrentView();
+    if (failure) {
+      errorEl.textContent = failure;
+      errorEl.style.display = 'block';
+      saveBtn.disabled = false;
+      return;
+    }
     close();
     showToast('Couleurs appliquées', '🎨');
   };
@@ -311,7 +402,9 @@ function removeFromRosters(personId) {
   if (asvIdx !== -1) {
     ASV_PEOPLE.splice(asvIdx, 1);
     reindexPresentShades();
-    saveASVRoster();
+    // Cache seulement : manage-users a supprimé la ligne asv_roster en
+    // dernier, après toutes les données, avant qu'on arrive ici.
+    saveASVRosterCache();
     return;
   }
   const vetIdx = PEOPLE.findIndex((p) => p.id === personId);
@@ -710,10 +803,19 @@ function openManageUsersModal() {
               const existing = ASV_PEOPLE.find(
                 (p) => p.name.trim().toLowerCase() === name.trim().toLowerCase() && !linkedPersonIds.has(p.id)
               );
-              const asvPerson = existing || addASVPerson(name, inviteLastName);
-              if (existing && inviteLastName) {
-                existing.lastName = inviteLastName;
-                saveASVRoster();
+              // `inviteTf` a été lu ET validé avant l'appel réseau : une fraction
+              // nulle n'arrive jamais jusqu'ici. Une nouvelle ASV est créée en
+              // base avec son temps de travail ; une existante n'est modifiée
+              // que sur les colonnes qui changent.
+              const asvPerson = existing || (await addASVPerson(name, inviteLastName, inviteTf));
+              if (existing) {
+                const changes = {};
+                if (inviteLastName) changes.lastName = inviteLastName;
+                if (inviteTf) {
+                  changes.timeFraction = inviteTf.fraction;
+                  changes.workingDays = inviteTf.workingDays;
+                }
+                await saveASVPersonChanges(existing, changes);
               }
               personId = asvPerson?.id || null;
               // Date d'arrivée d'une nouvelle ASV : sert au prorata des congés payés
@@ -723,14 +825,6 @@ function openManageUsersModal() {
               if (asvPerson && !existing && /^\d{4}-\d{2}-\d{2}$/.test(inviteArrival)) {
                 store.DATA.slots[`asv_arrival_${asvPerson.id}`] = inviteArrival;
                 _saveData(false);
-              }
-              // Appliquer le temps de travail choisi
-              // `inviteTf` a été lu ET validé avant l'appel réseau : une fraction
-              // nulle n'arrive jamais jusqu'ici.
-              if (asvPerson && inviteTf) {
-                asvPerson.timeFraction = inviteTf.fraction;
-                asvPerson.workingDays = inviteTf.workingDays;
-                saveASVRoster();
               }
             }
             if (personId) {
@@ -993,6 +1087,27 @@ function openEditUserModal(userId, users, onBack) {
     }
     box.querySelector('#edit-save').disabled = true;
     try {
+      // Effectif d'abord : c'est l'écriture qui peut être refusée pour
+      // conflit (autre poste) ou hors ligne. Refusée, rien n'est envoyé au
+      // compte et la fenêtre reste ouverte.
+      const rosterPerson = personId ? personOf(personId) : null;
+      if (rosterPerson && ASV_PEOPLE.includes(rosterPerson)) {
+        const changes = {};
+        if (colorInput) changes.color = colorInput.value;
+        if (role === 'asv') {
+          const lastNameInput = box.querySelector('#edit-lastname');
+          if (lastNameInput !== null) changes.lastName = lastNameInput.value.trim() || null;
+          if (tfResult) {
+            changes.timeFraction = tfResult.fraction;
+            changes.workingDays = tfResult.workingDays;
+          }
+        }
+        const failure = await saveASVPersonChanges(rosterPerson, changes);
+        if (failure) throw new Error(failure);
+      } else if (rosterPerson && colorInput) {
+        const failure = await saveVetColor(rosterPerson, colorInput.value);
+        if (failure) throw new Error(failure);
+      }
       const payload = {
         action: 'update',
         user_id: userId,
@@ -1010,28 +1125,6 @@ function openEditUserModal(userId, users, onBack) {
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
         throw new Error(e.error || `Erreur ${res.status}`);
-      }
-      // Mettre à jour la couleur en local
-      if (colorInput && personId) {
-        const p = personOf(personId);
-        if (p) {
-          p.color = colorInput.value;
-          savePersonColors();
-          applyPersonColorVars();
-        }
-      }
-      // Mettre à jour le temps de travail contractuel en local (ASV uniquement)
-      if (role === 'asv' && personId) {
-        const lastNameInput = box.querySelector('#edit-lastname');
-        const p = personOf(personId);
-        if (p) {
-          if (lastNameInput !== null) p.lastName = lastNameInput.value.trim() || undefined;
-          if (tfResult) {
-            p.timeFraction = tfResult.fraction;
-            p.workingDays = tfResult.workingDays;
-          }
-          saveASVRoster();
-        }
       }
       showToast('Collaborateur mis à jour', '✅');
       onBack();

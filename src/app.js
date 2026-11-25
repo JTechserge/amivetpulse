@@ -7,6 +7,8 @@ import {
   SYNC_BASELINE_KEY,
   VIEW_STATE_KEY,
   AUTH_SESSION_KEY,
+  ASV_ROSTER_KEY,
+  ASV_LEGACY_CHECKED_KEY,
   SUPABASE_URL,
   SUPABASE_AUTH_URL,
   SUPABASE_ANON_KEY,
@@ -15,9 +17,10 @@ import {
 } from './config.js';
 import { escapeHTML, fmtISO, daysInMonth, isoWeekday, isSunday, holidayName, getWeekMondayDate } from './utils.js';
 import { getAuthSession, saveAuthSession, supabaseHeaders } from './auth.js';
-import { loadASVRoster, loadVetRosterCache, applyVetRosterRows } from './state.js';
-import { showToast, showSavedToast, openConfirmModal, loadPersonColors, applyPersonColorVars } from './ui.js';
-import { pushChangesToSupabase, syncFromSupabase, fetchVetRoster } from './api.js';
+import { loadASVRoster, loadVetRosterCache, applyVetRosterRows, applyASVRosterRows } from './state.js';
+import { compareLegacyRoster } from './lib/asv-roster.js';
+import { showToast, showSavedToast, openConfirmModal, applyPersonColorVars } from './ui.js';
+import { pushChangesToSupabase, syncFromSupabase, fetchVetRoster, fetchASVRoster } from './api.js';
 import {
   buildPatch,
   applyPatch,
@@ -848,7 +851,9 @@ function initApp() {
   applyRoleToDOM();
   loadASVRoster();
   loadVetRosterCache();
-  loadPersonColors();
+  // Les couleurs viennent des effectifs (asv_roster / vet_roster) : plus de
+  // surcharge locale `amivet_person_colors` depuis la v23.
+  applyPersonColorVars();
   // Rafraîchir le token toutes les 45 min pour éviter les 401 après expiration
   setInterval(() => authRefreshSession(), 45 * 60 * 1000);
   loadData();
@@ -937,6 +942,7 @@ document.addEventListener('DOMContentLoaded', init);
 function refreshData() {
   pullRemotePlanning();
   loadVetRoster();
+  loadASVRosterRemote();
   loadSignatures();
   loadForecastSignatures();
   loadInterviews();
@@ -986,6 +992,53 @@ function loadVetRoster() {
     }
   });
 }
+
+// L'effectif ASV est partagé (table asv_roster) depuis la v23. Même cycle que
+// vet_roster : une réponse vide ou en échec laisse le cache en place.
+// Renvoie une promesse pour que Réglages puisse recharger après un conflit.
+function loadASVRosterRemote() {
+  return fetchASVRoster().then((rows) => {
+    if (!rows || !applyASVRosterRows(rows)) return false;
+    applyPersonColorVars();
+    renderCurrentView();
+    warnLegacyASVRosterDrift(rows);
+    return true;
+  });
+}
+
+// Premier démarrage de la v23 sur un poste : l'effectif historique de ce
+// poste (clé `amivet_asv_roster`, laissée intacte pour un retour arrière) est
+// comparé à la base. En cas d'écart on AVERTIT, on ne pousse jamais rien :
+// l'effectif de référence a été inséré depuis le poste principal, un autre
+// poste peut porter un effectif périmé. Réservé à qui peut corriger (Réglages).
+function warnLegacyASVRosterDrift(rows) {
+  if (!canAccessSettings() || localStorage.getItem(ASV_LEGACY_CHECKED_KEY)) return;
+  const markChecked = () => localStorage.setItem(ASV_LEGACY_CHECKED_KEY, new Date().toISOString());
+  let legacy;
+  try {
+    legacy = JSON.parse(localStorage.getItem(ASV_ROSTER_KEY) || 'null');
+  } catch {
+    legacy = null;
+  }
+  const diffs = Array.isArray(legacy) ? compareLegacyRoster(legacy, rows) : [];
+  if (!diffs.length) {
+    markChecked();
+    return;
+  }
+  // Non marqué tant que le message n'a pas été lu : fermer la fenêtre sans
+  // confirmer le fait revenir au prochain démarrage.
+  openConfirmModal({
+    title: 'Effectif ASV : écart avec l’ancien effectif de ce poste',
+    message:
+      `${diffs.join(' ; ')}. ` +
+      'L’effectif partagé en base fait foi et rien n’a été envoyé depuis ce poste. ' +
+      'Vérifiez ces personnes dans Réglages et corrigez-les si besoin.',
+    confirmLabel: 'J’ai noté',
+    danger: false,
+    onConfirm: markChecked,
+  });
+}
+
 function refreshAllPwaData() {
   refreshData();
 }
@@ -1082,6 +1135,7 @@ setupSettings({
   authRefreshSession,
   buildCalViews,
   activeCalendarViewKey,
+  reloadASVRoster: loadASVRosterRemote,
 });
 setupCalendar({
   snapshotBeforeChange,

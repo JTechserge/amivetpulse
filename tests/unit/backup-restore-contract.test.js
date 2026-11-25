@@ -79,8 +79,8 @@ function purgedTables() {
   const block = FN_SRC.match(/const PURGE_TARGETS[^=]*=\s*\[([\s\S]*?)\n\];/);
   if (!block) throw new Error('PURGE_TARGETS introuvable dans la Edge Function.');
   const targets = [...block[1].matchAll(/\{\s*table:\s*'([a-z_]+)'/g)].map(([, t]) => t);
-  // Les deux lignes que la purge retire hors de PURGE_TARGETS, en fin de course.
-  return [...new Set([...targets, 'vet_roster', 'user_profiles'])];
+  // Les lignes que la purge retire hors de PURGE_TARGETS, en fin de course.
+  return [...new Set([...targets, 'vet_roster', 'asv_roster', 'user_profiles'])];
 }
 
 // Tables du schéma volontairement hors sauvegarde. Toute entrée ici est une

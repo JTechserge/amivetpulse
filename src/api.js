@@ -107,6 +107,81 @@ export async function apiSetVetArchived(personId, archived) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
 
+// Couleur d'un vétérinaire : seule colonne que le poste modifie en dehors de
+// la création. Lève si aucune ligne n'a été touchée (personne absente, RLS).
+export async function apiSetVetColor(personId, color) {
+  const res = await fetch(`${SUPABASE_URL}vet_roster?id=eq.${encodeURIComponent(personId)}`, {
+    method: 'PATCH',
+    headers: supabaseHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+    body: JSON.stringify({ color, updated_at: new Date().toISOString() }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const rows = await res.json();
+  if (!Array.isArray(rows) || !rows.length) throw new Error('aucune ligne modifiée');
+}
+
+// ----------------------------------------------------------------
+// Effectif ASV (asv_roster table) — partagé entre postes depuis le 25/11/2026
+// ----------------------------------------------------------------
+
+// Lecture ouverte à tout compte authentifié. null en cas d'erreur → cache local.
+export async function fetchASVRoster() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}asv_roster?select=*&order=sort_order.asc`, {
+      headers: supabaseHeaders(),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    console.warn('Effectif ASV inaccessible (hors ligne ?), cache local conservé.', e);
+    return null;
+  }
+}
+
+// Création d'une ligne. Pas d'upsert : un id déjà pris (autre poste, ou
+// vétérinaire) doit échouer, pas écraser la personne existante.
+export async function apiInsertASVPerson(row) {
+  const res = await fetch(`${SUPABASE_URL}asv_roster`, {
+    method: 'POST',
+    headers: supabaseHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+    body: JSON.stringify(row),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `HTTP ${res.status}`);
+  }
+  const rows = await res.json();
+  return rows[0];
+}
+
+/**
+ * Modifie les seules colonnes données d'UNE ligne, à condition qu'elle n'ait
+ * pas bougé depuis la lecture (updated_at, tenu par trigger en base).
+ * 0 ligne touchée = modifiée entre-temps sur un autre poste (ou droit refusé) :
+ * l'erreur porte `conflict`, l'appelant recharge l'effectif.
+ */
+export async function apiPatchASVPerson(personId, expectedUpdatedAt, columns) {
+  const url =
+    `${SUPABASE_URL}asv_roster?id=eq.${encodeURIComponent(personId)}` +
+    `&updated_at=eq.${encodeURIComponent(expectedUpdatedAt)}`;
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: supabaseHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+    body: JSON.stringify(columns),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `HTTP ${res.status}`);
+  }
+  const rows = await res.json();
+  if (!Array.isArray(rows) || !rows.length) {
+    const err = new Error('modifiée entre-temps sur un autre poste');
+    err.conflict = true;
+    throw err;
+  }
+  return rows[0];
+}
+
 // ----------------------------------------------------------------
 // Signatures électroniques (monthly_signatures table)
 // ----------------------------------------------------------------

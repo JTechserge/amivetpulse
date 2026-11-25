@@ -25,7 +25,7 @@ interface AsvPerson {
 async function getRoster(page: Page): Promise<AsvPerson[]> {
   await page.goto('./');
   await page.waitForTimeout(600);
-  return page.evaluate<AsvPerson[]>(() => JSON.parse(localStorage.getItem('amivet_asv_roster') || '[]'));
+  return page.evaluate<AsvPerson[]>(() => JSON.parse(localStorage.getItem('amivet_asv_roster_cache') || '[]'));
 }
 
 // ────────────────────────────────────────────────────────────
@@ -34,7 +34,8 @@ async function getRoster(page: Page): Promise<AsvPerson[]> {
 
 test.describe('Effectif ASV — localStorage après init', () => {
   // loadASVRoster() s'exécute dans init() → DOMContentLoaded
-  // et sauvegarde le roster (+ Carla si absente) dans localStorage.
+  // et écrit le cache `amivet_asv_roster_cache` (la clé historique
+  // `amivet_asv_roster` n'est plus jamais écrite depuis la v23).
 
   test('le roster contient exactement 4 ASV (Marie, Johanna, Julie, Carla)', async ({ page }) => {
     const roster = await getRoster(page);
