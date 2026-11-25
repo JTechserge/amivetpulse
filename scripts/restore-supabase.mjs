@@ -35,6 +35,7 @@ const TABLES = [
   'planning_data',
   'user_profiles',
   'vet_roster',
+  'asv_roster',
   'email_settings',
   'annual_interviews',
   'cp_adjustments',

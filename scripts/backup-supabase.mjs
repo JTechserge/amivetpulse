@@ -27,6 +27,7 @@ const TABLES = [
   { name: 'planning_data',       requiredMinRows: 1 }, // singleton, doit toujours exister
   { name: 'user_profiles' },
   { name: 'vet_roster' }, // effectif vétérinaire ; détruit par la purge de collaborateur
+  { name: 'asv_roster' }, // effectif ASV (fraction de temps : paie) ; détruit par la purge
   { name: 'monthly_signatures' },
   { name: 'forecast_signatures' }, // signatures du prévisionnel ; détruites par la purge
   { name: 'signature_tokens' },
