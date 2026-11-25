@@ -5,6 +5,7 @@
    ================================================================ */
 import { SUPABASE_URL, SUPABASE_FUNCTIONS_URL } from './config.js';
 import { supabaseHeaders } from './auth.js';
+import { asvPatchQuery } from './lib/asv-roster.js';
 
 // ----------------------------------------------------------------
 // Planning data (planning_data table — singleton JSON)
@@ -161,10 +162,7 @@ export async function apiInsertASVPerson(row) {
  * l'erreur porte `conflict`, l'appelant recharge l'effectif.
  */
 export async function apiPatchASVPerson(personId, expectedUpdatedAt, columns) {
-  const url =
-    `${SUPABASE_URL}asv_roster?id=eq.${encodeURIComponent(personId)}` +
-    `&updated_at=eq.${encodeURIComponent(expectedUpdatedAt)}`;
-  const res = await fetch(url, {
+  const res = await fetch(`${SUPABASE_URL}${asvPatchQuery(personId, expectedUpdatedAt)}`, {
     method: 'PATCH',
     headers: supabaseHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
     body: JSON.stringify(columns),

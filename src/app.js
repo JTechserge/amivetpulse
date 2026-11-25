@@ -1026,7 +1026,9 @@ function warnLegacyASVRosterDrift(rows) {
     return;
   }
   // Non marqué tant que le message n'a pas été lu : fermer la fenêtre sans
-  // confirmer le fait revenir au prochain démarrage.
+  // confirmer le fait revenir au prochain démarrage. Jamais par-dessus une
+  // fenêtre ouverte (fiche en cours d'édition) : il reviendra au cycle suivant.
+  if (document.getElementById('modal-backdrop')?.classList.contains('open')) return;
   openConfirmModal({
     title: 'Effectif ASV : écart avec l’ancien effectif de ce poste',
     message:

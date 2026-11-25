@@ -20,7 +20,12 @@ import {
   saveVetRosterCache,
 } from './state.js';
 import { apiUpsertVetPerson, apiInsertASVPerson, apiPatchASVPerson, apiSetVetColor } from './api.js';
-import { asvChangedColumns, asvPersonToInsertRow } from './lib/asv-roster.js';
+import {
+  asvChangedColumns,
+  asvPersonToInsertRow,
+  rosterOfflineRefusal,
+  rosterVersionRefusal,
+} from './lib/asv-roster.js';
 import {
   countCollaboratorFootprint,
   requiresSecondConfirmation,
@@ -109,17 +114,21 @@ function pickDefaultASVColor() {
 // n'est modifié qu'APRÈS l'accord de la base, à partir de la ligne renvoyée.
 
 function rosterOfflineReason() {
-  return typeof navigator !== 'undefined' && navigator.onLine === false
-    ? 'Hors ligne : modification de l’effectif impossible. Reconnectez-vous puis recommencez.'
-    : null;
+  return rosterOfflineRefusal(typeof navigator !== 'undefined' ? navigator.onLine : undefined);
 }
 
 /**
  * Enregistre `changes` (champs en mémoire : color, timeFraction, workingDays,
  * lastName…) sur une ASV. Renvoie null si tout est passé, sinon le motif du
  * refus (déjà affiché). Sur conflit, l'effectif est rechargé depuis la base.
+ *
+ * `version` = updated_at de la personne AU MOMENT OÙ L'UTILISATEUR A VU SES
+ * VALEURS. Une fenêtre ouverte doit passer celle de son ouverture : un
+ * rafraîchissement pendant qu'elle est ouverte met `person.updatedAt` à jour
+ * alors que les champs affichés sont restés anciens, et la condition ne
+ * protégerait plus rien (modification de l'autre poste écrasée sans refus).
  */
-async function saveASVPersonChanges(person, changes) {
+async function saveASVPersonChanges(person, changes, version = person.updatedAt) {
   const columns = asvChangedColumns(person, changes);
   if (!Object.keys(columns).length) return null;
   const offline = rosterOfflineReason();
@@ -127,14 +136,15 @@ async function saveASVPersonChanges(person, changes) {
     showToast(offline, '⚠️');
     return offline;
   }
-  if (!person.updatedAt) {
-    const msg = `Effectif ASV pas encore chargé depuis le serveur : rechargez la page avant de modifier ${person.short}.`;
+  const versionRefusal = rosterVersionRefusal(version, person.short);
+  if (versionRefusal) {
+    const msg = versionRefusal;
     showToast(msg, '⚠️');
     _reloadASVRoster?.();
     return msg;
   }
   try {
-    const row = await apiPatchASVPerson(person.id, person.updatedAt, columns);
+    const row = await apiPatchASVPerson(person.id, version, columns);
     applyASVRosterRow(row);
     applyPersonColorVars();
     return null;
@@ -279,9 +289,15 @@ function openColorPickerModal() {
   `;
   backdrop.classList.add('open');
   const close = () => backdrop.classList.remove('open');
+  // Ce que l'utilisateur voit : couleur et version de chaque personne à
+  // l'ouverture. Une couleur inchangée depuis l'ouverture ne part pas, même si
+  // un rafraîchissement l'a modifiée entre-temps (elle vient d'un autre poste).
+  const opened = new Map(allPeople().map((p) => [p.id, { color: p.color, updatedAt: p.updatedAt ?? null }]));
   box.querySelector('#modal-cancel').onclick = close;
   box.querySelector('#color-save').onclick = async () => {
-    const all = allPeople();
+    // Personnes présentes à l'ouverture seulement : une personne arrivée
+    // depuis n'a pas de champ dans la fenêtre.
+    const all = allPeople().filter((p) => opened.has(p.id) && box.querySelector(`#color-input-${p.id}`));
     const newColors = {};
     all.forEach((p) => {
       newColors[p.id] = box.querySelector(`#color-input-${p.id}`).value;
@@ -316,8 +332,11 @@ function openColorPickerModal() {
     let failure = null;
     for (const p of all) {
       const color = newColors[p.id];
-      if (color.toLowerCase() === p.color.toLowerCase()) continue;
-      failure = ASV_PEOPLE.includes(p) ? await saveASVPersonChanges(p, { color }) : await saveVetColor(p, color);
+      const seen = opened.get(p.id);
+      if (color.toLowerCase() === seen.color.toLowerCase()) continue;
+      failure = ASV_PEOPLE.includes(p)
+        ? await saveASVPersonChanges(p, { color }, seen.updatedAt)
+        : await saveVetColor(p, color);
       if (failure) break;
     }
     applyPersonColorVars();
@@ -772,6 +791,30 @@ function openManageUsersModal() {
           return;
         }
         box.querySelector('#invite-btn').disabled = true;
+        // ASV : la ligne d'effectif est créée AVANT le compte. Dans l'ordre
+        // inverse, un INSERT refusé laissait un compte sans person_id, qu'aucun
+        // écran ne permet de rattacher ; ici un échec du compte laisse au pire
+        // une ligne « Sans compte », visible et invitable ou supprimable.
+        const inviteLastName = role === 'asv' ? (box.querySelector('#invite-lastname')?.value || '').trim() : '';
+        const existingASV =
+          role === 'asv'
+            ? ASV_PEOPLE.find(
+                (p) => p.name.trim().toLowerCase() === name.trim().toLowerCase() && !linkedPersonIds.has(p.id)
+              )
+            : null;
+        let createdASV = null;
+        if (role === 'asv' && !existingASV) {
+          // `inviteTf` a été lu ET validé ci-dessus : une fraction nulle
+          // n'arrive jamais jusqu'ici.
+          createdASV = await addASVPerson(name, inviteLastName, inviteTf);
+          if (!createdASV) {
+            errEl.textContent = 'Création de l’ASV dans l’effectif refusée : aucun compte créé.';
+            errEl.style.display = 'block';
+            box.querySelector('#invite-btn').disabled = false;
+            return;
+          }
+        }
+        let rosterWarning = null;
         try {
           const res = await fetch(`${SUPABASE_FUNCTIONS_URL}manage-users`, {
             method: 'POST',
@@ -799,15 +842,12 @@ function openManageUsersModal() {
               const vetPerson = existingVet || (await addVetEmployePerson(name));
               personId = vetPerson?.id || null;
             } else if (role === 'asv') {
-              const inviteLastName = (box.querySelector('#invite-lastname')?.value || '').trim();
-              const existing = ASV_PEOPLE.find(
-                (p) => p.name.trim().toLowerCase() === name.trim().toLowerCase() && !linkedPersonIds.has(p.id)
-              );
-              // `inviteTf` a été lu ET validé avant l'appel réseau : une fraction
-              // nulle n'arrive jamais jusqu'ici. Une nouvelle ASV est créée en
-              // base avec son temps de travail ; une existante n'est modifiée
-              // que sur les colonnes qui changent.
-              const asvPerson = existing || (await addASVPerson(name, inviteLastName, inviteTf));
+              const existing = existingASV;
+              const asvPerson = existing || createdASV;
+              // Une ASV existante n'est modifiée que sur les colonnes qui
+              // changent. Un refus (conflit, effectif pas encore lu) ne bloque
+              // pas le rattachement du compte, déjà créé, mais doit se voir :
+              // la fraction conservée serait l'ancienne (enjeu de paie).
               if (existing) {
                 const changes = {};
                 if (inviteLastName) changes.lastName = inviteLastName;
@@ -815,7 +855,8 @@ function openManageUsersModal() {
                   changes.timeFraction = inviteTf.fraction;
                   changes.workingDays = inviteTf.workingDays;
                 }
-                await saveASVPersonChanges(existing, changes);
+                const failure = await saveASVPersonChanges(existing, changes);
+                if (failure) rosterWarning = failure;
               }
               personId = asvPerson?.id || null;
               // Date d'arrivée d'une nouvelle ASV : sert au prorata des congés payés
@@ -841,7 +882,12 @@ function openManageUsersModal() {
           box.querySelector('#invite-btn').disabled = false;
           // Compte créé mais email refusé par Brevo : la ligne de planning est
           // liée quand même, l'email se renvoie depuis la fiche du collaborateur.
-          if (inviteData.email_sent === false) {
+          if (rosterWarning) {
+            showToast(
+              `Compte créé, mais le temps de travail de ${name} n'est PAS enregistré (${rosterWarning}). Corrigez-le depuis sa fiche.`,
+              '⚠️'
+            );
+          } else if (inviteData.email_sent === false) {
             showToast(`Compte créé, mais l'email n'est pas parti — renvoyez-le depuis la fiche de ${name}`, '⚠️');
           } else {
             showToast(`Invitation et guide envoyés à ${email}`, '📧');
@@ -974,6 +1020,10 @@ function openEditUserModal(userId, users, onBack) {
   box.className = 'modal-box';
   const isAdmin = store.currentUser?.role === 'admin';
   const personId = user.person_id;
+  // Valeurs vues à l'ouverture (voir saveASVPersonChanges) : la version sert
+  // au contrôle de concurrence, la couleur à ne renvoyer qu'un vrai changement.
+  const openedPerson = personId ? personOf(personId) : null;
+  const opened = { updatedAt: openedPerson?.updatedAt ?? null, color: openedPerson?.color ?? '' };
 
   // eslint-disable-next-line no-unsanitized/property
   box.innerHTML = `
@@ -1093,7 +1143,9 @@ function openEditUserModal(userId, users, onBack) {
       const rosterPerson = personId ? personOf(personId) : null;
       if (rosterPerson && ASV_PEOPLE.includes(rosterPerson)) {
         const changes = {};
-        if (colorInput) changes.color = colorInput.value;
+        if (colorInput && colorInput.value.toLowerCase() !== opened.color.toLowerCase()) {
+          changes.color = colorInput.value;
+        }
         if (role === 'asv') {
           const lastNameInput = box.querySelector('#edit-lastname');
           if (lastNameInput !== null) changes.lastName = lastNameInput.value.trim() || null;
@@ -1102,9 +1154,9 @@ function openEditUserModal(userId, users, onBack) {
             changes.workingDays = tfResult.workingDays;
           }
         }
-        const failure = await saveASVPersonChanges(rosterPerson, changes);
+        const failure = await saveASVPersonChanges(rosterPerson, changes, opened.updatedAt);
         if (failure) throw new Error(failure);
-      } else if (rosterPerson && colorInput) {
+      } else if (rosterPerson && colorInput && colorInput.value.toLowerCase() !== opened.color.toLowerCase()) {
         const failure = await saveVetColor(rosterPerson, colorInput.value);
         if (failure) throw new Error(failure);
       }

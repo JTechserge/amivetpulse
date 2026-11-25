@@ -122,3 +122,29 @@ export function compareLegacyRoster(legacy, rows) {
   }
   return diffs;
 }
+
+/**
+ * Requête du PATCH conditionnel : une ligne, à la version lue. Le `+` du
+ * fuseau de updated_at (« …+00:00 ») DOIT être encodé, sinon PostgREST le lit
+ * comme un espace et la condition ne correspond plus jamais à rien.
+ */
+export function asvPatchQuery(personId, version) {
+  return `asv_roster?id=eq.${encodeURIComponent(personId)}&updated_at=eq.${encodeURIComponent(version)}`;
+}
+
+/** Hors ligne : toute écriture de l'effectif est refusée (décision du 25/11/2026). */
+export function rosterOfflineRefusal(online) {
+  return online === false
+    ? 'Hors ligne : modification de l’effectif impossible. Reconnectez-vous puis recommencez.'
+    : null;
+}
+
+/**
+ * Sans version lue en base (personne amorcée depuis la clé historique ou
+ * l'effectif par défaut), aucune écriture : ce serait pousser une valeur locale.
+ */
+export function rosterVersionRefusal(version, label) {
+  return version
+    ? null
+    : `Effectif ASV pas encore chargé depuis le serveur : rechargez la page avant de modifier ${label}.`;
+}

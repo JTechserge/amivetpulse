@@ -4,6 +4,9 @@ import {
   asvPersonToInsertRow,
   asvChangedColumns,
   compareLegacyRoster,
+  asvPatchQuery,
+  rosterOfflineRefusal,
+  rosterVersionRefusal,
 } from '../../src/lib/asv-roster.js';
 
 // Effectif ASV partagé : la fraction de temps proratise les CP acquis et la
@@ -146,5 +149,28 @@ describe('compareLegacyRoster', () => {
     const l = [{ id: 'julie', short: 'Julie', workingDays: null }];
     const r = [{ ...row, id: 'julie', short: 'Julie', time_fraction: 1, working_days: null }];
     expect(compareLegacyRoster(l, r)).toEqual([]);
+  });
+});
+
+describe('asvPatchQuery', () => {
+  it('cible une ligne à la version lue, avec le + du fuseau encodé', () => {
+    expect(asvPatchQuery('jeremie-test-asv', '2026-11-25T18:39:00.123456+00:00')).toBe(
+      'asv_roster?id=eq.jeremie-test-asv&updated_at=eq.2026-11-25T18%3A39%3A00.123456%2B00%3A00'
+    );
+  });
+});
+
+describe('refus d’écriture', () => {
+  it('refuse hors ligne, et seulement hors ligne', () => {
+    expect(rosterOfflineRefusal(false)).toMatch(/Hors ligne/);
+    expect(rosterOfflineRefusal(true)).toBeNull();
+    // navigator absent (ou onLine non renseigné) : pas de refus présumé.
+    expect(rosterOfflineRefusal(undefined)).toBeNull();
+  });
+
+  it('refuse une personne jamais lue en base', () => {
+    expect(rosterVersionRefusal(null, 'Julie')).toMatch(/pas encore chargé.*Julie/);
+    expect(rosterVersionRefusal(undefined, 'Julie')).not.toBeNull();
+    expect(rosterVersionRefusal('2026-11-25T18:39:00+00:00', 'Julie')).toBeNull();
   });
 });
